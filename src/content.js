@@ -17,7 +17,6 @@
   const FOCUS_ROW_CLASS = "mesh-helper-row-focus";
 
   const LOW_ROW_BG = "rgba(248, 113, 113, 0.22)";
-  const LOW_ROW_SHADOW = "inset 4px 0 0 #ef4444";
 
   const config = {
     minGrades: DEFAULT_MIN_GRADES
@@ -120,6 +119,7 @@
   // --------------------------------------------------------
   //  Подсветка строки за весь период ДО столбца «Итог» включительно.
   //  Важно: правее «Итог» обычно находится «Ср.» — его не красим.
+  //  Красная боковая линия теперь только на строке через CSS, а не на каждой ячейке.
   // --------------------------------------------------------
   function getRowHighlightTargets(row) {
     if (!row) return [];
@@ -129,7 +129,7 @@
       return tag === "td" || tag === "th";
     });
 
-    const targets = [row];
+    const targets = [];
 
     if (directCells.length) {
       for (const cell of directCells) {
@@ -147,15 +147,13 @@
       return [...new Set(targets)].filter(Boolean);
     }
 
-    // Запасной вариант для нестандартной разметки МЭШ:
-    // красим строку и все markCell/finalResult, но не average/«Ср.»
     const fallback = [
       ...row.querySelectorAll('div[data-test-component^="markCell-"]'),
       ...row.querySelectorAll('div[data-test-component*="markCell"]'),
       ...row.querySelectorAll('div[data-test-component*="finalResult"]')
     ].filter((el) => !isAverageElement(el));
 
-    return [...new Set([...targets, ...fallback])].filter(Boolean);
+    return [...new Set(fallback)].filter(Boolean);
   }
 
   function setLowGradesHighlight(row, enabled) {
@@ -168,13 +166,9 @@
     targets.forEach((el) => {
       if (enabled) {
         rememberStyle(el, "background-color", "mhPrevBg");
-        rememberStyle(el, "box-shadow", "mhPrevShadow");
-
         setImportantStyle(el, "background-color", LOW_ROW_BG);
-        setImportantStyle(el, "box-shadow", LOW_ROW_SHADOW);
       } else {
         restoreStyle(el, "background-color", "mhPrevBg");
-        restoreStyle(el, "box-shadow", "mhPrevShadow");
       }
     });
   }
@@ -204,7 +198,6 @@
   }
 
   function getRowStats(row) {
-    // Только обычные ячейки с оценками, без "ср. балл" и "итог".
     const cells = row.querySelectorAll(
       'div[data-test-component^="markCell-"]:not([data-test-component*="average"]):not([data-test-component*="finalResult"])'
     );
@@ -231,7 +224,7 @@
     const title = panel.querySelector(".mh-title");
     if (!title) return;
 
-    if (title.querySelector(".mh-title-main")) return; // уже готово
+    if (title.querySelector(".mh-title-main")) return;
 
     const main = document.createElement("div");
     main.className = "mh-title-main";
@@ -303,7 +296,7 @@
       students.forEach((s) => {
         if (s.absenceCount > 0) {
           let rate = (s.absenceCount / totalLessons) * 100;
-          rate = Math.round(rate * 10) / 10; // 1 знак после запятой
+          rate = Math.round(rate * 10) / 10;
           s.absenceRate = rate;
         } else {
           s.absenceRate = 0;
@@ -325,7 +318,6 @@
 
   // --------------------------------------------------------
   //  Перетаскивание панели мышкой + сохранение позиции
-  //  Важно: НЕ разворачиваем панель после drag (через флаг _meshWasDragged)
   // --------------------------------------------------------
   function enablePanelDrag(panel) {
     const header = panel.querySelector(".mh-header") || panel;
@@ -338,7 +330,6 @@
     let startLeft = 0;
     let startTop = 0;
 
-    // восстановление позиции
     const saved = localStorage.getItem("meshHelperPosition");
     if (saved) {
       try {
@@ -396,8 +387,6 @@
 
   // --------------------------------------------------------
   //  Сворачиваемая панель вверх (3D-плашка)
-  //  + кликом по шапке в свернутом виде разворачиваем,
-  //    но если был drag — НЕ разворачиваем
   // --------------------------------------------------------
   function setupCollapsiblePanel(panel) {
     let btn = panel.querySelector(".mh-collapse-btn");
@@ -420,7 +409,7 @@
         panel.classList.remove("mh-collapsed-top");
         btn.textContent = "▲";
       }
-      updateProblemCountInTitle(); // цифра всегда актуальная
+      updateProblemCountInTitle();
     }
 
     applyState();
@@ -440,7 +429,6 @@
       header.addEventListener("click", (e) => {
         if (e.target.closest(".mh-collapse-btn")) return;
 
-        // если был drag — не открываем
         if (panel._meshWasDragged) {
           panel._meshWasDragged = false;
           return;
@@ -487,7 +475,6 @@
 
     document.body.appendChild(panel);
 
-    // делаем 2 строки в заголовке (один раз)
     ensureTitleStructure(panel);
 
     const minInput = panel.querySelector("#mh-min");
@@ -642,7 +629,7 @@
 
     const s = document.createElement("style");
     s.id = "mesh-helper-style";
-    s.textContent = ""; // стили в panel.css
+    s.textContent = "";
     document.head.appendChild(s);
   }
 
