@@ -13,6 +13,11 @@
   //  Конфигурация
   // --------------------------------------------------------
   const DEFAULT_MIN_GRADES = 5;
+  const LOW_ROW_CLASS = "mesh-helper-low-grades-row";
+  const FOCUS_ROW_CLASS = "mesh-helper-row-focus";
+
+  const LOW_ROW_BG = "rgba(248, 113, 113, 0.22)";
+  const LOW_ROW_SHADOW = "inset 4px 0 0 #ef4444";
 
   const config = {
     minGrades: DEFAULT_MIN_GRADES
@@ -50,11 +55,156 @@
     return students.reduce((acc, s) => acc + (s.status === "low" ? 1 : 0), 0);
   }
 
+  function setImportantStyle(el, prop, value) {
+    if (!el || !el.style) return;
+    el.style.setProperty(prop, value, "important");
+  }
+
+  function rememberStyle(el, prop, dataKey) {
+    if (!el || !el.style || el.dataset[dataKey] !== undefined) return;
+    const value = el.style.getPropertyValue(prop);
+    el.dataset[dataKey] = value || "__EMPTY__";
+  }
+
+  function restoreStyle(el, prop, dataKey) {
+    if (!el || !el.style) return;
+
+    const previous = el.dataset[dataKey];
+    if (previous === undefined) return;
+
+    if (previous === "__EMPTY__") {
+      el.style.removeProperty(prop);
+    } else {
+      el.style.setProperty(prop, previous);
+    }
+
+    delete el.dataset[dataKey];
+  }
+
+  function isAverageElement(el) {
+    if (!el) return false;
+    const testComponent = el.getAttribute?.("data-test-component") || "";
+    const text = getText(el).toLowerCase();
+
+    return (
+      testComponent.includes("average") ||
+      /^ср\.?$/.test(text) ||
+      text === "средний балл"
+    );
+  }
+
+  function isFinalElement(el) {
+    if (!el) return false;
+    const testComponent = el.getAttribute?.("data-test-component") || "";
+    const text = getText(el).toLowerCase();
+
+    return (
+      testComponent.includes("finalResult") ||
+      /итог/.test(text)
+    );
+  }
+
+  function getHighlightDescendants(cell) {
+    if (!cell) return [];
+
+    const selectors = [
+      'div[data-test-component^="markCell-"]',
+      'div[data-test-component*="markCell"]',
+      'div[data-test-component*="finalResult"]'
+    ];
+
+    return [cell, ...cell.querySelectorAll(selectors.join(","))]
+      .filter((el) => !isAverageElement(el));
+  }
+
+  // --------------------------------------------------------
+  //  Подсветка строки за весь период ДО столбца «Итог» включительно.
+  //  Важно: правее «Итог» обычно находится «Ср.» — его не красим.
+  // --------------------------------------------------------
+  function getRowHighlightTargets(row) {
+    if (!row) return [];
+
+    const directCells = [...row.children].filter((el) => {
+      const tag = el.tagName?.toLowerCase();
+      return tag === "td" || tag === "th";
+    });
+
+    const targets = [row];
+
+    if (directCells.length) {
+      for (const cell of directCells) {
+        if (isAverageElement(cell) || cell.querySelector?.('[data-test-component*="average"]')) {
+          break;
+        }
+
+        targets.push(...getHighlightDescendants(cell));
+
+        if (isFinalElement(cell) || cell.querySelector?.('[data-test-component*="finalResult"]')) {
+          break;
+        }
+      }
+
+      return [...new Set(targets)].filter(Boolean);
+    }
+
+    // Запасной вариант для нестандартной разметки МЭШ:
+    // красим строку и все markCell/finalResult, но не average/«Ср.»
+    const fallback = [
+      ...row.querySelectorAll('div[data-test-component^="markCell-"]'),
+      ...row.querySelectorAll('div[data-test-component*="markCell"]'),
+      ...row.querySelectorAll('div[data-test-component*="finalResult"]')
+    ].filter((el) => !isAverageElement(el));
+
+    return [...new Set([...targets, ...fallback])].filter(Boolean);
+  }
+
+  function setLowGradesHighlight(row, enabled) {
+    if (!row) return;
+
+    row.classList.toggle(LOW_ROW_CLASS, enabled);
+
+    const targets = getRowHighlightTargets(row);
+
+    targets.forEach((el) => {
+      if (enabled) {
+        rememberStyle(el, "background-color", "mhPrevBg");
+        rememberStyle(el, "box-shadow", "mhPrevShadow");
+
+        setImportantStyle(el, "background-color", LOW_ROW_BG);
+        setImportantStyle(el, "box-shadow", LOW_ROW_SHADOW);
+      } else {
+        restoreStyle(el, "background-color", "mhPrevBg");
+        restoreStyle(el, "box-shadow", "mhPrevShadow");
+      }
+    });
+  }
+
+  function clearAllLowGradesHighlights() {
+    document.querySelectorAll(`.${LOW_ROW_CLASS}`).forEach((row) => {
+      setLowGradesHighlight(row, false);
+    });
+  }
+
   // --------------------------------------------------------
   //  Разбор одной строки журнала (один ученик)
   // --------------------------------------------------------
+  function getCellValues(cell) {
+    if (!cell) return [];
+
+    const spans = [...cell.querySelectorAll("span")]
+      .map(getText)
+      .filter(Boolean);
+
+    if (spans.length) return spans;
+
+    const text = getText(cell);
+    if (!text) return [];
+
+    return text.split(" ").map((s) => s.trim()).filter(Boolean);
+  }
+
   function getRowStats(row) {
-    // Только обычные ячейки с оценками, без "ср. балл" и "итог"
+    // Только обычные ячейки с оценками, без "ср. балл" и "итог".
     const cells = row.querySelectorAll(
       'div[data-test-component^="markCell-"]:not([data-test-component*="average"]):not([data-test-component*="finalResult"])'
     );
@@ -63,13 +213,12 @@
     let absenceCount = 0;
 
     cells.forEach((cell) => {
-      const span = cell.querySelector("span");
-      if (!span) return;
+      const values = getCellValues(cell);
 
-      const val = getText(span);
-
-      if (/^[1-5]$/.test(val)) gradeCount++;
-      else if (val.toLowerCase() === "н") absenceCount++;
+      values.forEach((val) => {
+        if (/^[1-5]$/.test(val)) gradeCount++;
+        else if (val.toLowerCase() === "н") absenceCount++;
+      });
     });
 
     return { gradeCount, absenceCount, lessonCount: cells.length };
@@ -113,6 +262,8 @@
     students = [];
     totalLessons = 0;
 
+    clearAllLowGradesHighlights();
+
     const rows = document.querySelectorAll("tr");
 
     rows.forEach((row, index) => {
@@ -132,10 +283,8 @@
       const finalEl = row.querySelector('div[data-test-component*="finalResult"] span');
       const hasFinal = !!finalEl && getText(finalEl) !== "";
 
-      row.classList.remove("mesh-helper-low-grades-row");
-      if (gradeCount < config.minGrades) row.classList.add("mesh-helper-low-grades-row");
-
       const status = gradeCount < config.minGrades ? "low" : "ok";
+      setLowGradesHighlight(row, status === "low");
 
       students.push({
         id: index,
@@ -322,7 +471,7 @@
       </div>
 
       <div class="mh-section mh-settings">
-        <label class="mh-label" for="mh-min">Минимум оценок</label>
+        <label class="mh-label" for="mh-min">Минимум оценок за период</label>
         <div class="mh-settings-row">
           <input id="mh-min" type="number" min="1">
           <button id="mh-save" type="button">Сохранить</button>
@@ -330,7 +479,7 @@
       </div>
 
       <div class="mh-section">
-        <div id="mh-summary" class="mh-subtitle">Проблемные ученики: 0</div>
+        <div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div>
         <button id="mh-export" class="mh-export" type="button">Экспорт в Excel</button>
         <div id="mh-list" class="mh-list"></div>
       </div>
@@ -389,7 +538,7 @@
     const summaryEl = panel.querySelector("#mh-summary");
 
     const problematic = students.filter((s) => s.status === "low");
-    summaryEl.textContent = `Проблемные ученики: ${problematic.length}`;
+    summaryEl.textContent = `Ученики ниже нормы по оценкам: ${problematic.length}`;
 
     if (!problematic.length) {
       listEl.innerHTML = '<div class="mh-note">Все ученики в норме 👍</div>';
@@ -405,7 +554,8 @@
             <div class="mh-item-text">
               <div class="mh-name">${escapeHtml(s.name)}</div>
               <div class="mh-count">
-                Оценок: ${s.gradeCount}, Н: ${s.absenceCount} (${rate}%)
+                Оценок за период: ${s.gradeCount}<br>
+                Н: ${s.absenceCount} (${rate}%)
               </div>
             </div>
             <button class="mh-goto" type="button" data-id="${s.id}">Подсветить</button>
@@ -422,8 +572,8 @@
   // --------------------------------------------------------
   function highlightRow(row) {
     if (!row) return;
-    row.classList.add("mesh-helper-row-focus");
-    setTimeout(() => row.classList.remove("mesh-helper-row-focus"), 1500);
+    row.classList.add(FOCUS_ROW_CLASS);
+    setTimeout(() => row.classList.remove(FOCUS_ROW_CLASS), 1500);
   }
 
   function focusRow(id) {
