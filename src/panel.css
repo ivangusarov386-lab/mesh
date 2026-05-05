@@ -203,9 +203,14 @@
 .mesh-helper-low-grades-row th,
 .mesh-helper-low-grades-row div[data-test-component^="markCell-"],
 .mesh-helper-low-grades-row div[data-test-component*="markCell"],
-.mesh-helper-low-grades-row div[data-test-component*="average"],
 .mesh-helper-low-grades-row div[data-test-component*="finalResult"] {
   background-color: rgba(248, 113, 113, 0.22) !important;
+}
+
+/* Ср./средний балл специально НЕ красим. Его контролирует только логика JS. */
+.mesh-helper-low-grades-row div[data-test-component*="average"] {
+  background-color: initial !important;
+  box-shadow: none !important;
 }
 
 .mesh-helper-low-grades-row {
@@ -241,14 +246,14 @@
 
 /* Овал + 3D */
 #mesh-helper-panel.mh-collapsed-top {
-  position: fixed; /* чтобы ::before работал корректно */
+  position: fixed;
   top: 10px;
   right: 10px;
 
   height: 54px !important;
   min-height: 54px !important;
 
-  width: 340px !important; /* чуть шире в стороны */
+  width: 340px !important;
   padding: 0 !important;
 
   border-radius: 999px !important;
@@ -286,7 +291,7 @@
   align-items: center;
   justify-content: center;
 
-  cursor: move !important; /* перетаскивание сохраняем */
+  cursor: move !important;
 }
 
 /* Текст по центру, две строки */
