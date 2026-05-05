@@ -103,7 +103,7 @@
     );
   }
 
-  function getHighlightDescendants(cell) {
+  function getCellInnerTargets(cell) {
     if (!cell) return [];
 
     const selectors = [
@@ -118,8 +118,10 @@
 
   // --------------------------------------------------------
   //  Подсветка строки за весь период ДО столбца «Итог» включительно.
-  //  Важно: правее «Итог» обычно находится «Ср.» — его не красим.
-  //  Красная боковая линия теперь только на строке через CSS, а не на каждой ячейке.
+  //  Важное правило МЭШ:
+  //  - внутри периода может быть несколько «Ср.» average;
+  //  - они НЕ являются границей периода;
+  //  - граница подсветки — finalResult / «Итог».
   // --------------------------------------------------------
   function getRowHighlightTargets(row) {
     if (!row) return [];
@@ -133,15 +135,16 @@
 
     if (directCells.length) {
       for (const cell of directCells) {
-        if (isAverageElement(cell) || cell.querySelector?.('[data-test-component*="average"]')) {
-          break;
+        const hasAverage = isAverageElement(cell) || cell.querySelector?.('[data-test-component*="average"]');
+        const hasFinal = isFinalElement(cell) || cell.querySelector?.('[data-test-component*="finalResult"]');
+
+        // Average / «Ср.» пропускаем, но НЕ останавливаемся:
+        // после него в МЭШ могут идти следующие даты и итог периода.
+        if (!hasAverage) {
+          targets.push(...getCellInnerTargets(cell));
         }
 
-        targets.push(...getHighlightDescendants(cell));
-
-        if (isFinalElement(cell) || cell.querySelector?.('[data-test-component*="finalResult"]')) {
-          break;
-        }
+        if (hasFinal) break;
       }
 
       return [...new Set(targets)].filter(Boolean);
