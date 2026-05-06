@@ -15,11 +15,15 @@
   const DEFAULT_MIN_GRADES = 5;
   const LOW_ROW_CLASS = "mesh-helper-low-grades-row";
   const FOCUS_ROW_CLASS = "mesh-helper-row-focus";
+  const FINAL_MISSING_CLASS = "mesh-helper-final-missing";
 
   const LOW_ROW_BG = "rgba(248, 113, 113, 0.22)";
+  const FINAL_MISSING_BG = "rgba(59, 130, 246, 0.26)";
+  const FINAL_MISSING_OUTLINE = "inset 0 0 0 2px rgba(37, 99, 235, 0.72)";
 
   const config = {
-    minGrades: DEFAULT_MIN_GRADES
+    minGrades: DEFAULT_MIN_GRADES,
+    checkFinals: false
   };
 
   let students = [];
@@ -103,25 +107,34 @@
     );
   }
 
+  function findFinalCell(row) {
+    if (!row) return null;
+    const finalInner = row.querySelector('[data-test-component*="finalResult"]');
+    if (!finalInner) return null;
+    return finalInner.closest("td, th") || finalInner;
+  }
+
+  function isFinalCellFilled(row) {
+    const finalCell = findFinalCell(row);
+    if (!finalCell) return false;
+    return /[1-5]/.test(getText(finalCell));
+  }
+
   function getCellInnerTargets(cell) {
     if (!cell) return [];
 
     const selectors = [
       'div[data-test-component^="markCell-"]',
-      'div[data-test-component*="markCell"]',
-      'div[data-test-component*="finalResult"]'
+      'div[data-test-component*="markCell"]'
     ];
 
     return [cell, ...cell.querySelectorAll(selectors.join(","))]
-      .filter((el) => !isAverageElement(el));
+      .filter((el) => !isAverageElement(el) && !isFinalElement(el));
   }
 
   // --------------------------------------------------------
-  //  Подсветка строки за весь период ДО столбца «Итог» включительно.
-  //  Важное правило МЭШ:
-  //  - внутри периода может быть несколько «Ср.» average;
-  //  - они НЕ являются границей периода;
-  //  - граница подсветки — finalResult / «Итог».
+  //  Подсветка строки за весь период ДО столбца «Итог».
+  //  Сам «Итог» больше НЕ красим красным — для него отдельный тумблер.
   // --------------------------------------------------------
   function getRowHighlightTargets(row) {
     if (!row) return [];
@@ -138,13 +151,13 @@
         const hasAverage = isAverageElement(cell) || cell.querySelector?.('[data-test-component*="average"]');
         const hasFinal = isFinalElement(cell) || cell.querySelector?.('[data-test-component*="finalResult"]');
 
+        if (hasFinal) break;
+
         // Average / «Ср.» пропускаем, но НЕ останавливаемся:
         // после него в МЭШ могут идти следующие даты и итог периода.
         if (!hasAverage) {
           targets.push(...getCellInnerTargets(cell));
         }
-
-        if (hasFinal) break;
       }
 
       return [...new Set(targets)].filter(Boolean);
@@ -152,9 +165,8 @@
 
     const fallback = [
       ...row.querySelectorAll('div[data-test-component^="markCell-"]'),
-      ...row.querySelectorAll('div[data-test-component*="markCell"]'),
-      ...row.querySelectorAll('div[data-test-component*="finalResult"]')
-    ].filter((el) => !isAverageElement(el));
+      ...row.querySelectorAll('div[data-test-component*="markCell"]')
+    ].filter((el) => !isAverageElement(el) && !isFinalElement(el));
 
     return [...new Set(fallback)].filter(Boolean);
   }
@@ -176,9 +188,37 @@
     });
   }
 
-  function clearAllLowGradesHighlights() {
+  function setFinalMissingHighlight(row, enabled) {
+    const finalCell = findFinalCell(row);
+    if (!finalCell) return;
+
+    const finalInner = finalCell.querySelector?.('[data-test-component*="finalResult"]') || finalCell;
+    const targets = [finalCell, finalInner].filter(Boolean);
+
+    targets.forEach((el) => {
+      el.classList.toggle(FINAL_MISSING_CLASS, enabled);
+
+      if (enabled) {
+        rememberStyle(el, "background-color", "mhPrevFinalBg");
+        rememberStyle(el, "box-shadow", "mhPrevFinalShadow");
+
+        setImportantStyle(el, "background-color", FINAL_MISSING_BG);
+        setImportantStyle(el, "box-shadow", FINAL_MISSING_OUTLINE);
+      } else {
+        restoreStyle(el, "background-color", "mhPrevFinalBg");
+        restoreStyle(el, "box-shadow", "mhPrevFinalShadow");
+      }
+    });
+  }
+
+  function clearAllHighlights() {
     document.querySelectorAll(`.${LOW_ROW_CLASS}`).forEach((row) => {
       setLowGradesHighlight(row, false);
+    });
+
+    document.querySelectorAll(`.${FINAL_MISSING_CLASS}`).forEach((el) => {
+      const row = el.closest("tr");
+      if (row) setFinalMissingHighlight(row, false);
     });
   }
 
@@ -221,7 +261,7 @@
   }
 
   // --------------------------------------------------------
-  //  Заголовок: 2 строки (делаем ОДИН РАЗ и дальше только обновляем цифру)
+  //  Заголовок: 2 строки
   // --------------------------------------------------------
   function ensureTitleStructure(panel) {
     const title = panel.querySelector(".mh-title");
@@ -258,7 +298,7 @@
     students = [];
     totalLessons = 0;
 
-    clearAllLowGradesHighlights();
+    clearAllHighlights();
 
     const rows = document.querySelectorAll("tr");
 
@@ -276,11 +316,11 @@
 
       if (lessonCount > 0 && totalLessons === 0) totalLessons = lessonCount;
 
-      const finalEl = row.querySelector('div[data-test-component*="finalResult"] span');
-      const hasFinal = !!finalEl && getText(finalEl) !== "";
-
+      const hasFinal = isFinalCellFilled(row);
       const status = gradeCount < config.minGrades ? "low" : "ok";
+
       setLowGradesHighlight(row, status === "low");
+      setFinalMissingHighlight(row, config.checkFinals && !hasFinal);
 
       students.push({
         id: index,
@@ -469,6 +509,14 @@
         </div>
       </div>
 
+      <div class="mh-section mh-final-settings">
+        <label class="mh-toggle-row" for="mh-check-finals">
+          <input id="mh-check-finals" type="checkbox">
+          <span>Контроль итоговых</span>
+        </label>
+        <div class="mh-note">Если итоговая не выставлена — ячейка «Итог» подсветится синим.</div>
+      </div>
+
       <div class="mh-section">
         <div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div>
         <button id="mh-export" class="mh-export" type="button">Экспорт в Excel</button>
@@ -481,7 +529,10 @@
     ensureTitleStructure(panel);
 
     const minInput = panel.querySelector("#mh-min");
+    const checkFinalsInput = panel.querySelector("#mh-check-finals");
+
     minInput.value = config.minGrades;
+    checkFinalsInput.checked = !!config.checkFinals;
 
     panel.querySelector("#mh-save").addEventListener("click", (e) => {
       e.preventDefault();
@@ -497,6 +548,12 @@
 
       config.minGrades = num;
       chrome.storage.sync.set({ minGrades: num });
+      scanJournal();
+    });
+
+    checkFinalsInput.addEventListener("change", () => {
+      config.checkFinals = checkFinalsInput.checked;
+      chrome.storage.sync.set({ checkFinals: config.checkFinals });
       scanJournal();
     });
 
@@ -652,9 +709,10 @@
   function init() {
     injectCSS();
 
-    chrome.storage.sync.get(["minGrades"], ({ minGrades }) => {
+    chrome.storage.sync.get(["minGrades", "checkFinals"], ({ minGrades, checkFinals }) => {
       config.minGrades =
         typeof minGrades === "number" ? minGrades : DEFAULT_MIN_GRADES;
+      config.checkFinals = !!checkFinals;
 
       const panel = ensurePanel();
       ensureTitleStructure(panel);
