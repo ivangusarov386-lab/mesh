@@ -15,8 +15,38 @@
     return String(url || "").includes(MARKS_PART);
   }
 
+  function extractMarks(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.items)) return payload.items;
+    if (Array.isArray(payload?.marks)) return payload.marks;
+    if (Array.isArray(payload?.response)) return payload.response;
+    if (Array.isArray(payload?.data?.items)) return payload.data.items;
+    if (Array.isArray(payload?.payload?.items)) return payload.payload.items;
+    return [];
+  }
+
+  function saveDebugMarks(url, payload) {
+    try {
+      const marks = extractMarks(payload);
+
+      window.__MESH_HELPER_MARKS_DEBUG__ = {
+        loadedAt: Date.now(),
+        url: String(url || ""),
+        count: marks.length,
+        marks,
+        byStudent(studentProfileId) {
+          const id = Number(studentProfileId);
+          return this.marks.filter((mark) => Number(mark?.student_profile_id) === id);
+        }
+      };
+    } catch (error) {}
+  }
+
   function postMarks(url, payload) {
     try {
+      saveDebugMarks(url, payload);
+
       window.postMessage(
         {
           source: SOURCE,
