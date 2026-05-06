@@ -32,6 +32,30 @@
     return !!cell?.querySelector?.('[data-test-component*="finalResult"]');
   }
 
+  function parseRuDateToIso(dateText, year) {
+    const value = String(dateText || "").trim();
+    const m = value.match(/^(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?$/);
+    if (!m) return null;
+
+    const day = String(m[1]).padStart(2, "0");
+    const month = String(m[2]).padStart(2, "0");
+    const y = m[3] || year;
+
+    if (!y) return null;
+    return `${y}-${month}-${day}`;
+  }
+
+  function detectSchoolYear() {
+    const pageText = text(document.body);
+    const m = pageText.match(/(20\d{2})\s*[-–]\s*(\d{2}|20\d{2})/);
+    if (m) return Number(m[1]);
+    return new Date().getFullYear();
+  }
+
+  function getMarkCellFromCell(cell) {
+    return cell?.querySelector?.('[data-test-component^="markCell-"]') || null;
+  }
+
   function lessonIds(row) {
     const ids = new Set();
     const cells = [...row.children].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
@@ -40,7 +64,7 @@
       if (finalCell(cell)) break;
       if (avg(cell)) continue;
 
-      const markCell = cell.querySelector?.('[data-test-component^="markCell-"]');
+      const markCell = getMarkCellFromCell(cell);
       const attr = markCell?.getAttribute?.("data-test-component") || "";
       const m = attr.match(/^markCell-\d+_(\d+)_/);
       if (m) ids.add(Number(m[1]));
@@ -49,16 +73,80 @@
     return ids;
   }
 
+  function getVisibleDatesByColumn() {
+    const dates = [];
+    const yearStart = detectSchoolYear();
+    const headerCells = [...document.querySelectorAll("th, td, div")];
+
+    headerCells.forEach((el) => {
+      const t = text(el);
+      if (!/^\d{1,2}$/.test(t)) return;
+
+      const parentText = text(el.closest("tr") || el.parentElement || "");
+      if (!parentText) return;
+
+      const rect = el.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+
+      dates.push({ x: rect.left + rect.width / 2, day: Number(t) });
+    });
+
+    return { dates, yearStart };
+  }
+
+  function getRowVisibleDateSet(row) {
+    const result = new Set();
+    const { dates, yearStart } = getVisibleDatesByColumn();
+    if (!dates.length) return result;
+
+    const cells = [...row.children].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
+
+    for (const cell of cells) {
+      if (finalCell(cell)) break;
+      if (avg(cell)) continue;
+
+      const markCell = getMarkCellFromCell(cell);
+      if (!markCell) continue;
+
+      const rect = markCell.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const nearest = dates.reduce((best, item) => {
+        const dist = Math.abs(item.x - centerX);
+        return !best || dist < best.dist ? { ...item, dist } : best;
+      }, null);
+
+      if (!nearest || nearest.dist > 18) continue;
+
+      const monthText = text(cell.closest("table") || document.body);
+      const apiMarks = data()?.marks || [];
+      const sid = studentId(row);
+      const possible = apiMarks
+        .filter((m) => Number(m?.student_profile_id) === sid)
+        .map((m) => String(m?.date || ""))
+        .filter((d) => d.endsWith(`-${String(nearest.day).padStart(2, "0")}`));
+
+      possible.forEach((d) => result.add(d));
+    }
+
+    return result;
+  }
+
   function exactCount(row, marks) {
     const sid = studentId(row);
+    if (!sid) return null;
+
     const ids = lessonIds(row);
-    if (!sid || !ids.size) return null;
+    const visibleDates = getRowVisibleDateSet(row);
 
     let count = 0;
     for (const mark of marks) {
       if (Number(mark?.student_profile_id) !== sid) continue;
-      if (!ids.has(Number(mark?.schedule_lesson_id))) continue;
-      if (/^[1-5]$/.test(String(mark?.name || "").trim())) count++;
+      if (!/^[1-5]$/.test(String(mark?.name || "").trim())) continue;
+
+      const byLesson = ids.has(Number(mark?.schedule_lesson_id));
+      const byDate = visibleDates.has(String(mark?.date || ""));
+
+      if (byLesson || byDate) count++;
     }
     return count;
   }
