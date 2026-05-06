@@ -2,30 +2,24 @@
   "manifest_version": 3,
   "name": "МЭШ — Помощник учителя",
   "description": "Подсветка учеников с малым количеством оценок, анализ пропусков и экспорт в Excel в журнале school.mos.ru.",
-  "version": "1.2.2",
-  "host_permissions": [
-    "https://school.mos.ru/*"
-  ],
-  "permissions": [
-    "storage"
-  ],
+  "version": "1.2.3",
+  "host_permissions": ["https://school.mos.ru/*"],
+  "permissions": ["storage"],
   "web_accessible_resources": [
     {
-      "resources": [
-        "src/marks-api-hook.js"
-      ],
-      "matches": [
-        "https://school.mos.ru/*"
-      ]
+      "resources": ["src/marks-api-hook.js"],
+      "matches": ["https://school.mos.ru/*"]
     }
   ],
   "content_scripts": [
     {
       "matches": ["https://school.mos.ru/*"],
-      "js": [
-        "src/content.js",
-        "src/marks-api-bridge.js"
-      ],
+      "js": ["src/marks-api-bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://school.mos.ru/*"],
+      "js": ["src/content.js"],
       "css": ["src/panel.css"],
       "run_at": "document_idle"
     }
