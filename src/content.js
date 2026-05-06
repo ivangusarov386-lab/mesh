@@ -2,8 +2,11 @@
 //  МЭШ – Помощник учителя
 //  Подсветка учеников с малым количеством оценок,
 //  учёт пропусков "Н", экспорт в Excel (CSV),
-//  контроль итоговых,
-//  точный подсчёт оценок из пойманного ответа marks API.
+//  контроль итоговых.
+//
+//  ВАЖНО:
+//  Подсветка недобора оценок снова работает по DOM-подсчёту.
+//  Пойманные marks API пока используются только как диагностический слой.
 // ==========================================================
 
 (() => {
@@ -77,11 +80,8 @@
     const previous = el.dataset[dataKey];
     if (previous === undefined) return;
 
-    if (previous === "__EMPTY__") {
-      el.style.removeProperty(prop);
-    } else {
-      el.style.setProperty(prop, previous);
-    }
+    if (previous === "__EMPTY__") el.style.removeProperty(prop);
+    else el.style.setProperty(prop, previous);
 
     delete el.dataset[dataKey];
   }
@@ -103,10 +103,7 @@
     const testComponent = el.getAttribute?.("data-test-component") || "";
     const text = getText(el).toLowerCase();
 
-    return (
-      testComponent.includes("finalResult") ||
-      /итог/.test(text)
-    );
+    return testComponent.includes("finalResult") || /итог/.test(text);
   }
 
   function getStudentProfileIdFromRow(row) {
@@ -156,7 +153,7 @@
 
     if (apiMarksReady) {
       console.log(
-        "[МЭШ помощник] Подключён точный подсчёт marks:",
+        "[МЭШ помощник] marks API пойман, но подсветка пока работает по DOM:",
         marksData.count,
         "записей, учеников:",
         Object.keys(apiStatsByStudentId).length
@@ -179,7 +176,7 @@
 
   // --------------------------------------------------------
   //  Подсветка строки за весь период ДО столбца «Итог».
-  //  Сам «Итог» больше НЕ красим красным — для него отдельный тумблер.
+  //  Сам «Итог» НЕ красим красным — для него отдельный тумблер.
   // --------------------------------------------------------
   function getRowHighlightTargets(row) {
     if (!row) return [];
@@ -197,12 +194,7 @@
         const hasFinal = isFinalElement(cell) || cell.querySelector?.('[data-test-component*="finalResult"]');
 
         if (hasFinal) break;
-
-        // Average / «Ср.» пропускаем, но НЕ останавливаемся:
-        // после него в МЭШ могут идти следующие даты и итог периода.
-        if (!hasAverage) {
-          targets.push(...getCellInnerTargets(cell));
-        }
+        if (!hasAverage) targets.push(...getCellInnerTargets(cell));
       }
 
       return [...new Set(targets)].filter(Boolean);
@@ -221,9 +213,7 @@
 
     row.classList.toggle(LOW_ROW_CLASS, enabled);
 
-    const targets = getRowHighlightTargets(row);
-
-    targets.forEach((el) => {
+    getRowHighlightTargets(row).forEach((el) => {
       if (enabled) {
         rememberStyle(el, "background-color", "mhPrevBg");
         setImportantStyle(el, "background-color", LOW_ROW_BG);
@@ -246,7 +236,6 @@
       if (enabled) {
         rememberStyle(el, "background-color", "mhPrevFinalBg");
         rememberStyle(el, "box-shadow", "mhPrevFinalShadow");
-
         setImportantStyle(el, "background-color", FINAL_MISSING_BG);
         setImportantStyle(el, "box-shadow", FINAL_MISSING_OUTLINE);
       } else {
@@ -268,7 +257,7 @@
   }
 
   // --------------------------------------------------------
-  //  Разбор одной строки журнала (один ученик)
+  //  Подсчёт оценок по DOM — основной рабочий режим подсветки
   // --------------------------------------------------------
   function getCellValues(cell) {
     if (!cell) return [];
@@ -305,21 +294,30 @@
     return { gradeCount, absenceCount, lessonCount: cells.length, source: "DOM" };
   }
 
-  function getRowStats(row) {
+  function getApiHiddenInfo(row) {
     syncMarksFromBridge();
 
-    const domStats = getDomRowStats(row);
     const studentProfileId = getStudentProfileIdFromRow(row);
     const apiStat = studentProfileId ? apiStatsByStudentId[String(studentProfileId)] : null;
 
-    if (!apiStat) return domStats;
-
     return {
-      gradeCount: Number(apiStat.total || 0),
-      absenceCount: domStats.absenceCount,
-      lessonCount: domStats.lessonCount,
-      source: "API",
-      hiddenCount: Number(apiStat.hidden || 0)
+      apiTotal: Number(apiStat?.total || 0),
+      hiddenCount: Number(apiStat?.hidden || 0),
+      apiReady: !!apiStat
+    };
+  }
+
+  function getRowStats(row) {
+    const domStats = getDomRowStats(row);
+    const apiInfo = getApiHiddenInfo(row);
+
+    // Главный фикс: подсветка снова считается по DOM, чтобы не обнулять проблемы.
+    // API пока показываем отдельно, не вмешивая его в статус строки.
+    return {
+      ...domStats,
+      apiTotal: apiInfo.apiTotal,
+      hiddenCount: apiInfo.hiddenCount,
+      apiReady: apiInfo.apiReady
     };
   }
 
@@ -329,7 +327,6 @@
   function ensureTitleStructure(panel) {
     const title = panel.querySelector(".mh-title");
     if (!title) return;
-
     if (title.querySelector(".mh-title-main")) return;
 
     const main = document.createElement("div");
@@ -377,7 +374,15 @@
       const anyCell = row.querySelector('div[data-test-component^="markCell-"]');
       if (!anyCell) return;
 
-      const { gradeCount, absenceCount, lessonCount, source, hiddenCount } = getRowStats(row);
+      const {
+        gradeCount,
+        absenceCount,
+        lessonCount,
+        source,
+        apiTotal,
+        hiddenCount,
+        apiReady
+      } = getRowStats(row);
 
       if (lessonCount > 0 && totalLessons === 0) totalLessons = lessonCount;
 
@@ -397,7 +402,9 @@
         hasFinal,
         status,
         source,
-        hiddenCount: hiddenCount || 0,
+        apiTotal,
+        hiddenCount,
+        apiReady,
         rowElement: row,
         absenceRate: 0
       });
@@ -435,7 +442,6 @@
 
     let isDragging = false;
     let wasDragged = false;
-
     let startX = 0;
     let startY = 0;
     let startLeft = 0;
@@ -456,14 +462,12 @@
 
       isDragging = true;
       wasDragged = false;
-
       startX = e.clientX;
       startY = e.clientY;
 
       const rect = panel.getBoundingClientRect();
       startLeft = rect.left;
       startTop = rect.top;
-
       document.body.style.userSelect = "none";
     });
 
@@ -653,7 +657,7 @@
     const summaryEl = panel.querySelector("#mh-summary");
 
     const problematic = students.filter((s) => s.status === "low");
-    const sourceLabel = apiMarksReady ? " · точный подсчёт" : "";
+    const sourceLabel = apiMarksReady ? " · marks пойманы" : "";
     summaryEl.textContent = `Ученики ниже нормы по оценкам: ${problematic.length}${sourceLabel}`;
 
     if (!problematic.length) {
@@ -665,14 +669,17 @@
     listEl.innerHTML = problematic
       .map((s) => {
         const rate = s.absenceRate || 0;
-        const hiddenInfo = s.hiddenCount > 0 ? `<br><span class="mh-source">Скрытых/доп. оценок: ${s.hiddenCount}</span>` : "";
+        const apiInfo = s.apiReady
+          ? `<br><span class="mh-source">API оценок: ${s.apiTotal}; скрытых/доп.: ${s.hiddenCount}</span>`
+          : "";
+
         return `
           <div class="mh-item">
             <div class="mh-item-text">
               <div class="mh-name">${escapeHtml(s.name)}</div>
               <div class="mh-count">
                 Оценок за период: ${s.gradeCount}<br>
-                Н: ${s.absenceCount} (${rate}%)${hiddenInfo}
+                Н: ${s.absenceCount} (${rate}%)${apiInfo}
               </div>
             </div>
             <button class="mh-goto" type="button" data-id="${s.id}">Подсветить</button>
@@ -712,13 +719,13 @@
 
     const header = [
       "ФИО",
-      "Количество оценок",
+      "Количество оценок DOM",
       "Количество Н",
       "Всего уроков",
       "% пропусков",
       "Итог выставлен",
-      "Источник подсчёта",
-      "Скрытых/доп. оценок"
+      "API оценок",
+      "API скрытых/доп."
     ];
 
     const rows = [header];
@@ -734,8 +741,8 @@
         s.lessonCount ?? 0,
         rateCell,
         s.hasFinal ? "Да" : "Нет",
-        s.source === "API" ? "marks API" : "DOM",
-        s.hiddenCount || 0
+        s.apiReady ? s.apiTotal : "",
+        s.apiReady ? s.hiddenCount : ""
       ]);
     });
 
