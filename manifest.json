@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "МЭШ — Помощник учителя",
   "description": "Подсветка учеников с малым количеством оценок, анализ пропусков и экспорт в Excel в журнале school.mos.ru.",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "host_permissions": ["https://school.mos.ru/*"],
   "permissions": ["storage"],
   "web_accessible_resources": [
@@ -19,7 +19,7 @@
     },
     {
       "matches": ["https://school.mos.ru/*"],
-      "js": ["src/content.js"],
+      "js": ["src/content.js", "src/period-counts.js"],
       "css": ["src/panel.css"],
       "run_at": "document_idle"
     }
