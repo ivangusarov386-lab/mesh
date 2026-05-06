@@ -198,21 +198,12 @@
    Подсветка строк журнала
    ============================================ */
 
-.mesh-helper-low-grades-row,
-.mesh-helper-low-grades-row td,
-.mesh-helper-low-grades-row th,
-.mesh-helper-low-grades-row div[data-test-component^="markCell-"],
-.mesh-helper-low-grades-row div[data-test-component*="markCell"],
-.mesh-helper-low-grades-row div[data-test-component*="finalResult"] {
-  background-color: rgba(248, 113, 113, 0.22) !important;
-}
-
-/* Ср./средний балл специально НЕ красим. Его контролирует только логика JS. */
-.mesh-helper-low-grades-row div[data-test-component*="average"] {
-  background-color: initial !important;
-  box-shadow: none !important;
-}
-
+/*
+  ВАЖНО:
+  Общую заливку через CSS на .mesh-helper-low-grades-row / td / th НЕ делаем.
+  Границу подсветки до «Итог» контролирует content.js точечно через inline-style.
+  Иначе МЭШ красит «Ср.» и правый итоговый средний балл.
+*/
 .mesh-helper-low-grades-row {
   box-shadow: inset 4px 0 0 #ef4444 !important;
 }
