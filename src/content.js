@@ -2,10 +2,8 @@
 //  МЭШ – Помощник учителя
 //  Подсветка учеников с малым количеством оценок,
 //  учёт пропусков "Н", экспорт в Excel (CSV),
-//  панель со сворачиванием вверх (3D-плашка) + drag,
-//  в свернутом виде показывает 2 строки:
-//    1) "Помощник учителя"
-//    2) "Проблемных: N"
+//  контроль итоговых,
+//  точный подсчёт оценок из пойманного ответа marks API.
 // ==========================================================
 
 (() => {
@@ -30,6 +28,10 @@
   let observer = null;
   let scanTimer = null;
   let totalLessons = 0;
+
+  let marksVersion = 0;
+  let apiStatsByStudentId = {};
+  let apiMarksReady = false;
 
   // --------------------------------------------------------
   //  Утилиты
@@ -107,6 +109,13 @@
     );
   }
 
+  function getStudentProfileIdFromRow(row) {
+    const markCell = row?.querySelector?.('[data-test-component^="markCell-"]');
+    const value = markCell?.getAttribute?.("data-test-component") || "";
+    const match = value.match(/^markCell-(\d+)_/);
+    return match ? Number(match[1]) : null;
+  }
+
   function findFinalCell(row) {
     if (!row) return null;
     const finalInner = row.querySelector('[data-test-component*="finalResult"]');
@@ -131,6 +140,42 @@
     return [cell, ...cell.querySelectorAll(selectors.join(","))]
       .filter((el) => !isAverageElement(el) && !isFinalElement(el));
   }
+
+  // --------------------------------------------------------
+  //  Данные marks, пойманные bridge-скриптом
+  // --------------------------------------------------------
+  function syncMarksFromBridge() {
+    const marksData = window.__MESH_HELPER_MARKS__;
+    if (!marksData || !marksData.loadedAt || !marksData.stats) return false;
+
+    if (marksData.loadedAt === marksVersion) return apiMarksReady;
+
+    marksVersion = marksData.loadedAt;
+    apiStatsByStudentId = marksData.stats || {};
+    apiMarksReady = Object.keys(apiStatsByStudentId).length > 0;
+
+    if (apiMarksReady) {
+      console.log(
+        "[МЭШ помощник] Подключён точный подсчёт marks:",
+        marksData.count,
+        "записей, учеников:",
+        Object.keys(apiStatsByStudentId).length
+      );
+    }
+
+    return apiMarksReady;
+  }
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window) return;
+    const data = event.data;
+    if (!data || data.source !== "mesh-helper-marks-hook") return;
+
+    setTimeout(() => {
+      syncMarksFromBridge();
+      scanJournal();
+    }, 100);
+  });
 
   // --------------------------------------------------------
   //  Подсветка строки за весь период ДО столбца «Итог».
@@ -240,7 +285,7 @@
     return text.split(" ").map((s) => s.trim()).filter(Boolean);
   }
 
-  function getRowStats(row) {
+  function getDomRowStats(row) {
     const cells = row.querySelectorAll(
       'div[data-test-component^="markCell-"]:not([data-test-component*="average"]):not([data-test-component*="finalResult"])'
     );
@@ -257,7 +302,25 @@
       });
     });
 
-    return { gradeCount, absenceCount, lessonCount: cells.length };
+    return { gradeCount, absenceCount, lessonCount: cells.length, source: "DOM" };
+  }
+
+  function getRowStats(row) {
+    syncMarksFromBridge();
+
+    const domStats = getDomRowStats(row);
+    const studentProfileId = getStudentProfileIdFromRow(row);
+    const apiStat = studentProfileId ? apiStatsByStudentId[String(studentProfileId)] : null;
+
+    if (!apiStat) return domStats;
+
+    return {
+      gradeCount: Number(apiStat.total || 0),
+      absenceCount: domStats.absenceCount,
+      lessonCount: domStats.lessonCount,
+      source: "API",
+      hiddenCount: Number(apiStat.hidden || 0)
+    };
   }
 
   // --------------------------------------------------------
@@ -295,6 +358,8 @@
   //  Сканирование журнала
   // --------------------------------------------------------
   function scanJournal() {
+    syncMarksFromBridge();
+
     students = [];
     totalLessons = 0;
 
@@ -312,7 +377,7 @@
       const anyCell = row.querySelector('div[data-test-component^="markCell-"]');
       if (!anyCell) return;
 
-      const { gradeCount, absenceCount, lessonCount } = getRowStats(row);
+      const { gradeCount, absenceCount, lessonCount, source, hiddenCount } = getRowStats(row);
 
       if (lessonCount > 0 && totalLessons === 0) totalLessons = lessonCount;
 
@@ -324,12 +389,15 @@
 
       students.push({
         id: index,
+        studentProfileId: getStudentProfileIdFromRow(row),
         name,
         gradeCount,
         absenceCount,
         lessonCount,
         hasFinal,
         status,
+        source,
+        hiddenCount: hiddenCount || 0,
         rowElement: row,
         absenceRate: 0
       });
@@ -585,7 +653,8 @@
     const summaryEl = panel.querySelector("#mh-summary");
 
     const problematic = students.filter((s) => s.status === "low");
-    summaryEl.textContent = `Ученики ниже нормы по оценкам: ${problematic.length}`;
+    const sourceLabel = apiMarksReady ? " · точный подсчёт" : "";
+    summaryEl.textContent = `Ученики ниже нормы по оценкам: ${problematic.length}${sourceLabel}`;
 
     if (!problematic.length) {
       listEl.innerHTML = '<div class="mh-note">Все ученики в норме 👍</div>';
@@ -596,13 +665,14 @@
     listEl.innerHTML = problematic
       .map((s) => {
         const rate = s.absenceRate || 0;
+        const hiddenInfo = s.hiddenCount > 0 ? `<br><span class="mh-source">Скрытых/доп. оценок: ${s.hiddenCount}</span>` : "";
         return `
           <div class="mh-item">
             <div class="mh-item-text">
               <div class="mh-name">${escapeHtml(s.name)}</div>
               <div class="mh-count">
                 Оценок за период: ${s.gradeCount}<br>
-                Н: ${s.absenceCount} (${rate}%)
+                Н: ${s.absenceCount} (${rate}%)${hiddenInfo}
               </div>
             </div>
             <button class="mh-goto" type="button" data-id="${s.id}">Подсветить</button>
@@ -646,7 +716,9 @@
       "Количество Н",
       "Всего уроков",
       "% пропусков",
-      "Итог выставлен"
+      "Итог выставлен",
+      "Источник подсчёта",
+      "Скрытых/доп. оценок"
     ];
 
     const rows = [header];
@@ -661,7 +733,9 @@
         s.absenceCount,
         s.lessonCount ?? 0,
         rateCell,
-        s.hasFinal ? "Да" : "Нет"
+        s.hasFinal ? "Да" : "Нет",
+        s.source === "API" ? "marks API" : "DOM",
+        s.hiddenCount || 0
       ]);
     });
 
@@ -719,6 +793,8 @@
 
       startObserver();
       scanJournal();
+      setTimeout(scanJournal, 1200);
+      setTimeout(scanJournal, 3000);
     });
   }
 
