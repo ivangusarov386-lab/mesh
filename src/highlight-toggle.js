@@ -1,11 +1,10 @@
 // ==========================================================
 //  МЭШ – Помощник учителя
-//  Раскрывающийся блок «Подсветка».
+//  Безопасный раскрывающийся блок «Подсветка».
 //
-//  По умолчанию подсветка недобора оценок включена.
-//  Если выключить — список учеников и экспорт остаются,
-//  но красная подсветка строк/ячеек снимается и подавляется
-//  при последующих обновлениях DOM.
+//  ВАЖНО:
+//  Здесь нет глобального наблюдения за style/class и нет постоянной
+//  очистки всего DOM. Это нужно, чтобы не подвешивать МЭШ.
 // ==========================================================
 
 (() => {
@@ -18,45 +17,39 @@
 
   let enabled = true;
   let open = false;
-  let timer = null;
-  let cleaning = false;
+  let insertTimer = null;
+  let clearTimer = null;
 
   function isLowBg(value) {
     const bg = String(value || "");
     return LOW_BG_PARTS.every((part) => bg.includes(part));
   }
 
-  function clearLowHighlights() {
-    if (enabled || cleaning) return;
-    cleaning = true;
+  function clearLowHighlightsSoft() {
+    if (enabled) return;
 
-    try {
-      document.querySelectorAll(`.${LOW_ROW_CLASS}`).forEach((row) => {
-        row.classList.remove(LOW_ROW_CLASS);
-      });
+    document.querySelectorAll(`.${LOW_ROW_CLASS}`).forEach((row) => {
+      row.classList.remove(LOW_ROW_CLASS);
+    });
 
-      document.querySelectorAll("[data-mh-prev-bg]").forEach((el) => {
-        const previous = el.dataset.mhPrevBg;
+    document.querySelectorAll("[data-mh-prev-bg]").forEach((el) => {
+      const previous = el.dataset.mhPrevBg;
+      if (previous === "__EMPTY__") el.style.removeProperty("background-color");
+      else if (previous !== undefined) el.style.setProperty("background-color", previous);
+      delete el.dataset.mhPrevBg;
+    });
 
-        if (previous === "__EMPTY__") el.style.removeProperty("background-color");
-        else if (previous !== undefined) el.style.setProperty("background-color", previous);
-
-        delete el.dataset.mhPrevBg;
-      });
-
-      document.querySelectorAll("td, th, div").forEach((el) => {
-        const bg = el.style?.getPropertyValue("background-color");
-        if (isLowBg(bg)) el.style.removeProperty("background-color");
-      });
-    } finally {
-      cleaning = false;
-    }
+    // Только элементы, которые реально были окрашены нашим цветом.
+    document.querySelectorAll("td[style], th[style], div[style]").forEach((el) => {
+      const bg = el.style?.getPropertyValue("background-color");
+      if (isLowBg(bg)) el.style.removeProperty("background-color");
+    });
   }
 
-  function scheduleClear(delay = 0) {
+  function scheduleClear() {
     if (enabled) return;
-    clearTimeout(timer);
-    timer = setTimeout(clearLowHighlights, delay);
+    clearTimeout(clearTimer);
+    clearTimer = setTimeout(clearLowHighlightsSoft, 120);
   }
 
   function syncVisualState() {
@@ -87,7 +80,7 @@
     const finalSection = panel.querySelector(".mh-final-settings");
     const settingsSection = panel.querySelector(".mh-settings");
     const anchor = finalSection || settingsSection;
-    if (!anchor) return;
+    if (!anchor || !anchor.parentNode) return;
 
     const section = document.createElement("div");
     section.id = BOX_ID;
@@ -122,46 +115,49 @@
       chrome.storage.sync.set({ [STORAGE_KEY]: enabled });
 
       if (!enabled) {
-        clearLowHighlights();
-        scheduleClear(80);
-        scheduleClear(250);
+        clearLowHighlightsSoft();
+        scheduleClear();
       }
     });
 
     syncVisualState();
   }
 
+  function scheduleInsert() {
+    clearTimeout(insertTimer);
+    insertTimer = setTimeout(insertBox, 250);
+  }
+
   function init() {
     chrome.storage.sync.get([STORAGE_KEY, OPEN_KEY], (data) => {
-      // По умолчанию ВКЛ. Если старое значение было false — сохраняем выбор пользователя.
+      // По умолчанию ВКЛ.
       enabled = data[STORAGE_KEY] !== false;
       open = data[OPEN_KEY] === true;
       insertBox();
-      if (!enabled) clearLowHighlights();
+      if (!enabled) scheduleClear();
     });
   }
 
-  new MutationObserver(() => {
-    insertBox();
-    if (!enabled) {
-      clearLowHighlights();
-      scheduleClear(60);
-    }
-  }).observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ["class", "style"]
+  // Лёгкий наблюдатель: только чтобы вставить блок, когда появилась панель.
+  // НЕ следим за style/class, чтобы не грузить МЭШ.
+  const observer = new MutationObserver(() => {
+    if (!document.getElementById(BOX_ID)) scheduleInsert();
   });
 
-  setInterval(() => {
-    insertBox();
-    if (!enabled) clearLowHighlights();
-  }, 250);
+  function startObserver() {
+    observer.observe(document.body || document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+  }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init, { once: true });
+    document.addEventListener("DOMContentLoaded", () => {
+      startObserver();
+      init();
+    }, { once: true });
   } else {
+    startObserver();
     init();
   }
 })();
