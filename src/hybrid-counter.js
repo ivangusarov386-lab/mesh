@@ -1,181 +1,142 @@
-// ==========================================================
-//  МЭШ – Помощник учителя
-//  Гибридный счетчик: видимый период из DOM + скрытые/доп. из marks API.
-//
-//  Главное правило:
-//  НЕ добавляем hidden по ученику целиком.
-//  Добавляем только разницу API-DOM по тем датам, которые реально видны в строке.
-// ==========================================================
-
 (() => {
   const LOW_ROW_CLASS = "mesh-helper-low-grades-row";
   const LOW_ROW_BG = "rgba(248, 113, 113, 0.22)";
+  const FOCUS_ROW_CLASS = "mesh-helper-row-focus";
   let timer = null;
 
-  function isHighlightEnabled() {
-    return window.__MESH_HELPER_HIGHLIGHT_LOW_ENABLED__ !== false;
-  }
-
-  function text(el) {
-    return (el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
-  }
-
-  function escapeHtml(value) {
-    return String(value || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
+  const text = (el) => (el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
+  const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#039;");
+  const isHighlightOn = () => window.__MESH_HELPER_HIGHLIGHT_LOW_ENABLED__ !== false;
 
   function minGrades() {
-    const value = Number(document.querySelector("#mh-min")?.value || 5);
-    return Number.isFinite(value) && value > 0 ? value : 5;
+    const n = Number(document.querySelector("#mh-min")?.value || 5);
+    return Number.isFinite(n) && n > 0 ? n : 5;
   }
 
   function marks() {
-    const data = window.__MESH_HELPER_MARKS__;
-    return data && Array.isArray(data.marks) ? data.marks : [];
+    const main = window.__MESH_HELPER_MARKS__;
+    if (main && Array.isArray(main.marks) && main.marks.length) return main.marks;
+    const debug = window.__MESH_HELPER_MARKS_DEBUG__;
+    if (debug && Array.isArray(debug.marks) && debug.marks.length) return debug.marks;
+    return [];
+  }
+
+  function isAverageCell(cell) {
+    return !!cell?.querySelector?.('[data-test-component*="average"]');
+  }
+
+  function isFinalCell(cell) {
+    return !!cell?.querySelector?.('[data-test-component*="finalResult"]');
   }
 
   function studentId(row) {
     const cell = row?.querySelector?.('[data-test-component^="markCell-"]');
     const attr = cell?.getAttribute?.("data-test-component") || "";
-    const match = attr.match(/^markCell-(\d+)_/);
-    return match ? Number(match[1]) : null;
+    const m = attr.match(/^markCell-(\d+)_/);
+    return m ? Number(m[1]) : null;
   }
 
-  function isAverage(el) {
-    return !!el?.getAttribute?.("data-test-component")?.includes("average");
+  function studentName(row) {
+    const fio = row?.querySelector?.("span[title]");
+    return fio ? (fio.getAttribute("title") || text(fio)) : "";
   }
 
-  function isFinal(el) {
-    return !!el?.getAttribute?.("data-test-component")?.includes("finalResult");
+  function rowCellsBeforeFinal(row) {
+    const result = [];
+    const cells = [...row.children].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
+    for (const cell of cells) {
+      if (isFinalCell(cell)) break;
+      if (isAverageCell(cell)) continue;
+      result.push(cell);
+    }
+    return result;
   }
 
-  function visibleMarkCells(row) {
-    return [...row.querySelectorAll('div[data-test-component^="markCell-"]')]
-      .filter((cell) => !isAverage(cell) && !isFinal(cell));
+  function visibleLessonIds(row) {
+    const ids = new Set();
+    rowCellsBeforeFinal(row).forEach((cell) => {
+      const markCell = cell.querySelector?.('[data-test-component^="markCell-"]');
+      const attr = markCell?.getAttribute?.("data-test-component") || "";
+      const m = attr.match(/^markCell-\d+_(\d+)_/);
+      const id = m ? Number(m[1]) : null;
+      if (id && id > 100000) ids.add(id);
+    });
+    return ids;
   }
 
-  function getDateFromMarkCell(cell) {
-    const attr = cell?.getAttribute?.("data-test-component") || "";
-    const match = attr.match(/^markCell-\d+_(\d+)_/);
-    const lessonId = match ? Number(match[1]) : null;
-    if (!lessonId) return null;
-
-    const apiMark = marks().find((mark) => Number(mark?.schedule_lesson_id) === lessonId && String(mark?.date || "").trim());
-    return apiMark ? String(apiMark.date).trim() : null;
-  }
-
-  function countDomGrades(row) {
+  function domStats(row) {
     let grades = 0;
     let absences = 0;
-    const dateCounts = {};
-
-    visibleMarkCells(row).forEach((cell) => {
-      const date = getDateFromMarkCell(cell);
-      const values = [...cell.querySelectorAll("span")].map(text).filter(Boolean);
-      const parts = values.length ? values : text(cell).split(" ").map((x) => x.trim()).filter(Boolean);
-
-      parts.forEach((value) => {
-        if (/^[1-5]$/.test(value)) {
-          grades += 1;
-          if (date) dateCounts[date] = (dateCounts[date] || 0) + 1;
-        } else if (value.toLowerCase() === "н") {
-          absences += 1;
-        }
+    let lessons = 0;
+    rowCellsBeforeFinal(row).forEach((cell) => {
+      const markCell = cell.querySelector?.('[data-test-component^="markCell-"]');
+      if (!markCell) return;
+      lessons += 1;
+      const spans = [...markCell.querySelectorAll("span")].map(text).filter(Boolean);
+      const parts = spans.length ? spans : text(markCell).split(" ").map((x) => x.trim()).filter(Boolean);
+      parts.forEach((v) => {
+        if (/^[1-5]$/.test(v)) grades += 1;
+        else if (v.toLowerCase() === "н") absences += 1;
       });
+    });
+    return { grades, absences, lessons };
+  }
+
+  function rowStats(row) {
+    const sid = studentId(row);
+    const lessonIds = visibleLessonIds(row);
+    const dom = domStats(row);
+    const api = marks();
+
+    if (!sid || !lessonIds.size || !api.length) {
+      return { gradeCount: dom.grades, absenceCount: dom.absences, lessonCount: dom.lessons };
+    }
+
+    let apiCount = 0;
+    api.forEach((mark) => {
+      if (Number(mark?.student_profile_id) !== sid) return;
+      if (!lessonIds.has(Number(mark?.schedule_lesson_id))) return;
+      if (!/^[1-5]$/.test(String(mark?.name || "").trim())) return;
+      apiCount += 1;
     });
 
     return {
-      grades,
-      absences,
-      lessons: visibleMarkCells(row).length,
-      dateCounts,
-      visibleDates: new Set(Object.keys(dateCounts))
+      gradeCount: Math.max(apiCount, dom.grades),
+      absenceCount: dom.absences,
+      lessonCount: dom.lessons
     };
   }
 
-  function apiExtraForVisibleDates(row, dom) {
-    const id = studentId(row);
-    if (!id) return 0;
-
-    let extra = 0;
-    const apiDateCounts = {};
-
-    marks().forEach((mark) => {
-      if (Number(mark?.student_profile_id) !== id) return;
-      if (!/^[1-5]$/.test(String(mark?.name || "").trim())) return;
-
-      const date = String(mark?.date || "").trim();
-      if (!date || !dom.visibleDates.has(date)) return;
-
-      apiDateCounts[date] = (apiDateCounts[date] || 0) + 1;
+  function targets(row) {
+    const out = [];
+    rowCellsBeforeFinal(row).forEach((cell) => {
+      out.push(cell);
+      cell.querySelectorAll?.('[data-test-component^="markCell-"]').forEach((el) => out.push(el));
     });
-
-    Object.keys(apiDateCounts).forEach((date) => {
-      const apiCount = apiDateCounts[date] || 0;
-      const domCount = dom.dateCounts[date] || 0;
-      if (apiCount > domCount) extra += apiCount - domCount;
-    });
-
-    return extra;
+    return [...new Set(out)];
   }
 
-  function highlightTargets(row) {
-    const targets = [];
-    const cells = [...row.children].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
-
-    for (const cell of cells) {
-      const hasFinal = !!cell.querySelector?.('[data-test-component*="finalResult"]');
-      const hasAverage = !!cell.querySelector?.('[data-test-component*="average"]');
-      if (hasFinal) break;
-      if (hasAverage) continue;
-      targets.push(cell);
-      cell.querySelectorAll?.('div[data-test-component^="markCell-"]').forEach((el) => targets.push(el));
-    }
-
-    return [...new Set(targets)];
-  }
-
-  function setHighlight(row, on) {
-    const enabled = isHighlightEnabled() && on;
-    row.classList.toggle(LOW_ROW_CLASS, enabled);
-
-    highlightTargets(row).forEach((el) => {
-      if (enabled) el.style.setProperty("background-color", LOW_ROW_BG, "important");
-      else el.style.removeProperty("background-color");
+  function setHighlight(row, active) {
+    const on = isHighlightOn() && active;
+    row.classList.toggle(LOW_ROW_CLASS, on);
+    targets(row).forEach((el) => {
+      if (on) el.style.setProperty("background-color", LOW_ROW_BG, "important");
+      else {
+        el.style.removeProperty("background-color");
+        if (el.dataset?.mhPrevBg) delete el.dataset.mhPrevBg;
+      }
     });
-
-    if (!isHighlightEnabled()) {
-      window.dispatchEvent(new CustomEvent("mesh-helper-force-clear-low"));
-    }
+    if (!isHighlightOn()) window.dispatchEvent(new CustomEvent("mesh-helper-force-clear-low"));
   }
 
   function rows() {
-    return [...document.querySelectorAll("tr")]
-      .map((row, id) => {
-        const fio = row.querySelector("span[title]");
-        const any = row.querySelector('div[data-test-component^="markCell-"]');
-        if (!fio || !any) return null;
-
-        const dom = countDomGrades(row);
-        const extra = apiExtraForVisibleDates(row, dom);
-        const gradeCount = dom.grades + extra;
-
-        return {
-          id,
-          row,
-          name: fio.getAttribute("title") || text(fio),
-          gradeCount,
-          absences: dom.absences,
-          lessons: dom.lessons,
-          hidden: extra
-        };
-      })
-      .filter(Boolean);
+    return [...document.querySelectorAll("tr")].map((row, id) => {
+      const name = studentName(row);
+      const sid = studentId(row);
+      if (!name || !sid) return null;
+      const stat = rowStats(row);
+      return { id, row, name, ...stat };
+    }).filter(Boolean);
   }
 
   function updatePanel(list, min) {
@@ -185,26 +146,18 @@
     const titleCount = panel?.querySelector("#mh-problem-count");
     if (!listEl || !summaryEl) return;
 
-    const problematic = list.filter((item) => item.gradeCount < min);
-    summaryEl.textContent = `Ученики ниже нормы по оценкам: ${problematic.length}`;
-    if (titleCount) titleCount.textContent = String(problematic.length);
+    const problems = list.filter((x) => x.gradeCount < min);
+    summaryEl.textContent = `Ученики ниже нормы по оценкам: ${problems.length}`;
+    if (titleCount) titleCount.textContent = String(problems.length);
 
-    if (!problematic.length) {
+    if (!problems.length) {
       listEl.innerHTML = '<div class="mh-note">Все ученики в норме 👍</div>';
       return;
     }
 
-    listEl.innerHTML = problematic.map((item) => {
-      const rate = item.lessons ? Math.round((item.absences / item.lessons) * 1000) / 10 : 0;
-      return `
-        <div class="mh-item">
-          <div class="mh-item-text">
-            <div class="mh-name">${escapeHtml(item.name)}</div>
-            <div class="mh-count">Оценок за период: ${item.gradeCount}<br>Н: ${item.absences} (${rate}%)</div>
-          </div>
-          <button class="mh-goto" type="button" data-hybrid-id="${item.id}">Подсветить</button>
-        </div>
-      `;
+    listEl.innerHTML = problems.map((x) => {
+      const rate = x.lessonCount ? Math.round((x.absenceCount / x.lessonCount) * 1000) / 10 : 0;
+      return `<div class="mh-item"><div class="mh-item-text"><div class="mh-name">${esc(x.name)}</div><div class="mh-count">Оценок за период: ${x.gradeCount}<br>Н: ${x.absenceCount} (${rate}%)</div></div><button class="mh-goto" type="button" data-hybrid-id="${x.id}">Подсветить</button></div>`;
     }).join("");
   }
 
@@ -212,47 +165,45 @@
     const item = rows().find((x) => x.id === id);
     if (!item) return;
     item.row.scrollIntoView({ behavior: "smooth", block: "center" });
-    item.row.classList.add("mesh-helper-row-focus");
-    setTimeout(() => item.row.classList.remove("mesh-helper-row-focus"), 1500);
+    item.row.classList.add(FOCUS_ROW_CLASS);
+    setTimeout(() => item.row.classList.remove(FOCUS_ROW_CLASS), 1500);
   }
 
   function apply() {
     const min = minGrades();
     const list = rows();
-    list.forEach((item) => setHighlight(item.row, item.gradeCount < min));
+    list.forEach((x) => setHighlight(x.row, x.gradeCount < min));
     updatePanel(list, min);
   }
 
-  function schedule() {
+  function schedule(delay = 120) {
     clearTimeout(timer);
-    timer = setTimeout(apply, 150);
+    timer = setTimeout(apply, delay);
   }
 
-  document.addEventListener("click", (event) => {
-    const btn = event.target.closest("[data-hybrid-id]");
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-hybrid-id]");
     if (!btn) return;
-    event.preventDefault();
-    event.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation();
     focusRow(Number(btn.dataset.hybridId));
   }, true);
 
-  window.addEventListener("mesh-helper-highlight-toggle", schedule);
-
-  window.addEventListener("message", (event) => {
-    if (event.source === window && event.data?.source === "mesh-helper-marks-hook") setTimeout(schedule, 150);
+  window.addEventListener("mesh-helper-highlight-toggle", () => schedule(40));
+  window.addEventListener("message", (e) => {
+    if (e.source === window && e.data?.source === "mesh-helper-marks-hook") {
+      schedule(80);
+      setTimeout(apply, 300);
+      setTimeout(apply, 900);
+    }
   });
 
-  new MutationObserver(schedule).observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    characterData: true
-  });
+  new MutationObserver(() => schedule(180)).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  setInterval(apply, 1200);
 
-  setInterval(apply, 1000);
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => schedule(200), { once: true });
+  else schedule(200);
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", schedule, { once: true });
-  else schedule();
-
-  setTimeout(schedule, 1500);
-  setTimeout(schedule, 3500);
+  setTimeout(apply, 1500);
+  setTimeout(apply, 3500);
 })();
