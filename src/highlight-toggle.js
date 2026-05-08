@@ -2,9 +2,10 @@
 //  МЭШ – Помощник учителя
 //  Безопасный раскрывающийся блок «Подсветка».
 //
-//  ВАЖНО:
-//  Здесь нет глобального наблюдения за style/class и нет постоянной
-//  очистки всего DOM. Это нужно, чтобы не подвешивать МЭШ.
+//  Главная идея:
+//  этот файл не только рисует тумблер, но и задаёт глобальный флаг
+//  window.__MESH_HELPER_HIGHLIGHT_LOW_ENABLED__.
+//  Остальные скрипты обязаны смотреть на этот флаг перед красной подсветкой.
 // ==========================================================
 
 (() => {
@@ -20,14 +21,19 @@
   let insertTimer = null;
   let clearTimer = null;
 
+  function setGlobalFlag() {
+    window.__MESH_HELPER_HIGHLIGHT_LOW_ENABLED__ = enabled;
+    window.dispatchEvent(new CustomEvent("mesh-helper-highlight-toggle", {
+      detail: { enabled }
+    }));
+  }
+
   function isLowBg(value) {
     const bg = String(value || "");
     return LOW_BG_PARTS.every((part) => bg.includes(part));
   }
 
   function clearLowHighlightsSoft() {
-    if (enabled) return;
-
     document.querySelectorAll(`.${LOW_ROW_CLASS}`).forEach((row) => {
       row.classList.remove(LOW_ROW_CLASS);
     });
@@ -39,17 +45,16 @@
       delete el.dataset.mhPrevBg;
     });
 
-    // Только элементы, которые реально были окрашены нашим цветом.
     document.querySelectorAll("td[style], th[style], div[style]").forEach((el) => {
       const bg = el.style?.getPropertyValue("background-color");
       if (isLowBg(bg)) el.style.removeProperty("background-color");
     });
   }
 
-  function scheduleClear() {
+  function scheduleClear(delay = 120) {
     if (enabled) return;
     clearTimeout(clearTimer);
-    clearTimer = setTimeout(clearLowHighlightsSoft, 120);
+    clearTimer = setTimeout(clearLowHighlightsSoft, delay);
   }
 
   function syncVisualState() {
@@ -113,10 +118,13 @@
     section.querySelector(`#${TOGGLE_ID}`)?.addEventListener("change", (event) => {
       enabled = event.target.checked;
       chrome.storage.sync.set({ [STORAGE_KEY]: enabled });
+      setGlobalFlag();
+      syncVisualState();
 
       if (!enabled) {
         clearLowHighlightsSoft();
-        scheduleClear();
+        scheduleClear(80);
+        scheduleClear(300);
       }
     });
 
@@ -130,16 +138,18 @@
 
   function init() {
     chrome.storage.sync.get([STORAGE_KEY, OPEN_KEY], (data) => {
-      // По умолчанию ВКЛ.
       enabled = data[STORAGE_KEY] !== false;
       open = data[OPEN_KEY] === true;
+      setGlobalFlag();
       insertBox();
       if (!enabled) scheduleClear();
     });
   }
 
-  // Лёгкий наблюдатель: только чтобы вставить блок, когда появилась панель.
-  // НЕ следим за style/class, чтобы не грузить МЭШ.
+  window.addEventListener("mesh-helper-force-clear-low", () => {
+    if (!enabled) clearLowHighlightsSoft();
+  });
+
   const observer = new MutationObserver(() => {
     if (!document.getElementById(BOX_ID)) scheduleInsert();
   });
