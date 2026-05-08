@@ -2,16 +2,19 @@
 //  МЭШ – Помощник учителя
 //  Гибридный счетчик: видимый период из DOM + скрытые/доп. из marks API.
 //
-//  Почему так:
-//  - DOM правильно ограничен текущим видимым периодом;
-//  - API видит скрытые оценки, но total может быть за весь год;
-//  - поэтому НЕ берем API total целиком, а добавляем только hidden.
+//  Главное правило:
+//  НЕ добавляем hidden по ученику целиком.
+//  Добавляем только разницу API-DOM по тем датам, которые реально видны в строке.
 // ==========================================================
 
 (() => {
   const LOW_ROW_CLASS = "mesh-helper-low-grades-row";
   const LOW_ROW_BG = "rgba(248, 113, 113, 0.22)";
   let timer = null;
+
+  function isHighlightEnabled() {
+    return window.__MESH_HELPER_HIGHLIGHT_LOW_ENABLED__ !== false;
+  }
 
   function text(el) {
     return (el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
@@ -31,9 +34,9 @@
     return Number.isFinite(value) && value > 0 ? value : 5;
   }
 
-  function marksStats() {
+  function marks() {
     const data = window.__MESH_HELPER_MARKS__;
-    return data && data.stats ? data.stats : {};
+    return data && Array.isArray(data.marks) ? data.marks : [];
   }
 
   function studentId(row) {
@@ -56,31 +59,69 @@
       .filter((cell) => !isAverage(cell) && !isFinal(cell));
   }
 
+  function getDateFromMarkCell(cell) {
+    const attr = cell?.getAttribute?.("data-test-component") || "";
+    const match = attr.match(/^markCell-\d+_(\d+)_/);
+    const lessonId = match ? Number(match[1]) : null;
+    if (!lessonId) return null;
+
+    const apiMark = marks().find((mark) => Number(mark?.schedule_lesson_id) === lessonId && String(mark?.date || "").trim());
+    return apiMark ? String(apiMark.date).trim() : null;
+  }
+
   function countDomGrades(row) {
     let grades = 0;
     let absences = 0;
+    const dateCounts = {};
 
     visibleMarkCells(row).forEach((cell) => {
-      const values = [...cell.querySelectorAll("span")]
-        .map(text)
-        .filter(Boolean);
-
+      const date = getDateFromMarkCell(cell);
+      const values = [...cell.querySelectorAll("span")].map(text).filter(Boolean);
       const parts = values.length ? values : text(cell).split(" ").map((x) => x.trim()).filter(Boolean);
 
       parts.forEach((value) => {
-        if (/^[1-5]$/.test(value)) grades += 1;
-        else if (value.toLowerCase() === "н") absences += 1;
+        if (/^[1-5]$/.test(value)) {
+          grades += 1;
+          if (date) dateCounts[date] = (dateCounts[date] || 0) + 1;
+        } else if (value.toLowerCase() === "н") {
+          absences += 1;
+        }
       });
     });
 
-    return { grades, absences, lessons: visibleMarkCells(row).length };
+    return {
+      grades,
+      absences,
+      lessons: visibleMarkCells(row).length,
+      dateCounts,
+      visibleDates: new Set(Object.keys(dateCounts))
+    };
   }
 
-  function hiddenFromApi(row) {
+  function apiExtraForVisibleDates(row, dom) {
     const id = studentId(row);
     if (!id) return 0;
-    const stat = marksStats()[String(id)];
-    return Number(stat?.hidden || 0);
+
+    let extra = 0;
+    const apiDateCounts = {};
+
+    marks().forEach((mark) => {
+      if (Number(mark?.student_profile_id) !== id) return;
+      if (!/^[1-5]$/.test(String(mark?.name || "").trim())) return;
+
+      const date = String(mark?.date || "").trim();
+      if (!date || !dom.visibleDates.has(date)) return;
+
+      apiDateCounts[date] = (apiDateCounts[date] || 0) + 1;
+    });
+
+    Object.keys(apiDateCounts).forEach((date) => {
+      const apiCount = apiDateCounts[date] || 0;
+      const domCount = dom.dateCounts[date] || 0;
+      if (apiCount > domCount) extra += apiCount - domCount;
+    });
+
+    return extra;
   }
 
   function highlightTargets(row) {
@@ -100,11 +141,17 @@
   }
 
   function setHighlight(row, on) {
-    row.classList.toggle(LOW_ROW_CLASS, on);
+    const enabled = isHighlightEnabled() && on;
+    row.classList.toggle(LOW_ROW_CLASS, enabled);
+
     highlightTargets(row).forEach((el) => {
-      if (on) el.style.setProperty("background-color", LOW_ROW_BG, "important");
-      else if (el.dataset.mhPrevBg === undefined) el.style.removeProperty("background-color");
+      if (enabled) el.style.setProperty("background-color", LOW_ROW_BG, "important");
+      else el.style.removeProperty("background-color");
     });
+
+    if (!isHighlightEnabled()) {
+      window.dispatchEvent(new CustomEvent("mesh-helper-force-clear-low"));
+    }
   }
 
   function rows() {
@@ -115,8 +162,8 @@
         if (!fio || !any) return null;
 
         const dom = countDomGrades(row);
-        const hidden = hiddenFromApi(row);
-        const gradeCount = dom.grades + hidden;
+        const extra = apiExtraForVisibleDates(row, dom);
+        const gradeCount = dom.grades + extra;
 
         return {
           id,
@@ -125,7 +172,7 @@
           gradeCount,
           absences: dom.absences,
           lessons: dom.lessons,
-          hidden
+          hidden: extra
         };
       })
       .filter(Boolean);
@@ -178,7 +225,7 @@
 
   function schedule() {
     clearTimeout(timer);
-    timer = setTimeout(apply, 120);
+    timer = setTimeout(apply, 150);
   }
 
   document.addEventListener("click", (event) => {
@@ -188,6 +235,8 @@
     event.stopPropagation();
     focusRow(Number(btn.dataset.hybridId));
   }, true);
+
+  window.addEventListener("mesh-helper-highlight-toggle", schedule);
 
   window.addEventListener("message", (event) => {
     if (event.source === window && event.data?.source === "mesh-helper-marks-hook") setTimeout(schedule, 150);
