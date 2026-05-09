@@ -52,16 +52,56 @@
     return result;
   }
 
-  function visibleLessonIds(row) {
-    const ids = new Set();
-    rowCellsBeforeFinal(row).forEach((cell) => {
-      const markCell = cell.querySelector?.('[data-test-component^="markCell-"]');
-      const attr = markCell?.getAttribute?.("data-test-component") || "";
-      const m = attr.match(/^markCell-\d+_(\d+)_/);
-      const id = m ? Number(m[1]) : null;
-      if (id && id > 100000) ids.add(id);
+  function markCellFromTd(cell) {
+    return cell.querySelector?.('[data-test-component^="markCell-"]') || null;
+  }
+
+  function parseLessonId(markCell) {
+    const attr = markCell?.getAttribute?.("data-test-component") || "";
+    const m = attr.match(/^markCell-\d+_(\d+)_/);
+    const id = m ? Number(m[1]) : null;
+    return id && id > 100000 ? id : null;
+  }
+
+  function lessonDateMap() {
+    const map = new Map();
+    marks().forEach((mark) => {
+      const lessonId = Number(mark?.schedule_lesson_id);
+      const date = String(mark?.date || "").trim();
+      if (lessonId && date && !map.has(lessonId)) map.set(lessonId, date);
     });
-    return ids;
+    return map;
+  }
+
+  function visiblePeriod(row, apiMarks) {
+    const ids = new Set();
+    const dates = new Set();
+    const byLesson = lessonDateMap();
+
+    rowCellsBeforeFinal(row).forEach((cell) => {
+      const markCell = markCellFromTd(cell);
+      if (!markCell) return;
+
+      const lessonId = parseLessonId(markCell);
+      if (!lessonId) return;
+
+      ids.add(lessonId);
+      const date = byLesson.get(lessonId);
+      if (date) dates.add(date);
+    });
+
+    // Резерв: если даты не удалось восстановить, используем даты оценок этого ученика по видимым lessonId.
+    if (!dates.size && ids.size) {
+      const sid = studentId(row);
+      apiMarks.forEach((mark) => {
+        if (Number(mark?.student_profile_id) !== sid) return;
+        if (!ids.has(Number(mark?.schedule_lesson_id))) return;
+        const date = String(mark?.date || "").trim();
+        if (date) dates.add(date);
+      });
+    }
+
+    return { ids, dates };
   }
 
   function domStats(row) {
@@ -69,7 +109,7 @@
     let absences = 0;
     let lessons = 0;
     rowCellsBeforeFinal(row).forEach((cell) => {
-      const markCell = cell.querySelector?.('[data-test-component^="markCell-"]');
+      const markCell = markCellFromTd(cell);
       if (!markCell) return;
       lessons += 1;
       const spans = [...markCell.querySelectorAll("span")].map(text).filter(Boolean);
@@ -84,20 +124,30 @@
 
   function rowStats(row) {
     const sid = studentId(row);
-    const lessonIds = visibleLessonIds(row);
-    const dom = domStats(row);
     const api = marks();
+    const dom = domStats(row);
+    const period = visiblePeriod(row, api);
 
-    if (!sid || !lessonIds.size || !api.length) {
+    if (!sid || (!period.dates.size && !period.ids.size) || !api.length) {
       return { gradeCount: dom.grades, absenceCount: dom.absences, lessonCount: dom.lessons };
     }
 
     let apiCount = 0;
     api.forEach((mark) => {
       if (Number(mark?.student_profile_id) !== sid) return;
-      if (!lessonIds.has(Number(mark?.schedule_lesson_id))) return;
       if (!/^[1-5]$/.test(String(mark?.name || "").trim())) return;
-      apiCount += 1;
+
+      const date = String(mark?.date || "").trim();
+      const lessonId = Number(mark?.schedule_lesson_id);
+
+      // Главная логика: считаем по видимым датам периода.
+      if (date && period.dates.has(date)) {
+        apiCount += 1;
+        return;
+      }
+
+      // Резерв: если даты нет, считаем по видимым lessonId.
+      if (!date && lessonId && period.ids.has(lessonId)) apiCount += 1;
     });
 
     return {
@@ -135,7 +185,7 @@
       const sid = studentId(row);
       if (!name || !sid) return null;
       const stat = rowStats(row);
-      return { id, row, name, ...stat };
+      return { id, row, name, studentId: sid, ...stat };
     }).filter(Boolean);
   }
 
@@ -190,8 +240,13 @@
   }, true);
 
   window.addEventListener("mesh-helper-highlight-toggle", () => schedule(40));
+  window.addEventListener("mesh-helper-marks-updated", () => {
+    schedule(60);
+    setTimeout(apply, 250);
+    setTimeout(apply, 900);
+  });
   window.addEventListener("message", (e) => {
-    if (e.source === window && e.data?.source === "mesh-helper-marks-hook") {
+    if (e.source === window && e.data?.source === "mesh-helper-marks-hook" && e.data?.type === "marks-response") {
       schedule(80);
       setTimeout(apply, 300);
       setTimeout(apply, 900);
