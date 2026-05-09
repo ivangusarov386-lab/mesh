@@ -1,7 +1,11 @@
 // ==========================================================
 //  МЭШ – Помощник учителя
-//  Page hook: читает ответы marks из контекста самой страницы.
-//  ВАЖНО: сам ничего не запрашивает, только слушает ответы, которые уже получает МЭШ.
+//  Page hook: читает ответы marks из контекста страницы.
+//
+//  ВАЖНО:
+//  - GET marks = источник актуального списка оценок;
+//  - POST/PATCH/DELETE marks = сигнал, что список нужно обновить;
+//  - после изменения оценки перезапрашиваем последний GET marks URL.
 // ==========================================================
 
 (() => {
@@ -11,6 +15,10 @@
 
   if (window.__meshHelperMarksHookInstalled) return;
   window.__meshHelperMarksHookInstalled = true;
+
+  let lastMarksListUrl = "";
+  let refreshTimer = null;
+  let refreshing = false;
 
   function isMarksListUrl(url) {
     return String(url || "").includes(MARKS_LIST_PART);
@@ -67,12 +75,50 @@
   }
 
   function postMarks(url, payload) {
+    if (isMarksListUrl(url)) lastMarksListUrl = String(url || "");
     saveDebugMarks(url, payload);
     post("marks-response", url, payload);
   }
 
   function postMutation(url, payload) {
     post("marks-mutated", url, payload || {});
+  }
+
+  async function refreshLastMarksList(reason) {
+    if (!lastMarksListUrl || refreshing) return;
+
+    refreshing = true;
+    try {
+      const response = await window.fetch(lastMarksListUrl, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          "Accept": "application/json"
+        }
+      });
+
+      const payload = await response.clone().json();
+      post("marks-refresh", lastMarksListUrl, { reason });
+      postMarks(lastMarksListUrl, payload);
+    } catch (error) {
+      post("marks-refresh-error", lastMarksListUrl, { reason, message: String(error?.message || error) });
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  function scheduleRefresh(reason, delay) {
+    if (!lastMarksListUrl) return;
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => refreshLastMarksList(reason), delay);
+  }
+
+  function scheduleMutationRefresh(url) {
+    postMutation(url, { refreshScheduled: true });
+    scheduleRefresh("after-mutation-250", 250);
+    setTimeout(() => refreshLastMarksList("after-mutation-900"), 900);
+    setTimeout(() => refreshLastMarksList("after-mutation-1800"), 1800);
   }
 
   function readJsonSafely(response, url, isList) {
@@ -92,12 +138,6 @@
     }
   }
 
-  function scheduleMutationSignal(url) {
-    setTimeout(() => postMutation(url, { delayed: 1 }), 250);
-    setTimeout(() => postMutation(url, { delayed: 2 }), 900);
-    setTimeout(() => postMutation(url, { delayed: 3 }), 1800);
-  }
-
   const originalFetch = window.fetch;
   if (typeof originalFetch === "function") {
     window.fetch = async function meshHelperFetchHook(input, init) {
@@ -107,11 +147,11 @@
         const url = typeof input === "string" ? input : input?.url;
         const method = String(init?.method || input?.method || "GET").toUpperCase();
 
-        if (isMarksListUrl(url)) {
+        if (isMarksListUrl(url) && method === "GET") {
           readJsonSafely(response, url, true);
         } else if (isAnyMarksUrl(url) && method !== "GET") {
           readJsonSafely(response, url, false);
-          scheduleMutationSignal(url);
+          scheduleMutationRefresh(url);
         }
       } catch (error) {}
 
@@ -140,16 +180,16 @@
           const text = this.responseText;
           const payload = text ? JSON.parse(text) : {};
 
-          if (isMarksListUrl(url)) {
+          if (isMarksListUrl(url) && method === "GET") {
             postMarks(url, payload);
           } else if (method !== "GET") {
             postMutation(url, payload);
-            scheduleMutationSignal(url);
+            scheduleMutationRefresh(url);
           }
         } catch (error) {
           if (isAnyMarksUrl(this.__meshHelperUrl) && this.__meshHelperMethod !== "GET") {
             postMutation(this.__meshHelperUrl, {});
-            scheduleMutationSignal(this.__meshHelperUrl);
+            scheduleMutationRefresh(this.__meshHelperUrl);
           }
         }
       });
