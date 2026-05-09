@@ -6,31 +6,24 @@
   position: fixed;
   top: 0;
   right: 0;
-
   width: 290px;
   height: 100vh;
-
   background: #ffffff;
   box-shadow: -2px 0 6px rgba(0, 0, 0, 0.18);
-
   padding: 0 14px 16px 14px;
   box-sizing: border-box;
-
   z-index: 1000001 !important;
   overflow-y: auto;
-
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
   color: #0f172a;
 }
 
-/* Заголовок панели */
 .mh-header {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-
   padding: 14px 0 10px 0;
   user-select: none;
 }
@@ -41,7 +34,6 @@
   text-align: center;
 }
 
-/* Две строки заголовка (нужны для плашки) */
 .mh-title-main {
   font-size: 18px;
   font-weight: 700;
@@ -56,48 +48,25 @@
   line-height: 1.1;
 }
 
-/* Кнопка сворачивания (в шапке) */
 .mh-collapse-btn {
   position: absolute;
   top: 8px;
   right: 8px;
-
   border: none;
   cursor: pointer;
-
   padding: 6px 10px;
   border-radius: 999px;
-
   font-size: 12px;
   line-height: 1;
-
   background: #f1f5f9;
   color: #0f172a;
-
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.12);
   z-index: 1000002 !important;
-  pointer-events: auto !important;
 }
 
-.mh-collapse-btn:hover {
-  background: #e2e8f0;
-}
+.mh-section { margin-bottom: 18px; }
+.mh-label { display: block; margin-bottom: 4px; }
 
-.mh-collapse-btn:active {
-  transform: translateY(1px);
-}
-
-/* Блоки */
-.mh-section {
-  margin-bottom: 18px;
-}
-
-.mh-label {
-  display: block;
-  margin-bottom: 4px;
-}
-
-/* Настройки */
 .mh-settings-row {
   display: flex;
   gap: 8px;
@@ -121,11 +90,6 @@
   font-size: 12px;
 }
 
-#mh-save:hover {
-  background: #1d4ed8;
-}
-
-/* Подзаголовок + экспорт */
 .mh-subtitle {
   font-weight: 500;
   margin-bottom: 8px;
@@ -141,11 +105,6 @@
   font-size: 12px;
 }
 
-.mh-export:hover {
-  background: #e2e8f0;
-}
-
-/* Список учеников */
 .mh-list {
   border-top: 1px solid #e2e8f0;
 }
@@ -164,21 +123,10 @@
   border-bottom: 1px solid #e2e8f0;
 }
 
-.mh-item-text {
-  max-width: 180px;
-}
+.mh-item-text { max-width: 180px; }
+.mh-name { font-weight: 600; font-size: 13px; }
+.mh-count { font-size: 12px; color: #64748b; }
 
-.mh-name {
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.mh-count {
-  font-size: 12px;
-  color: #64748b;
-}
-
-/* Кнопка "Подсветить" */
 .mh-goto {
   padding: 4px 10px;
   background: #0f766e;
@@ -190,44 +138,10 @@
   white-space: nowrap;
 }
 
-.mh-goto:hover {
-  background: #115e59;
-}
-
-/* ============================================
-   Подсветка строк журнала
-   ============================================ */
-
-/*
-  ВАЖНО:
-  Общую заливку через CSS на .mesh-helper-low-grades-row / td / th НЕ делаем.
-  Границу подсветки до «Итог» контролирует content.js точечно через inline-style.
-  Иначе МЭШ красит «Ср.» и правый итоговый средний балл.
-*/
 .mesh-helper-low-grades-row {
   box-shadow: inset 4px 0 0 #ef4444 !important;
 }
 
-.mesh-helper-row-focus {
-  animation: mesh-helper-row-focus 1.2s ease-out;
-}
-
-@keyframes mesh-helper-row-focus {
-  from {
-    box-shadow: inset 4px 0 0 #22c55e, 0 0 12px rgba(34, 197, 94, 0.9);
-    background-color: rgba(34, 197, 94, 0.25);
-  }
-  to {
-    box-shadow: inset 4px 0 0 #22c55e, 0 0 0 rgba(34, 197, 94, 0);
-    background-color: transparent;
-  }
-}
-
-/* ============================================
-   Сворачивание ВВЕРХ → ОВАЛЬНАЯ 3D-ПЛАШКА
-   ============================================ */
-
-/* В свернутом виде скрываем всё, кроме шапки */
 #mesh-helper-panel.mh-collapsed-top .mh-section,
 #mesh-helper-panel.mh-collapsed-top #mh-list,
 #mesh-helper-panel.mh-collapsed-top #mh-summary,
@@ -235,64 +149,38 @@
   display: none !important;
 }
 
-/* Овал + 3D — компактно, в высоту верхней фиолетовой полосы МЭШ */
 #mesh-helper-panel.mh-collapsed-top {
   position: fixed;
   top: 46px;
   right: 12px;
-
   height: 38px !important;
   min-height: 38px !important;
-
   width: 300px !important;
   padding: 0 !important;
-
   border-radius: 999px !important;
   overflow: hidden !important;
-
   background: linear-gradient(180deg, #ff4a4a 0%, #df0000 55%, #ad0000 100%) !important;
-
   box-shadow:
-    0 6px 14px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.42),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.25) !important;
+    0 6px 14px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.42),
+    inset 0 -2px 0 rgba(0,0,0,0.25) !important;
 }
 
-/* Блик слева (объём) */
-#mesh-helper-panel.mh-collapsed-top::before {
-  content: "";
-  position: absolute;
-  left: 8px;
-  top: 5px;
-  bottom: 5px;
-  width: 18px;
-
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
-  filter: blur(0.4px);
-  pointer-events: none;
-}
-
-/* Шапка становится центром кнопки (перетаскиваем её!) */
 #mesh-helper-panel.mh-collapsed-top .mh-header {
   height: 100%;
-  padding: 0 !important;
-
+  padding: 0 44px 0 74px !important;
   display: flex !important;
   align-items: center;
   justify-content: center;
-
   cursor: move !important;
 }
 
-/* Текст по центру, две строки */
 #mesh-helper-panel.mh-collapsed-top .mh-title {
-  color: #ffffff !important;
+  color: #fff !important;
   text-align: center;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  text-shadow: 0 1px 0 rgba(0,0,0,0.35);
 }
 
-/* В свернутом виде уменьшаем */
 #mesh-helper-panel.mh-collapsed-top .mh-title-main {
   font-size: 13px !important;
   font-weight: 800 !important;
@@ -307,24 +195,50 @@
   opacity: 0.9;
 }
 
-/* Кнопка-стрелка в плашке */
 #mesh-helper-panel.mh-collapsed-top .mh-collapse-btn {
   top: 50% !important;
   right: 10px !important;
   transform: translateY(-50%) !important;
-
   width: 26px !important;
   height: 26px !important;
   padding: 0 !important;
-
   display: flex !important;
   align-items: center;
   justify-content: center;
+  background: rgba(255,255,255,0.18) !important;
+  color: #fff !important;
+}
 
-  background: rgba(255, 255, 255, 0.18) !important;
-  color: #ffffff !important;
+/* Минимум оценок слева */
+.mh-mini-min-wrap {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 1000005;
+}
 
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    0 2px 6px rgba(0, 0, 0, 0.35) !important;
+.mh-mini-min-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.92);
+  text-shadow: 0 1px 0 rgba(0,0,0,0.3);
+}
+
+.mh-mini-min {
+  width: 34px !important;
+  height: 20px !important;
+  border: none !important;
+  border-radius: 8px !important;
+  text-align: center;
+  font-size: 11px !important;
+  font-weight: 700;
+  padding: 0 !important;
+  background: rgba(255,255,255,0.95) !important;
+  color: #111827 !important;
+  outline: none !important;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.15);
 }
