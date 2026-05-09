@@ -63,9 +63,9 @@
     return id && id > 100000 ? id : null;
   }
 
-  function lessonDateMap() {
+  function buildLessonDateMap(api) {
     const map = new Map();
-    marks().forEach((mark) => {
+    api.forEach((mark) => {
       const lessonId = Number(mark?.schedule_lesson_id);
       const date = String(mark?.date || "").trim();
       if (lessonId && date && !map.has(lessonId)) map.set(lessonId, date);
@@ -73,15 +73,15 @@
     return map;
   }
 
-  function visiblePeriod(row, apiMarks) {
+  function visiblePeriod(row, api) {
     const ids = new Set();
     const dates = new Set();
-    const byLesson = lessonDateMap();
+    const byLesson = buildLessonDateMap(api);
+    const sid = studentId(row);
 
     rowCellsBeforeFinal(row).forEach((cell) => {
       const markCell = markCellFromTd(cell);
       if (!markCell) return;
-
       const lessonId = parseLessonId(markCell);
       if (!lessonId) return;
 
@@ -90,10 +90,10 @@
       if (date) dates.add(date);
     });
 
-    // Резерв: если даты не удалось восстановить, используем даты оценок этого ученика по видимым lessonId.
-    if (!dates.size && ids.size) {
-      const sid = studentId(row);
-      apiMarks.forEach((mark) => {
+    // Усиление: если у конкретного ученика есть оценка на видимом уроке,
+    // добавляем её дату в период даже если общая карта не помогла.
+    if (sid && ids.size) {
+      api.forEach((mark) => {
         if (Number(mark?.student_profile_id) !== sid) return;
         if (!ids.has(Number(mark?.schedule_lesson_id))) return;
         const date = String(mark?.date || "").trim();
@@ -132,7 +132,9 @@
       return { gradeCount: dom.grades, absenceCount: dom.absences, lessonCount: dom.lessons };
     }
 
-    let apiCount = 0;
+    let byLesson = 0;
+    let byDate = 0;
+
     api.forEach((mark) => {
       if (Number(mark?.student_profile_id) !== sid) return;
       if (!/^[1-5]$/.test(String(mark?.name || "").trim())) return;
@@ -140,18 +142,12 @@
       const date = String(mark?.date || "").trim();
       const lessonId = Number(mark?.schedule_lesson_id);
 
-      // Главная логика: считаем по видимым датам периода.
-      if (date && period.dates.has(date)) {
-        apiCount += 1;
-        return;
-      }
-
-      // Резерв: если даты нет, считаем по видимым lessonId.
-      if (!date && lessonId && period.ids.has(lessonId)) apiCount += 1;
+      if (lessonId && period.ids.has(lessonId)) byLesson += 1;
+      if (date && period.dates.has(date)) byDate += 1;
     });
 
     return {
-      gradeCount: Math.max(apiCount, dom.grades),
+      gradeCount: Math.max(dom.grades, byLesson, byDate),
       absenceCount: dom.absences,
       lessonCount: dom.lessons
     };
