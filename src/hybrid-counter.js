@@ -90,8 +90,6 @@
       if (date) dates.add(date);
     });
 
-    // Усиление: если у конкретного ученика есть оценка на видимом уроке,
-    // добавляем её дату в период даже если общая карта не помогла.
     if (sid && ids.size) {
       api.forEach((mark) => {
         if (Number(mark?.student_profile_id) !== sid) return;
@@ -104,21 +102,40 @@
     return { ids, dates };
   }
 
+  function hasStackIcon(markCell) {
+    if (!markCell) return false;
+    return !!markCell.querySelector("svg") || /stack|misc-stacked|filled-misc-stacked/i.test(markCell.innerHTML || "");
+  }
+
   function domStats(row) {
     let grades = 0;
     let absences = 0;
     let lessons = 0;
+
     rowCellsBeforeFinal(row).forEach((cell) => {
       const markCell = markCellFromTd(cell);
       if (!markCell) return;
       lessons += 1;
+
       const spans = [...markCell.querySelectorAll("span")].map(text).filter(Boolean);
       const parts = spans.length ? spans : text(markCell).split(" ").map((x) => x.trim()).filter(Boolean);
+
+      let visibleGradesInCell = 0;
       parts.forEach((v) => {
-        if (/^[1-5]$/.test(v)) grades += 1;
-        else if (v.toLowerCase() === "н") absences += 1;
+        if (/^[1-5]$/.test(v)) {
+          grades += 1;
+          visibleGradesInCell += 1;
+        } else if (v.toLowerCase() === "н") {
+          absences += 1;
+        }
       });
+
+      // Универсальный DOM-резерв для скрытых/дополнительных оценок:
+      // МЭШ показывает значок «стопки» в ячейке, когда внутри несколько отметок.
+      // Если видим одну цифровую оценку + значок стопки, считаем минимум 2 оценки.
+      if (visibleGradesInCell === 1 && hasStackIcon(markCell)) grades += 1;
     });
+
     return { grades, absences, lessons };
   }
 
