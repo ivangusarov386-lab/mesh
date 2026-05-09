@@ -1,10 +1,10 @@
 // ==========================================================
 //  МЭШ – Помощник учителя
-//  Раскрывающийся блок «Проверка оценок».
+//  Безопасный раскрывающийся блок «Проверка оценок».
 //
-//  Внутри блока находятся:
-//  - подсветка недобора оценок;
-//  - контроль итоговых.
+//  Важно: без тяжёлого MutationObserver по всему DOM.
+//  Последний вариант мог ломать загрузку МЭШ из-за постоянной
+//  перерисовки панели. Здесь вставка выполняется ограниченно.
 // ==========================================================
 
 (() => {
@@ -17,8 +17,8 @@
 
   let enabled = true;
   let open = false;
-  let insertTimer = null;
   let clearTimer = null;
+  let attempts = 0;
 
   function setGlobalFlag() {
     window.__MESH_HELPER_HIGHLIGHT_LOW_ENABLED__ = enabled;
@@ -52,22 +52,9 @@
     clearTimer = setTimeout(clearLowHighlightsSoft, delay);
   }
 
-  function moveFinalSectionIntoBox() {
-    const box = document.getElementById(BOX_ID);
-    const body = box?.querySelector(".mh-highlight-body");
-    const finalSection = document.querySelector(".mh-final-settings");
-    if (!box || !body || !finalSection) return;
-    if (finalSection.closest(`#${BOX_ID}`)) return;
-
-    finalSection.classList.add("mh-grade-check-final-inside");
-    body.appendChild(finalSection);
-  }
-
   function syncVisualState() {
     const box = document.getElementById(BOX_ID);
     if (!box) return;
-
-    moveFinalSectionIntoBox();
 
     const button = box.querySelector(".mh-highlight-title");
     const body = box.querySelector(".mh-highlight-body");
@@ -80,69 +67,81 @@
     if (button) button.setAttribute("aria-expanded", open ? "true" : "false");
   }
 
-  function insertBox() {
-    const panel = document.getElementById("mesh-helper-panel");
-    if (!panel) return;
+  function moveFinalSectionIntoBoxOnce() {
+    const box = document.getElementById(BOX_ID);
+    const body = box?.querySelector(".mh-highlight-body");
+    const finalSection = document.querySelector(".mh-final-settings");
+    if (!box || !body || !finalSection) return false;
+    if (finalSection.closest(`#${BOX_ID}`)) return true;
 
-    const existing = panel.querySelector(`#${BOX_ID}`);
-    if (existing) {
-      syncVisualState();
-      return;
-    }
-
-    const finalSection = panel.querySelector(".mh-final-settings");
-    const settingsSection = panel.querySelector(".mh-settings");
-    const anchor = finalSection || settingsSection;
-    if (!anchor || !anchor.parentNode) return;
-
-    const section = document.createElement("div");
-    section.id = BOX_ID;
-    section.className = "mh-section mh-highlight-settings mh-grade-check-settings";
-    section.innerHTML = `
-      <button class="mh-highlight-title" type="button" aria-expanded="false">
-        <span>Проверка оценок</span>
-        <span class="mh-highlight-arrow">▼</span>
-      </button>
-
-      <div class="mh-highlight-body">
-        <label class="mh-toggle-row" for="${TOGGLE_ID}">
-          <input id="${TOGGLE_ID}" type="checkbox">
-          <span>Подсветка недобора оценок</span>
-        </label>
-        <div class="mh-note">Можно выключить красную подсветку, когда она временно не нужна.</div>
-      </div>
-    `;
-
-    anchor.parentNode.insertBefore(section, anchor);
-    moveFinalSectionIntoBox();
-
-    section.querySelector(".mh-highlight-title")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      open = !open;
-      chrome.storage.sync.set({ [OPEN_KEY]: open });
-      syncVisualState();
-    });
-
-    section.querySelector(`#${TOGGLE_ID}`)?.addEventListener("change", (event) => {
-      enabled = event.target.checked;
-      chrome.storage.sync.set({ [STORAGE_KEY]: enabled });
-      setGlobalFlag();
-      syncVisualState();
-
-      if (!enabled) {
-        clearLowHighlightsSoft();
-        scheduleClear(80);
-        scheduleClear(300);
-      }
-    });
-
-    syncVisualState();
+    finalSection.classList.add("mh-grade-check-final-inside");
+    body.appendChild(finalSection);
+    return true;
   }
 
-  function scheduleInsert() {
-    clearTimeout(insertTimer);
-    insertTimer = setTimeout(insertBox, 250);
+  function insertBox() {
+    const panel = document.getElementById("mesh-helper-panel");
+    if (!panel) return false;
+
+    let section = panel.querySelector(`#${BOX_ID}`);
+    if (!section) {
+      const finalSection = panel.querySelector(".mh-final-settings");
+      const settingsSection = panel.querySelector(".mh-settings");
+      const anchor = finalSection || settingsSection;
+      if (!anchor || !anchor.parentNode) return false;
+
+      section = document.createElement("div");
+      section.id = BOX_ID;
+      section.className = "mh-section mh-highlight-settings mh-grade-check-settings";
+      section.innerHTML = `
+        <button class="mh-highlight-title" type="button" aria-expanded="false">
+          <span>Проверка оценок</span>
+          <span class="mh-highlight-arrow">▼</span>
+        </button>
+
+        <div class="mh-highlight-body">
+          <label class="mh-toggle-row" for="${TOGGLE_ID}">
+            <input id="${TOGGLE_ID}" type="checkbox">
+            <span>Подсветка недобора оценок</span>
+          </label>
+          <div class="mh-note">Можно выключить красную подсветку, когда она временно не нужна.</div>
+        </div>
+      `;
+
+      anchor.parentNode.insertBefore(section, anchor);
+
+      section.querySelector(".mh-highlight-title")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        open = !open;
+        chrome.storage.sync.set({ [OPEN_KEY]: open });
+        syncVisualState();
+      });
+
+      section.querySelector(`#${TOGGLE_ID}`)?.addEventListener("change", (event) => {
+        enabled = event.target.checked;
+        chrome.storage.sync.set({ [STORAGE_KEY]: enabled });
+        setGlobalFlag();
+        syncVisualState();
+
+        if (!enabled) {
+          clearLowHighlightsSoft();
+          scheduleClear(80);
+          scheduleClear(300);
+        }
+      });
+    }
+
+    moveFinalSectionIntoBoxOnce();
+    syncVisualState();
+    return true;
+  }
+
+  function tryInsertLimited() {
+    attempts += 1;
+    const ok = insertBox();
+    if (ok || attempts >= 20) return;
+    setTimeout(tryInsertLimited, 400);
   }
 
   function init() {
@@ -150,7 +149,7 @@
       enabled = data[STORAGE_KEY] !== false;
       open = data[OPEN_KEY] === true;
       setGlobalFlag();
-      insertBox();
+      tryInsertLimited();
       if (!enabled) scheduleClear();
     });
   }
@@ -159,22 +158,17 @@
     if (!enabled) clearLowHighlightsSoft();
   });
 
-  const observer = new MutationObserver(() => {
-    if (!document.getElementById(BOX_ID)) scheduleInsert();
-    else syncVisualState();
+  window.addEventListener("mesh-helper-panel-ready", () => {
+    attempts = 0;
+    tryInsertLimited();
   });
 
-  function startObserver() {
-    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
-  }
-
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      startObserver();
-      init();
-    }, { once: true });
+    document.addEventListener("DOMContentLoaded", init, { once: true });
   } else {
-    startObserver();
     init();
   }
+
+  setTimeout(tryInsertLimited, 1000);
+  setTimeout(tryInsertLimited, 2500);
 })();
