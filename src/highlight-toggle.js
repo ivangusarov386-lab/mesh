@@ -1,16 +1,15 @@
 // ==========================================================
 //  МЭШ – Помощник учителя
-//  Безопасный раскрывающийся блок «Подсветка».
+//  Раскрывающийся блок «Проверка оценок».
 //
-//  Главная идея:
-//  этот файл не только рисует тумблер, но и задаёт глобальный флаг
-//  window.__MESH_HELPER_HIGHLIGHT_LOW_ENABLED__.
-//  Остальные скрипты обязаны смотреть на этот флаг перед красной подсветкой.
+//  Внутри блока находятся:
+//  - подсветка недобора оценок;
+//  - контроль итоговых.
 // ==========================================================
 
 (() => {
   const STORAGE_KEY = "highlightLowGrades";
-  const OPEN_KEY = "highlightPanelOpen";
+  const OPEN_KEY = "gradeCheckPanelOpen";
   const TOGGLE_ID = "mh-highlight-low-grades";
   const BOX_ID = "mh-highlight-box";
   const LOW_ROW_CLASS = "mesh-helper-low-grades-row";
@@ -23,9 +22,7 @@
 
   function setGlobalFlag() {
     window.__MESH_HELPER_HIGHLIGHT_LOW_ENABLED__ = enabled;
-    window.dispatchEvent(new CustomEvent("mesh-helper-highlight-toggle", {
-      detail: { enabled }
-    }));
+    window.dispatchEvent(new CustomEvent("mesh-helper-highlight-toggle", { detail: { enabled } }));
   }
 
   function isLowBg(value) {
@@ -34,9 +31,7 @@
   }
 
   function clearLowHighlightsSoft() {
-    document.querySelectorAll(`.${LOW_ROW_CLASS}`).forEach((row) => {
-      row.classList.remove(LOW_ROW_CLASS);
-    });
+    document.querySelectorAll(`.${LOW_ROW_CLASS}`).forEach((row) => row.classList.remove(LOW_ROW_CLASS));
 
     document.querySelectorAll("[data-mh-prev-bg]").forEach((el) => {
       const previous = el.dataset.mhPrevBg;
@@ -57,9 +52,22 @@
     clearTimer = setTimeout(clearLowHighlightsSoft, delay);
   }
 
+  function moveFinalSectionIntoBox() {
+    const box = document.getElementById(BOX_ID);
+    const body = box?.querySelector(".mh-highlight-body");
+    const finalSection = document.querySelector(".mh-final-settings");
+    if (!box || !body || !finalSection) return;
+    if (finalSection.closest(`#${BOX_ID}`)) return;
+
+    finalSection.classList.add("mh-grade-check-final-inside");
+    body.appendChild(finalSection);
+  }
+
   function syncVisualState() {
     const box = document.getElementById(BOX_ID);
     if (!box) return;
+
+    moveFinalSectionIntoBox();
 
     const button = box.querySelector(".mh-highlight-title");
     const body = box.querySelector(".mh-highlight-body");
@@ -89,10 +97,10 @@
 
     const section = document.createElement("div");
     section.id = BOX_ID;
-    section.className = "mh-section mh-highlight-settings";
+    section.className = "mh-section mh-highlight-settings mh-grade-check-settings";
     section.innerHTML = `
       <button class="mh-highlight-title" type="button" aria-expanded="false">
-        <span>Подсветка</span>
+        <span>Проверка оценок</span>
         <span class="mh-highlight-arrow">▼</span>
       </button>
 
@@ -106,6 +114,7 @@
     `;
 
     anchor.parentNode.insertBefore(section, anchor);
+    moveFinalSectionIntoBox();
 
     section.querySelector(".mh-highlight-title")?.addEventListener("click", (event) => {
       event.preventDefault();
@@ -152,13 +161,11 @@
 
   const observer = new MutationObserver(() => {
     if (!document.getElementById(BOX_ID)) scheduleInsert();
+    else syncVisualState();
   });
 
   function startObserver() {
-    observer.observe(document.body || document.documentElement, {
-      childList: true,
-      subtree: true
-    });
+    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
   }
 
   if (document.readyState === "loading") {
