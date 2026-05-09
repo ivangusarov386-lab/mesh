@@ -4,6 +4,7 @@
   const LOW_ROW_BG = "rgba(248, 113, 113, 0.22)";
   const FOCUS_ROW_CLASS = "mesh-helper-row-focus";
   let timer = null;
+  let hoverTimer = null;
 
   const text = (el) => (el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
   const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#039;");
@@ -177,6 +178,14 @@
     return [...new Set(out)];
   }
 
+  function paintRow(row) {
+    if (!row || !isHighlightOn() || !row.classList.contains(LOW_ROW_CLASS)) return;
+    targets(row).forEach((el) => {
+      el.classList.add(LOW_CELL_CLASS);
+      el.style.setProperty("background-color", LOW_ROW_BG, "important");
+    });
+  }
+
   function setHighlight(row, active) {
     const on = isHighlightOn() && active;
     row.classList.toggle(LOW_ROW_CLASS, on);
@@ -250,6 +259,20 @@
     e.preventDefault();
     e.stopPropagation();
     focusRow(Number(btn.dataset.hybridId));
+  }, true);
+
+  document.addEventListener("pointerover", (e) => {
+    const row = e.target?.closest?.(`tr.${LOW_ROW_CLASS}`);
+    if (!row) return;
+    paintRow(row);
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => paintRow(row), 40);
+  }, true);
+
+  document.addEventListener("mouseover", (e) => {
+    const row = e.target?.closest?.(`tr.${LOW_ROW_CLASS}`);
+    if (!row) return;
+    paintRow(row);
   }, true);
 
   window.addEventListener("mesh-helper-highlight-toggle", () => schedule(40));
