@@ -20,7 +20,7 @@
     {
       "matches": ["https://school.mos.ru/*"],
       "js": [
-        "src/content.js",
+        "src/panel-shell.js",
         "src/hybrid-counter.js",
         "src/highlight-toggle.js",
         "src/clean-panel.js"
