@@ -142,6 +142,11 @@
   box-shadow: inset 4px 0 0 #ef4444 !important;
 }
 
+/* Минимум в шапке показываем только в свернутой плашке */
+.mh-mini-min-wrap {
+  display: none !important;
+}
+
 #mesh-helper-panel.mh-collapsed-top .mh-section,
 #mesh-helper-panel.mh-collapsed-top #mh-list,
 #mesh-helper-panel.mh-collapsed-top #mh-summary,
@@ -209,13 +214,12 @@
   color: #fff !important;
 }
 
-/* Минимум оценок слева */
-.mh-mini-min-wrap {
+#mesh-helper-panel.mh-collapsed-top .mh-mini-min-wrap {
   position: absolute;
   left: 10px;
   top: 50%;
   transform: translateY(-50%);
-  display: flex;
+  display: flex !important;
   align-items: center;
   gap: 4px;
   z-index: 1000005;
