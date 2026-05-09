@@ -178,12 +178,41 @@
     return [...new Set(out)];
   }
 
+  function paintElement(el) {
+    if (!el || !el.style) return;
+    el.classList.add(LOW_CELL_CLASS);
+    el.style.setProperty("background-color", LOW_ROW_BG, "important");
+  }
+
   function paintRow(row) {
     if (!row || !isHighlightOn() || !row.classList.contains(LOW_ROW_CLASS)) return;
-    targets(row).forEach((el) => {
-      el.classList.add(LOW_CELL_CLASS);
-      el.style.setProperty("background-color", LOW_ROW_BG, "important");
-    });
+    targets(row).forEach(paintElement);
+  }
+
+  function paintHoveredMark(target) {
+    const row = target?.closest?.(`tr.${LOW_ROW_CLASS}`);
+    if (!row || !isHighlightOn()) return;
+
+    const td = target.closest?.("td, th");
+    const markCell = target.closest?.('[data-test-component^="markCell-"]') || td?.querySelector?.('[data-test-component^="markCell-"]');
+
+    paintRow(row);
+    if (td && !isAverageCell(td) && !isFinalCell(td)) paintElement(td);
+    if (markCell) paintElement(markCell);
+
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => {
+      paintRow(row);
+      if (td && !isAverageCell(td) && !isFinalCell(td)) paintElement(td);
+      if (markCell) paintElement(markCell);
+    }, 30);
+
+    setTimeout(() => {
+      if (!row.isConnected) return;
+      paintRow(row);
+      if (td?.isConnected && !isAverageCell(td) && !isFinalCell(td)) paintElement(td);
+      if (markCell?.isConnected) paintElement(markCell);
+    }, 120);
   }
 
   function setHighlight(row, active) {
@@ -261,19 +290,9 @@
     focusRow(Number(btn.dataset.hybridId));
   }, true);
 
-  document.addEventListener("pointerover", (e) => {
-    const row = e.target?.closest?.(`tr.${LOW_ROW_CLASS}`);
-    if (!row) return;
-    paintRow(row);
-    clearTimeout(hoverTimer);
-    hoverTimer = setTimeout(() => paintRow(row), 40);
-  }, true);
-
-  document.addEventListener("mouseover", (e) => {
-    const row = e.target?.closest?.(`tr.${LOW_ROW_CLASS}`);
-    if (!row) return;
-    paintRow(row);
-  }, true);
+  ["pointerover", "mouseover", "mousemove", "mouseenter"].forEach((eventName) => {
+    document.addEventListener(eventName, (e) => paintHoveredMark(e.target), true);
+  });
 
   window.addEventListener("mesh-helper-highlight-toggle", () => schedule(40));
   window.addEventListener("mesh-helper-marks-updated", () => {
