@@ -1,11 +1,54 @@
 (() => {
   const DEFAULT_MIN = 5;
   const PANEL_ID = "mesh-helper-panel";
+  const MINI_MIN_ID = "mh-mini-min";
 
   function ensureTitle(panel) {
     const title = panel.querySelector(".mh-title");
     if (!title || title.querySelector(".mh-title-main")) return;
     title.innerHTML = '<div class="mh-title-main">Помощник учителя</div><div class="mh-title-sub">Проблемных: <span id="mh-problem-count">0</span></div>';
+  }
+
+  function syncMiniMin(panel, value) {
+    const mini = panel.querySelector(`#${MINI_MIN_ID}`);
+    const min = panel.querySelector("#mh-min");
+    if (mini && String(mini.value) !== String(value)) mini.value = value;
+    if (min && String(min.value) !== String(value)) min.value = value;
+  }
+
+  function saveMin(panel, rawValue) {
+    const n = Number(rawValue || DEFAULT_MIN);
+    const value = Number.isFinite(n) && n > 0 ? n : DEFAULT_MIN;
+    syncMiniMin(panel, value);
+    chrome.storage.sync.set({ minGrades: value });
+    window.dispatchEvent(new CustomEvent("mesh-helper-min-grades-changed"));
+  }
+
+  function ensureMiniMin(panel) {
+    const header = panel.querySelector(".mh-header") || panel;
+    if (header.querySelector(`#${MINI_MIN_ID}`)) return;
+
+    const wrap = document.createElement("div");
+    wrap.className = "mh-mini-min-wrap";
+    wrap.innerHTML = `
+      <span class="mh-mini-min-label">Мин.</span>
+      <input id="${MINI_MIN_ID}" class="mh-mini-min" type="number" min="1" title="Минимум оценок за период">
+    `;
+
+    header.insertBefore(wrap, header.firstChild);
+
+    const mini = wrap.querySelector(`#${MINI_MIN_ID}`);
+    mini.addEventListener("click", (e) => e.stopPropagation());
+    mini.addEventListener("mousedown", (e) => e.stopPropagation());
+    mini.addEventListener("change", () => saveMin(panel, mini.value));
+    mini.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        e.preventDefault();
+        saveMin(panel, mini.value);
+        mini.blur();
+      }
+    });
   }
 
   function setupCollapse(panel) {
@@ -100,6 +143,7 @@
     }
 
     ensureTitle(panel);
+    ensureMiniMin(panel);
     setupCollapse(panel);
     setupDrag(panel);
 
@@ -108,18 +152,25 @@
     const finals = panel.querySelector("#mh-check-finals");
 
     chrome.storage.sync.get(["minGrades", "checkFinals"], (data) => {
-      minInput.value = typeof data.minGrades === "number" ? data.minGrades : DEFAULT_MIN;
+      const value = typeof data.minGrades === "number" ? data.minGrades : DEFAULT_MIN;
+      syncMiniMin(panel, value);
       finals.checked = data.checkFinals === true;
     });
 
     if (save && save.dataset.ready !== "1") {
       save.dataset.ready = "1";
-      save.addEventListener("click", () => {
-        const n = Number(minInput.value || DEFAULT_MIN);
-        const value = Number.isFinite(n) && n > 0 ? n : DEFAULT_MIN;
-        minInput.value = value;
-        chrome.storage.sync.set({ minGrades: value });
-        window.dispatchEvent(new CustomEvent("mesh-helper-min-grades-changed"));
+      save.addEventListener("click", () => saveMin(panel, minInput.value));
+    }
+
+    if (minInput && minInput.dataset.ready !== "1") {
+      minInput.dataset.ready = "1";
+      minInput.addEventListener("change", () => syncMiniMin(panel, minInput.value));
+      minInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          saveMin(panel, minInput.value);
+          minInput.blur();
+        }
       });
     }
 
@@ -131,6 +182,7 @@
       });
     }
 
+    window.dispatchEvent(new CustomEvent("mesh-helper-panel-ready"));
     return panel;
   }
 
