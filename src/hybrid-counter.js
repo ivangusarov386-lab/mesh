@@ -1,5 +1,6 @@
 (() => {
   const LOW_ROW_CLASS = "mesh-helper-low-grades-row";
+  const LOW_CELL_CLASS = "mesh-helper-low-grades-cell";
   const LOW_ROW_BG = "rgba(248, 113, 113, 0.22)";
   const FOCUS_ROW_CLASS = "mesh-helper-row-focus";
   let timer = null;
@@ -130,9 +131,6 @@
         }
       });
 
-      // Универсальный DOM-резерв для скрытых/дополнительных оценок:
-      // МЭШ показывает значок «стопки» в ячейке, когда внутри несколько отметок.
-      // Если видим одну цифровую оценку + значок стопки, считаем минимум 2 оценки.
       if (visibleGradesInCell === 1 && hasStackIcon(markCell)) grades += 1;
     });
 
@@ -183,9 +181,11 @@
     const on = isHighlightOn() && active;
     row.classList.toggle(LOW_ROW_CLASS, on);
     targets(row).forEach((el) => {
+      el.classList.toggle(LOW_CELL_CLASS, on);
       if (on) el.style.setProperty("background-color", LOW_ROW_BG, "important");
       else {
         el.style.removeProperty("background-color");
+        el.classList.remove(LOW_CELL_CLASS);
         if (el.dataset?.mhPrevBg) delete el.dataset.mhPrevBg;
       }
     });
