@@ -2,6 +2,7 @@
   const DEFAULT_MIN = 5;
   const PANEL_ID = "mesh-helper-panel";
   const MINI_MIN_ID = "mh-mini-min";
+  let panelAttempts = 0;
 
   function ensureTitle(panel) {
     const title = panel.querySelector(".mh-title");
@@ -31,15 +32,18 @@
     const wrap = document.createElement("div");
     wrap.className = "mh-mini-min-wrap";
     wrap.innerHTML = `
-      <span class="mh-mini-min-label">Мин.</span>
-      <input id="${MINI_MIN_ID}" class="mh-mini-min" type="number" min="1" title="Минимум оценок за период">
+      <span class="mh-mini-min-label">Мин</span>
+      <input id="${MINI_MIN_ID}" class="mh-mini-min" type="number" min="1" max="20" title="Минимум оценок">
     `;
 
     header.insertBefore(wrap, header.firstChild);
 
     const mini = wrap.querySelector(`#${MINI_MIN_ID}`);
-    mini.addEventListener("click", (e) => e.stopPropagation());
-    mini.addEventListener("mousedown", (e) => e.stopPropagation());
+    ["click", "mousedown", "mouseup", "pointerdown", "pointerup"].forEach((eventName) => {
+      mini.addEventListener(eventName, (e) => e.stopPropagation());
+      wrap.addEventListener(eventName, (e) => e.stopPropagation());
+    });
+
     mini.addEventListener("change", () => saveMin(panel, mini.value));
     mini.addEventListener("keydown", (e) => {
       e.stopPropagation();
@@ -96,7 +100,7 @@
     } catch (e) {}
 
     header.addEventListener("mousedown", (e) => {
-      if (e.target.closest("button, input, label")) return;
+      if (e.target.closest("button, input, label, .mh-mini-min-wrap")) return;
       dragging = true;
       startX = e.clientX;
       startY = e.clientY;
@@ -154,7 +158,7 @@
     chrome.storage.sync.get(["minGrades", "checkFinals"], (data) => {
       const value = typeof data.minGrades === "number" ? data.minGrades : DEFAULT_MIN;
       syncMiniMin(panel, value);
-      finals.checked = data.checkFinals === true;
+      if (finals) finals.checked = data.checkFinals === true;
     });
 
     if (save && save.dataset.ready !== "1") {
@@ -186,14 +190,21 @@
     return panel;
   }
 
-  function init() {
-    ensurePanel();
+  function tryEnsurePanelLimited() {
+    panelAttempts += 1;
+    try {
+      ensurePanel();
+    } catch (e) {
+      console.warn("[МЭШ помощник][panel] init error", e);
+    }
+    if (!document.getElementById(PANEL_ID) && panelAttempts < 10) {
+      setTimeout(tryEnsurePanelLimited, 500);
+    }
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
-  else init();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", tryEnsurePanelLimited, { once: true });
+  else tryEnsurePanelLimited();
 
-  new MutationObserver(() => {
-    if (!document.getElementById(PANEL_ID)) ensurePanel();
-  }).observe(document.documentElement, { childList: true, subtree: true });
+  setTimeout(tryEnsurePanelLimited, 1200);
+  setTimeout(tryEnsurePanelLimited, 3000);
 })();
