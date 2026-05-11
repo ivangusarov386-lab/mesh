@@ -143,23 +143,14 @@
 }
 
 .mesh-helper-low-grades-cell {
-  position: relative !important;
+  background-color: rgba(248, 113, 113, 0.22) !important;
 }
 
-.mesh-helper-low-grades-cell::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(248, 113, 113, 0.18);
-  pointer-events: none;
-  z-index: 0;
+.mesh-helper-low-grades-cell:hover {
+  background-color: rgba(248, 113, 113, 0.22) !important;
 }
 
-.mesh-helper-low-grades-cell > * {
-  position: relative;
-  z-index: 1;
-}
-
+/* Минимум в шапке показываем только в свернутой плашке */
 .mh-mini-min-wrap {
   display: none !important;
 }
@@ -186,4 +177,80 @@
     0 6px 14px rgba(0,0,0,0.3),
     inset 0 1px 0 rgba(255,255,255,0.42),
     inset 0 -2px 0 rgba(0,0,0,0.25) !important;
+}
+
+#mesh-helper-panel.mh-collapsed-top .mh-header {
+  height: 100%;
+  padding: 0 44px 0 74px !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  cursor: move !important;
+}
+
+#mesh-helper-panel.mh-collapsed-top .mh-title {
+  color: #fff !important;
+  text-align: center;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.35);
+}
+
+#mesh-helper-panel.mh-collapsed-top .mh-title-main {
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  line-height: 1.05 !important;
+}
+
+#mesh-helper-panel.mh-collapsed-top .mh-title-sub {
+  margin-top: 1px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  line-height: 1.05 !important;
+  opacity: 0.9;
+}
+
+#mesh-helper-panel.mh-collapsed-top .mh-collapse-btn {
+  top: 50% !important;
+  right: 10px !important;
+  transform: translateY(-50%) !important;
+  width: 26px !important;
+  height: 26px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.18) !important;
+  color: #fff !important;
+}
+
+#mesh-helper-panel.mh-collapsed-top .mh-mini-min-wrap {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex !important;
+  align-items: center;
+  gap: 4px;
+  z-index: 1000005;
+}
+
+.mh-mini-min-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.92);
+  text-shadow: 0 1px 0 rgba(0,0,0,0.3);
+}
+
+.mh-mini-min {
+  width: 34px !important;
+  height: 20px !important;
+  border: none !important;
+  border-radius: 8px !important;
+  text-align: center;
+  font-size: 11px !important;
+  font-weight: 700;
+  padding: 0 !important;
+  background: rgba(255,255,255,0.95) !important;
+  color: #111827 !important;
+  outline: none !important;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.15);
 }
