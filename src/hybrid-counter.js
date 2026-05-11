@@ -1,8 +1,10 @@
 (() => {
   const LOW_ROW_CLASS = "mesh-helper-low-grades-row";
   const LOW_CELL_CLASS = "mesh-helper-low-grades-cell";
+  const LOW_ROW_BG = "rgba(248, 113, 113, 0.22)";
   const FOCUS_ROW_CLASS = "mesh-helper-row-focus";
   let timer = null;
+  let hoverTimer = null;
 
   const text = (el) => (el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
   const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#039;");
@@ -167,18 +169,63 @@
     };
   }
 
-  function highlightCells(row) {
-    return rowCellsBeforeFinal(row);
+  function targets(row) {
+    const out = [];
+    rowCellsBeforeFinal(row).forEach((cell) => {
+      out.push(cell);
+      cell.querySelectorAll?.('[data-test-component^="markCell-"]').forEach((el) => out.push(el));
+    });
+    return [...new Set(out)];
+  }
+
+  function paintElement(el) {
+    if (!el || !el.style) return;
+    el.classList.add(LOW_CELL_CLASS);
+    el.style.setProperty("background-color", LOW_ROW_BG, "important");
+  }
+
+  function paintRow(row) {
+    if (!row || !isHighlightOn() || !row.classList.contains(LOW_ROW_CLASS)) return;
+    targets(row).forEach(paintElement);
+  }
+
+  function paintHoveredMark(target) {
+    const row = target?.closest?.(`tr.${LOW_ROW_CLASS}`);
+    if (!row || !isHighlightOn()) return;
+
+    const td = target.closest?.("td, th");
+    const markCell = target.closest?.('[data-test-component^="markCell-"]') || td?.querySelector?.('[data-test-component^="markCell-"]');
+
+    paintRow(row);
+    if (td && !isAverageCell(td) && !isFinalCell(td)) paintElement(td);
+    if (markCell) paintElement(markCell);
+
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => {
+      paintRow(row);
+      if (td && !isAverageCell(td) && !isFinalCell(td)) paintElement(td);
+      if (markCell) paintElement(markCell);
+    }, 30);
+
+    setTimeout(() => {
+      if (!row.isConnected) return;
+      paintRow(row);
+      if (td?.isConnected && !isAverageCell(td) && !isFinalCell(td)) paintElement(td);
+      if (markCell?.isConnected) paintElement(markCell);
+    }, 120);
   }
 
   function setHighlight(row, active) {
     const on = isHighlightOn() && active;
     row.classList.toggle(LOW_ROW_CLASS, on);
-    highlightCells(row).forEach((cell) => {
-      cell.classList.toggle(LOW_CELL_CLASS, on);
-      cell.style.removeProperty("background-color");
-      if (!on) cell.classList.remove(LOW_CELL_CLASS);
-      if (cell.dataset?.mhPrevBg) delete cell.dataset.mhPrevBg;
+    targets(row).forEach((el) => {
+      el.classList.toggle(LOW_CELL_CLASS, on);
+      if (on) el.style.setProperty("background-color", LOW_ROW_BG, "important");
+      else {
+        el.style.removeProperty("background-color");
+        el.classList.remove(LOW_CELL_CLASS);
+        if (el.dataset?.mhPrevBg) delete el.dataset.mhPrevBg;
+      }
     });
     if (!isHighlightOn()) window.dispatchEvent(new CustomEvent("mesh-helper-force-clear-low"));
   }
@@ -242,6 +289,10 @@
     e.stopPropagation();
     focusRow(Number(btn.dataset.hybridId));
   }, true);
+
+  ["pointerover", "mouseover", "mousemove", "mouseenter"].forEach((eventName) => {
+    document.addEventListener(eventName, (e) => paintHoveredMark(e.target), true);
+  });
 
   window.addEventListener("mesh-helper-highlight-toggle", () => schedule(40));
   window.addEventListener("mesh-helper-marks-updated", () => {
