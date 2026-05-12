@@ -141,7 +141,14 @@
           <label class="mh-toggle-row" for="mh-check-finals"><input id="mh-check-finals" type="checkbox"><span>Контроль итоговых</span></label>
           <div class="mh-note">Если итоговая не выставлена — ячейка «Итог» подсветится синим.</div>
         </div>
-        <div class="mh-section"><div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div><button id="mh-export" class="mh-export" type="button">Экспорт в Excel</button><div id="mh-list" class="mh-list"></div></div>
+        <div class="mh-section">
+          <div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div>
+          <div class="mh-export-row">
+            <button id="mh-export-problems" class="mh-export" type="button">Выгрузить проблемных</button>
+            <button id="mh-export-all" class="mh-export" type="button">Выгрузить весь класс</button>
+          </div>
+          <div id="mh-list" class="mh-list"></div>
+        </div>
       `;
       document.body.appendChild(panel);
     }
