@@ -3,6 +3,7 @@
   const LOW_CELL_CLASS = "mesh-helper-low-grades-cell";
   const LOW_ROW_BG = "rgba(248, 113, 113, 0.22)";
   const FOCUS_ROW_CLASS = "mesh-helper-row-focus";
+  const ACADEMIC_DEBT_MIN_GRADES = 2;
   let timer = null;
   let hoverTimer = null;
   let lastRows = [];
@@ -30,6 +31,11 @@
 
   function isFinalCell(cell) {
     return !!cell?.querySelector?.('[data-test-component*="finalResult"]');
+  }
+
+  function isFutureLessonCell(markCell) {
+    const disabledBy = String(markCell?.getAttribute?.("data-disabled-by") || "").toUpperCase();
+    return disabledBy.includes("FUTURE");
   }
 
   function studentId(row) {
@@ -84,7 +90,7 @@
 
     rowCellsBeforeFinal(row).forEach((cell) => {
       const markCell = markCellFromTd(cell);
-      if (!markCell) return;
+      if (!markCell || isFutureLessonCell(markCell)) return;
       const lessonId = parseLessonId(markCell);
       if (!lessonId) return;
 
@@ -117,8 +123,11 @@
 
     rowCellsBeforeFinal(row).forEach((cell) => {
       const markCell = markCellFromTd(cell);
-      if (!markCell) return;
+      if (!markCell || isFutureLessonCell(markCell)) return;
       lessons += 1;
+
+      const cellText = text(markCell).toLowerCase();
+      if (/(^|\s)н(\s|$)/i.test(cellText) || cellText.includes("н")) absences += 1;
 
       const spans = [...markCell.querySelectorAll("span")].map(text).filter(Boolean);
       const parts = spans.length ? spans : text(markCell).split(" ").map((x) => x.trim()).filter(Boolean);
@@ -128,8 +137,6 @@
         if (/^[1-5]$/.test(v)) {
           grades += 1;
           visibleGradesInCell += 1;
-        } else if (v.toLowerCase() === "н") {
-          absences += 1;
         }
       });
 
@@ -296,7 +303,7 @@
         average,
         finalGrade,
         correctFinal: correctFinalFromAverage(average),
-        risk: stat.gradeCount < minGrades() ? "Да" : "Нет",
+        risk: stat.gradeCount < ACADEMIC_DEBT_MIN_GRADES ? "Да" : "Нет",
         absencePercent: stat.lessonCount ? Math.round((stat.absenceCount / stat.lessonCount) * 1000) / 10 : 0,
         ...stat
       };
@@ -314,7 +321,7 @@
         "ФИО": x.name,
         "Кол-во оценок": x.gradeCount,
         "Средний балл": x.average === null ? "" : String(x.average).replace(".", ","),
-        "Риск академической задолженности": x.gradeCount < min ? "Да" : "Нет",
+        "Риск академической задолженности": x.gradeCount < ACADEMIC_DEBT_MIN_GRADES ? "Да" : "Нет",
         "Выставленная итоговая оценка": x.finalGrade,
         "Правильная оценка": x.correctFinal,
         "Уроков прошло по факту": x.lessonCount,
@@ -328,6 +335,7 @@
   }
 
   function downloadCsv(mode) {
+    apply();
     const data = reportRows(mode);
     if (!data.length) {
       alert(mode === "all" ? "Нет данных для выгрузки." : "Проблемных учеников для выгрузки нет.");
@@ -360,17 +368,11 @@
     const allBtn = document.getElementById("mh-export-all");
     if (problemsBtn && problemsBtn.dataset.ready !== "1") {
       problemsBtn.dataset.ready = "1";
-      problemsBtn.addEventListener("click", () => {
-        apply();
-        downloadCsv("problems");
-      });
+      problemsBtn.addEventListener("click", () => downloadCsv("problems"));
     }
     if (allBtn && allBtn.dataset.ready !== "1") {
       allBtn.dataset.ready = "1";
-      allBtn.addEventListener("click", () => {
-        apply();
-        downloadCsv("all");
-      });
+      allBtn.addEventListener("click", () => downloadCsv("all"));
     }
   }
 
