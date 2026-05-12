@@ -5,6 +5,7 @@
   const FOCUS_ROW_CLASS = "mesh-helper-row-focus";
   let timer = null;
   let hoverTimer = null;
+  let lastRows = [];
 
   const text = (el) => (el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
   const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#039;");
@@ -138,6 +139,52 @@
     return { grades, absences, lessons };
   }
 
+  function parseAverage(value) {
+    const n = Number(String(value || "").replace(",", ".").replace(/[^\d.]/g, ""));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function averageFromRow(row) {
+    const cells = [...row.children].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
+    const avgTexts = cells.filter(isAverageCell).map(text).filter(Boolean);
+    const nums = avgTexts.map(parseAverage).filter((n) => n !== null);
+    if (nums.length) return nums[nums.length - 1];
+
+    const candidates = cells.map(text).map(parseAverage).filter((n) => n !== null && n >= 1 && n <= 5);
+    return candidates.length ? candidates[candidates.length - 1] : null;
+  }
+
+  function finalGradeFromRow(row) {
+    const finalCell = [...row.children].find(isFinalCell);
+    const value = text(finalCell || null);
+    const m = value.match(/[1-5]/);
+    return m ? Number(m[0]) : "";
+  }
+
+  function correctFinalFromAverage(avg) {
+    if (avg === null || avg === undefined || avg === "") return "";
+    const n = Number(avg);
+    if (!Number.isFinite(n)) return "";
+    if (n >= 4.6) return 5;
+    if (n >= 3.6) return 4;
+    if (n >= 2.6) return 3;
+    return 2;
+  }
+
+  function journalMeta() {
+    const titleText = text(document.querySelector("h1")) || text(document.querySelector('[class*="Journal"]')) || document.title || "";
+    const subjectSelect = text(document.querySelector("button[aria-haspopup='listbox']")) || "";
+    const pageText = text(document.body).slice(0, 4000);
+
+    const classMatch = (titleText + " " + subjectSelect + " " + pageText).match(/\b\d{1,2}\s*[-–—]\s*[А-ЯA-ZЁ][\wА-Яа-яЁё,\s]*\b/);
+    const subjectMatch = titleText.match(/Журнал\s+(.+?)\s+\d{1,2}\s*[-–—]/i);
+
+    return {
+      className: classMatch ? classMatch[0].replace(/\s+/g, " ").trim() : "",
+      subject: subjectMatch ? subjectMatch[1].trim() : (subjectSelect || "")
+    };
+  }
+
   function rowStats(row) {
     const sid = studentId(row);
     const api = marks();
@@ -231,22 +278,112 @@
   }
 
   function rows() {
+    const meta = journalMeta();
     return [...document.querySelectorAll("tr")].map((row, id) => {
       const name = studentName(row);
       const sid = studentId(row);
       if (!name || !sid) return null;
       const stat = rowStats(row);
-      return { id, row, name, studentId: sid, ...stat };
+      const average = averageFromRow(row);
+      const finalGrade = finalGradeFromRow(row);
+      return {
+        id,
+        row,
+        name,
+        studentId: sid,
+        className: meta.className,
+        subject: meta.subject,
+        average,
+        finalGrade,
+        correctFinal: correctFinalFromAverage(average),
+        risk: stat.gradeCount < minGrades() ? "Да" : "Нет",
+        absencePercent: stat.lessonCount ? Math.round((stat.absenceCount / stat.lessonCount) * 1000) / 10 : 0,
+        ...stat
+      };
     }).filter(Boolean);
   }
 
+  function reportRows(mode = "problems") {
+    const min = minGrades();
+    const source = lastRows.length ? lastRows : rows();
+    return source
+      .filter((x) => mode === "all" || x.gradeCount < min)
+      .map((x) => ({
+        "Класс": x.className,
+        "Предмет": x.subject,
+        "ФИО": x.name,
+        "Кол-во оценок": x.gradeCount,
+        "Средний балл": x.average === null ? "" : String(x.average).replace(".", ","),
+        "Риск академической задолженности": x.gradeCount < min ? "Да" : "Нет",
+        "Выставленная итоговая оценка": x.finalGrade,
+        "Правильная оценка": x.correctFinal,
+        "Уроков прошло по факту": x.lessonCount,
+        "Кол-во Н": x.absenceCount,
+        "% пропуска от уроков по факту": String(x.absencePercent).replace(".", ",") + "%"
+      }));
+  }
+
+  function csvValue(value) {
+    return `"${String(value ?? "").replace(/"/g, '""')}"`;
+  }
+
+  function downloadCsv(mode) {
+    const data = reportRows(mode);
+    if (!data.length) {
+      alert(mode === "all" ? "Нет данных для выгрузки." : "Проблемных учеников для выгрузки нет.");
+      return;
+    }
+
+    const headers = Object.keys(data[0]);
+    const csv = "\ufeff" + [
+      headers.map(csvValue).join(";"),
+      ...data.map((row) => headers.map((h) => csvValue(row[h])).join(";"))
+    ].join("\n");
+
+    const meta = journalMeta();
+    const date = new Date().toISOString().slice(0, 10);
+    const name = mode === "all" ? "ves_klass" : "problemnye";
+    const filename = `mesh_${name}_${(meta.className || "klass").replace(/[^\wа-яё-]+/gi, "_")}_${date}.csv`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function bindExportButtons() {
+    const problemsBtn = document.getElementById("mh-export-problems");
+    const allBtn = document.getElementById("mh-export-all");
+    if (problemsBtn && problemsBtn.dataset.ready !== "1") {
+      problemsBtn.dataset.ready = "1";
+      problemsBtn.addEventListener("click", () => {
+        apply();
+        downloadCsv("problems");
+      });
+    }
+    if (allBtn && allBtn.dataset.ready !== "1") {
+      allBtn.dataset.ready = "1";
+      allBtn.addEventListener("click", () => {
+        apply();
+        downloadCsv("all");
+      });
+    }
+  }
+
   function updatePanel(list, min) {
+    lastRows = list;
+    window.__MESH_HELPER_REPORT_ROWS__ = () => reportRows("all");
     const panel = document.getElementById("mesh-helper-panel");
     const listEl = panel?.querySelector("#mh-list");
     const summaryEl = panel?.querySelector("#mh-summary");
     const titleCount = panel?.querySelector("#mh-problem-count");
     if (!listEl || !summaryEl) return;
 
+    bindExportButtons();
     const problems = list.filter((x) => x.gradeCount < min);
     summaryEl.textContent = `Ученики ниже нормы по оценкам: ${problems.length}`;
     if (titleCount) titleCount.textContent = String(problems.length);
@@ -294,6 +431,8 @@
     document.addEventListener(eventName, (e) => paintHoveredMark(e.target), true);
   });
 
+  window.addEventListener("mesh-helper-panel-ready", bindExportButtons);
+  window.addEventListener("mesh-helper-min-grades-changed", () => schedule(40));
   window.addEventListener("mesh-helper-highlight-toggle", () => schedule(40));
   window.addEventListener("mesh-helper-marks-updated", () => {
     schedule(60);
