@@ -2,7 +2,20 @@
   const LOW_ROW_CLASS = "mesh-helper-low-grades-row";
   const LOW_CELL_CLASS = "mesh-helper-low-grades-cell";
   const WRONG_FINAL_CLASS = "mesh-helper-wrong-final-cell";
+  const WRONG_FINAL_BG = "rgba(250, 204, 21, 0.42)";
   const RED_RGB = "248, 113, 113";
+
+  let storageEnabled = false;
+
+  function text(el) {
+    return (el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
+  function isEnabled() {
+    const input = document.querySelector("#mh-check-finals");
+    if (input) return input.checked === true;
+    return storageEnabled === true;
+  }
 
   function markCellFromTd(cell) {
     return cell?.querySelector?.('[data-test-component^="markCell-"]') || null;
@@ -12,13 +25,40 @@
     return el?.closest?.("td, th") || null;
   }
 
+  function allRowCells(row) {
+    return [...(row?.children || [])].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
+  }
+
   function markAttr(el) {
     const cell = el?.matches?.('[data-test-component^="markCell-"]') ? el : markCellFromTd(el);
     return cell?.getAttribute?.("data-test-component") || "";
   }
 
+  function cellByComponent(row, needle) {
+    return allRowCells(row).find((cell) => markAttr(cell).includes(needle)) || null;
+  }
+
+  function gradeValueFromCell(cell) {
+    const raw = text(cell || null);
+    const m = raw.match(/[1-5]/);
+    return m ? Number(m[0]) : null;
+  }
+
+  function correctFinalFromAverage(avg) {
+    const n = Number(avg);
+    if (!Number.isFinite(n)) return null;
+    if (n >= 4.6) return 5;
+    if (n >= 3.6) return 4;
+    if (n >= 2.6) return 3;
+    return 2;
+  }
+
   function isYearResultAttr(attr) {
     return attr.includes("yearResult");
+  }
+
+  function isYearAttestationAttr(attr) {
+    return attr.includes("yearAttestation");
   }
 
   function isFinalResultAttr(attr) {
@@ -40,14 +80,33 @@
       .some((cell) => isFinalSummaryAttr(cell.getAttribute("data-test-component") || ""));
   }
 
+  function setYellow(cell, active) {
+    const markCell = markCellFromTd(cell);
+    [cell, markCell].filter(Boolean).forEach((el) => {
+      el.classList.toggle(WRONG_FINAL_CLASS, !!active);
+      if (active) el.style.setProperty("background-color", WRONG_FINAL_BG, "important");
+      else {
+        el.classList.remove(WRONG_FINAL_CLASS);
+        el.style.removeProperty("background-color");
+      }
+    });
+  }
+
+  function clearYellow(row) {
+    (row || document).querySelectorAll?.(`.${WRONG_FINAL_CLASS}`).forEach((el) => {
+      el.classList.remove(WRONG_FINAL_CLASS);
+      el.style.removeProperty("background-color");
+    });
+  }
+
   function removeWrongYellowFromPeriodFinals(row) {
     if (!row) return;
 
     [...row.querySelectorAll('[data-test-component^="markCell-"]')].forEach((markCell) => {
       const attr = markCell.getAttribute("data-test-component") || "";
 
-      // Временно НЕ проверяем периодовые finalResult, потому что МЭШ на разных страницах
-      // по-разному располагает средний балл и итог. Оставляем только точную проверку Г.
+      // Периодовые finalResult пока не проверяем: на разных экранах МЭШ рядом могут быть
+      // разные служебные средние. Оставляем только точные поля Г и И.
       if (!isFinalResultAttr(attr) || isYearResultAttr(attr)) return;
 
       const td = closestTd(markCell);
@@ -56,6 +115,59 @@
         el.style.removeProperty("background-color");
       });
     });
+  }
+
+  function checkYearResult(row) {
+    const yearCell = cellByComponent(row, "yearResult");
+    const paCell = cellByComponent(row, "intermediateAttestation");
+    const finalCells = allRowCells(row).filter((cell) => markAttr(cell).includes("finalResult"));
+
+    const finalValues = finalCells.map(gradeValueFromCell).filter((v) => v !== null).slice(0, 3);
+    const pa = gradeValueFromCell(paCell);
+    const currentYear = gradeValueFromCell(yearCell);
+
+    if (!yearCell || currentYear === null || finalValues.length < 3 || pa === null) {
+      setYellow(yearCell, false);
+      return null;
+    }
+
+    const values = [...finalValues, pa];
+    const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const expectedYear = correctFinalFromAverage(avg);
+    setYellow(yearCell, expectedYear !== null && currentYear !== expectedYear);
+    return expectedYear;
+  }
+
+  function checkYearAttestation(row) {
+    const yearCell = cellByComponent(row, "yearResult");
+    const examCell = cellByComponent(row, "yearExam");
+    const attestationCell = cellByComponent(row, "yearAttestation");
+
+    const year = gradeValueFromCell(yearCell);
+    const exam = gradeValueFromCell(examCell);
+    const currentAttestation = gradeValueFromCell(attestationCell);
+
+    if (!attestationCell || currentAttestation === null || year === null) {
+      setYellow(attestationCell, false);
+      return;
+    }
+
+    const expected = exam === null ? year : correctFinalFromAverage((year + exam) / 2);
+    setYellow(attestationCell, expected !== null && currentAttestation !== expected);
+  }
+
+  function applyFinalChecks(row) {
+    if (!isFinalSummaryRow(row)) return;
+
+    removeWrongYellowFromPeriodFinals(row);
+
+    if (!isEnabled()) {
+      clearYellow(row);
+      return;
+    }
+
+    checkYearResult(row);
+    checkYearAttestation(row);
   }
 
   function removeRedFromElement(el) {
@@ -73,7 +185,7 @@
   function cleanFinalSummaryRow(row) {
     if (!row) return;
 
-    removeWrongYellowFromPeriodFinals(row);
+    applyFinalChecks(row);
 
     if (!isFinalSummaryRow(row)) return;
 
@@ -85,6 +197,7 @@
 
   function cleanAll() {
     document.querySelectorAll("tr").forEach(cleanFinalSummaryRow);
+    if (!isEnabled()) clearYellow(document);
   }
 
   function cleanAroundTarget(target) {
@@ -100,11 +213,32 @@
     document.addEventListener(eventName, (e) => cleanAroundTarget(e.target), true);
   });
 
+  window.addEventListener("mesh-helper-finals-toggle", (event) => {
+    storageEnabled = event.detail?.enabled === true;
+    cleanAll();
+    setTimeout(cleanAll, 100);
+    setTimeout(cleanAll, 400);
+  });
+
+  document.addEventListener("change", (event) => {
+    if (event.target?.id === "mh-check-finals") {
+      storageEnabled = event.target.checked === true;
+      cleanAll();
+    }
+  }, true);
+
   const observer = new MutationObserver(() => {
     requestAnimationFrame(cleanAll);
   });
 
   function start() {
+    try {
+      chrome.storage.sync.get(["checkFinals"], (data) => {
+        storageEnabled = data.checkFinals === true;
+        cleanAll();
+      });
+    } catch (e) {}
+
     observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
