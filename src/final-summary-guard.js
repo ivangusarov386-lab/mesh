@@ -8,9 +8,21 @@
     return cell?.querySelector?.('[data-test-component^="markCell-"]') || null;
   }
 
+  function closestTd(el) {
+    return el?.closest?.("td, th") || null;
+  }
+
   function markAttr(el) {
     const cell = el?.matches?.('[data-test-component^="markCell-"]') ? el : markCellFromTd(el);
     return cell?.getAttribute?.("data-test-component") || "";
+  }
+
+  function isYearResultAttr(attr) {
+    return attr.includes("yearResult");
+  }
+
+  function isFinalResultAttr(attr) {
+    return attr.includes("finalResult");
   }
 
   function isFinalSummaryAttr(attr) {
@@ -28,6 +40,24 @@
       .some((cell) => isFinalSummaryAttr(cell.getAttribute("data-test-component") || ""));
   }
 
+  function removeWrongYellowFromPeriodFinals(row) {
+    if (!row) return;
+
+    [...row.querySelectorAll('[data-test-component^="markCell-"]')].forEach((markCell) => {
+      const attr = markCell.getAttribute("data-test-component") || "";
+
+      // Временно НЕ проверяем периодовые finalResult, потому что МЭШ на разных страницах
+      // по-разному располагает средний балл и итог. Оставляем только точную проверку Г.
+      if (!isFinalResultAttr(attr) || isYearResultAttr(attr)) return;
+
+      const td = closestTd(markCell);
+      [td, markCell].filter(Boolean).forEach((el) => {
+        el.classList.remove(WRONG_FINAL_CLASS);
+        el.style.removeProperty("background-color");
+      });
+    });
+  }
+
   function removeRedFromElement(el) {
     if (!el || !el.style) return;
     if (el.classList?.contains(WRONG_FINAL_CLASS)) return;
@@ -41,6 +71,10 @@
   }
 
   function cleanFinalSummaryRow(row) {
+    if (!row) return;
+
+    removeWrongYellowFromPeriodFinals(row);
+
     if (!isFinalSummaryRow(row)) return;
 
     row.classList.remove(LOW_ROW_CLASS);
