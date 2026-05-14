@@ -2,6 +2,8 @@
   const LOW_ROW_CLASS = "mesh-helper-low-grades-row";
   const LOW_CELL_CLASS = "mesh-helper-low-grades-cell";
   const LOW_ROW_BG = "rgba(248, 113, 113, 0.22)";
+  const WRONG_FINAL_CLASS = "mesh-helper-wrong-final-cell";
+  const WRONG_FINAL_BG = "rgba(250, 204, 21, 0.42)";
   const FOCUS_ROW_CLASS = "mesh-helper-row-focus";
   const ACADEMIC_DEBT_MIN_GRADES = 2;
   let timer = null;
@@ -61,6 +63,10 @@
     return result;
   }
 
+  function allRowCells(row) {
+    return [...row.children].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
+  }
+
   function markCellFromTd(cell) {
     return cell.querySelector?.('[data-test-component^="markCell-"]') || null;
   }
@@ -70,6 +76,99 @@
     const m = attr.match(/^markCell-\d+_(\d+)_/);
     const id = m ? Number(m[1]) : null;
     return id && id > 100000 ? id : null;
+  }
+
+  function cellByComponent(row, needle) {
+    return allRowCells(row).find((cell) => {
+      const markCell = markCellFromTd(cell);
+      const attr = markCell?.getAttribute?.("data-test-component") || "";
+      return attr.includes(needle);
+    }) || null;
+  }
+
+  function markCellAttr(cell) {
+    return markCellFromTd(cell)?.getAttribute?.("data-test-component") || "";
+  }
+
+  function gradeValueFromCell(cell) {
+    const raw = text(cell || null);
+    const m = raw.match(/[1-5]/);
+    return m ? Number(m[0]) : null;
+  }
+
+  function correctFinalFromAverage(avg) {
+    if (avg === null || avg === undefined || avg === "") return "";
+    const n = Number(avg);
+    if (!Number.isFinite(n)) return "";
+    if (n >= 4.6) return 5;
+    if (n >= 3.6) return 4;
+    if (n >= 2.6) return 3;
+    return 2;
+  }
+
+  function paintWrongFinal(cell, active) {
+    if (!cell) return;
+    const markCell = markCellFromTd(cell);
+    [cell, markCell].filter(Boolean).forEach((el) => {
+      el.classList.toggle(WRONG_FINAL_CLASS, !!active);
+      if (active) el.style.setProperty("background-color", WRONG_FINAL_BG, "important");
+      else {
+        el.style.removeProperty("background-color");
+        el.classList.remove(WRONG_FINAL_CLASS);
+      }
+    });
+  }
+
+  function clearWrongFinal(row) {
+    row.querySelectorAll?.(`.${WRONG_FINAL_CLASS}`).forEach((el) => {
+      el.classList.remove(WRONG_FINAL_CLASS);
+      el.style.removeProperty("background-color");
+    });
+  }
+
+  function checkPeriodFinals(row) {
+    let lastAverage = null;
+    allRowCells(row).forEach((cell) => {
+      const attr = markCellAttr(cell);
+      if (isAverageCell(cell)) {
+        lastAverage = parseAverage(text(cell));
+        return;
+      }
+
+      if (!attr.includes("finalResult")) return;
+      if (attr.includes("year") || attr.includes("Attestation")) return;
+
+      const current = gradeValueFromCell(cell);
+      const expected = correctFinalFromAverage(lastAverage);
+      const wrong = current !== null && expected !== "" && current !== expected;
+      paintWrongFinal(cell, wrong);
+      lastAverage = null;
+    });
+  }
+
+  function checkYearResult(row) {
+    const finalCells = allRowCells(row).filter((cell) => markCellAttr(cell).includes("finalResult"));
+    const finalValues = finalCells.map(gradeValueFromCell).filter((v) => v !== null);
+    const paCell = cellByComponent(row, "intermediateAttestation");
+    const yearCell = cellByComponent(row, "yearResult");
+    const pa = gradeValueFromCell(paCell);
+    const currentYear = gradeValueFromCell(yearCell);
+
+    if (!yearCell || currentYear === null || finalValues.length < 3 || pa === null) {
+      paintWrongFinal(yearCell, false);
+      return;
+    }
+
+    const values = [...finalValues.slice(0, 3), pa];
+    const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const expectedYear = correctFinalFromAverage(avg);
+    paintWrongFinal(yearCell, expectedYear !== "" && currentYear !== expectedYear);
+  }
+
+  function checkFinalCorrectness(row) {
+    clearWrongFinal(row);
+    checkPeriodFinals(row);
+    checkYearResult(row);
   }
 
   function buildLessonDateMap(api) {
@@ -152,7 +251,7 @@
   }
 
   function averageFromRow(row) {
-    const cells = [...row.children].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
+    const cells = allRowCells(row);
     const avgTexts = cells.filter(isAverageCell).map(text).filter(Boolean);
     const nums = avgTexts.map(parseAverage).filter((n) => n !== null);
     if (nums.length) return nums[nums.length - 1];
@@ -162,20 +261,10 @@
   }
 
   function finalGradeFromRow(row) {
-    const finalCell = [...row.children].find(isFinalCell);
+    const finalCell = allRowCells(row).find(isFinalCell);
     const value = text(finalCell || null);
     const m = value.match(/[1-5]/);
     return m ? Number(m[0]) : "";
-  }
-
-  function correctFinalFromAverage(avg) {
-    if (avg === null || avg === undefined || avg === "") return "";
-    const n = Number(avg);
-    if (!Number.isFinite(n)) return "";
-    if (n >= 4.6) return 5;
-    if (n >= 3.6) return 4;
-    if (n >= 2.6) return 3;
-    return 2;
   }
 
   function journalMeta() {
@@ -234,6 +323,7 @@
 
   function paintElement(el) {
     if (!el || !el.style) return;
+    if (el.classList.contains(WRONG_FINAL_CLASS)) return;
     el.classList.add(LOW_CELL_CLASS);
     el.style.setProperty("background-color", LOW_ROW_BG, "important");
   }
@@ -273,6 +363,7 @@
     const on = isHighlightOn() && active;
     row.classList.toggle(LOW_ROW_CLASS, on);
     targets(row).forEach((el) => {
+      if (el.classList.contains(WRONG_FINAL_CLASS)) return;
       el.classList.toggle(LOW_CELL_CLASS, on);
       if (on) el.style.setProperty("background-color", LOW_ROW_BG, "important");
       else {
@@ -290,6 +381,7 @@
       const name = studentName(row);
       const sid = studentId(row);
       if (!name || !sid) return null;
+      checkFinalCorrectness(row);
       const stat = rowStats(row);
       const average = averageFromRow(row);
       const finalGrade = finalGradeFromRow(row);
