@@ -6,6 +6,9 @@
   const RED_RGB = "248, 113, 113";
 
   let storageEnabled = false;
+  let observer = null;
+  let timer = null;
+  let intervalId = null;
 
   function text(el) {
     return (el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
@@ -88,8 +91,8 @@
     });
   }
 
-  function clearYellow(row) {
-    (row || document).querySelectorAll?.(`.${WRONG_FINAL_CLASS}`).forEach((el) => {
+  function clearYellow(root = document) {
+    root.querySelectorAll?.(`.${WRONG_FINAL_CLASS}`).forEach((el) => {
       el.classList.remove(WRONG_FINAL_CLASS);
       el.style.removeProperty("background-color");
     });
@@ -103,7 +106,6 @@
   function gradesFromLessonCell(cell) {
     const attr = markAttr(cell);
     if (!attr || isAverageCell(cell) || isFinalResultAttr(attr) || isFinalSummaryAttr(attr)) return [];
-
     const markCell = markCellFromTd(cell);
     if (!markCell) return [];
 
@@ -116,53 +118,32 @@
       if (/^[1-5]$/.test(clean)) values.push(Number(clean));
     });
 
-    // Если МЭШ показывает stack-иконку, а видна одна оценка, значит в ячейке есть скрытая/дополнительная.
-    // Для расчета итоговой учитываем ее тем же значением, что видимое значение.
     if (values.length === 1 && hasStackIcon(markCell)) values.push(values[0]);
-
     return values;
   }
 
   function collectGradesForPeriod(cells, finalIndex) {
     const grades = [];
-
-    // Идем от итоговой ячейки влево до предыдущей итоговой или до начала строки.
-    // Средний балл пропускаем. Берем только реальные оценочные ячейки периода.
     for (let i = finalIndex - 1; i >= 0; i -= 1) {
       const cell = cells[i];
       const attr = markAttr(cell);
-
       if (isFinalResultAttr(attr) || isFinalSummaryAttr(attr)) break;
-
       if (isAverageCell(cell)) continue;
-
       const vals = gradesFromLessonCell(cell);
       if (vals.length) grades.unshift(...vals);
     }
-
     return grades;
   }
 
   function checkPeriodFinals(row) {
     const cells = allRowCells(row);
-
     cells.forEach((cell, index) => {
       const attr = markAttr(cell);
-      if (!isFinalResultAttr(attr)) return;
-      if (isYearResultAttr(attr)) return;
-
+      if (!isFinalResultAttr(attr) || isYearResultAttr(attr)) return;
       const current = gradeValueFromCell(cell);
-      if (current === null) {
-        setYellow(cell, false);
-        return;
-      }
-
+      if (current === null) return setYellow(cell, false);
       const grades = collectGradesForPeriod(cells, index);
-      if (!grades.length) {
-        setYellow(cell, false);
-        return;
-      }
-
+      if (!grades.length) return setYellow(cell, false);
       const avg = grades.reduce((sum, value) => sum + value, 0) / grades.length;
       const expected = correctFinalFromAverage(avg);
       setYellow(cell, expected !== null && current !== expected);
@@ -173,143 +154,123 @@
     const yearCell = cellByComponent(row, "yearResult");
     const paCell = cellByComponent(row, "intermediateAttestation");
     const finalCells = allRowCells(row).filter((cell) => markAttr(cell).includes("finalResult"));
-
     const finalValues = finalCells.map(gradeValueFromCell).filter((v) => v !== null).slice(0, 3);
     const pa = gradeValueFromCell(paCell);
     const currentYear = gradeValueFromCell(yearCell);
 
-    if (!yearCell || currentYear === null || finalValues.length < 3 || pa === null) {
-      setYellow(yearCell, false);
-      return null;
-    }
-
+    if (!yearCell || currentYear === null || finalValues.length < 3 || pa === null) return setYellow(yearCell, false);
     const values = [...finalValues, pa];
     const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
     const expectedYear = correctFinalFromAverage(avg);
     setYellow(yearCell, expectedYear !== null && currentYear !== expectedYear);
-    return expectedYear;
   }
 
   function checkYearAttestation(row) {
     const yearCell = cellByComponent(row, "yearResult");
     const examCell = cellByComponent(row, "yearExam");
     const attestationCell = cellByComponent(row, "yearAttestation");
-
     const year = gradeValueFromCell(yearCell);
     const exam = gradeValueFromCell(examCell);
     const currentAttestation = gradeValueFromCell(attestationCell);
 
-    if (!attestationCell || currentAttestation === null || year === null) {
-      setYellow(attestationCell, false);
-      return;
-    }
-
+    if (!attestationCell || currentAttestation === null || year === null) return setYellow(attestationCell, false);
     const expected = exam === null ? year : correctFinalFromAverage((year + exam) / 2);
     setYellow(attestationCell, expected !== null && currentAttestation !== expected);
   }
 
-  function applyFinalChecks(row) {
-    if (!row) return;
+  function removeRedFromElement(el) {
+    if (!el || !el.style || el.classList?.contains(WRONG_FINAL_CLASS)) return;
+    el.classList?.remove(LOW_CELL_CLASS);
+    const bg = String(el.style.backgroundColor || "");
+    if (bg.includes(RED_RGB) || bg.includes("248") || bg.includes("113")) el.style.removeProperty("background-color");
+  }
 
-    if (!isEnabled()) {
-      clearYellow(row);
-      return;
-    }
-
+  function checkRow(row) {
+    if (!row || !isEnabled()) return;
     if (isFinalSummaryRow(row)) {
       checkYearResult(row);
       checkYearAttestation(row);
-      return;
+      row.classList.remove(LOW_ROW_CLASS);
+      row.style.removeProperty("box-shadow");
+      [...row.querySelectorAll("td, th, div, span")].forEach(removeRedFromElement);
+    } else {
+      checkPeriodFinals(row);
     }
-
-    checkPeriodFinals(row);
-  }
-
-  function removeRedFromElement(el) {
-    if (!el || !el.style) return;
-    if (el.classList?.contains(WRONG_FINAL_CLASS)) return;
-
-    el.classList?.remove(LOW_CELL_CLASS);
-
-    const bg = String(el.style.backgroundColor || "");
-    if (bg.includes(RED_RGB) || bg.includes("248") || bg.includes("113")) {
-      el.style.removeProperty("background-color");
-    }
-  }
-
-  function cleanFinalSummaryRow(row) {
-    if (!row) return;
-
-    applyFinalChecks(row);
-
-    if (!isFinalSummaryRow(row)) return;
-
-    row.classList.remove(LOW_ROW_CLASS);
-    row.style.removeProperty("box-shadow");
-
-    [...row.querySelectorAll("td, th, div, span")].forEach(removeRedFromElement);
   }
 
   function cleanAll() {
-    document.querySelectorAll("tr").forEach(cleanFinalSummaryRow);
-    if (!isEnabled()) clearYellow(document);
+    if (!isEnabled()) return clearYellow(document);
+    document.querySelectorAll("tr").forEach(checkRow);
   }
 
-  function cleanAroundTarget(target) {
-    const row = target?.closest?.("tr");
+  function schedule(delay = 900) {
+    if (!isEnabled()) return;
+    clearTimeout(timer);
+    timer = setTimeout(cleanAll, delay);
+  }
+
+  function enableHeavyMode() {
+    if (observer) return;
+    observer = new MutationObserver(() => schedule(1200));
+    observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    intervalId = setInterval(() => {
+      if (isEnabled() && !document.hidden) cleanAll();
+    }, 8000);
+    schedule(200);
+  }
+
+  function disableHeavyMode() {
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    clearTimeout(timer);
+    clearYellow(document);
+  }
+
+  function syncMode() {
+    if (isEnabled()) enableHeavyMode();
+    else disableHeavyMode();
+  }
+
+  document.addEventListener("pointerover", (event) => {
+    if (!isEnabled()) return;
+    const row = event.target?.closest?.("tr");
     if (!row) return;
-    cleanFinalSummaryRow(row);
-    setTimeout(() => cleanFinalSummaryRow(row), 0);
-    setTimeout(() => cleanFinalSummaryRow(row), 40);
-    setTimeout(() => cleanFinalSummaryRow(row), 140);
-  }
-
-  ["pointerover", "mouseover", "mousemove", "mouseenter", "pointermove"].forEach((eventName) => {
-    document.addEventListener(eventName, (e) => cleanAroundTarget(e.target), true);
-  });
+    setTimeout(() => checkRow(row), 80);
+  }, true);
 
   window.addEventListener("mesh-helper-finals-toggle", (event) => {
     storageEnabled = event.detail?.enabled === true;
-    cleanAll();
-    setTimeout(cleanAll, 100);
-    setTimeout(cleanAll, 400);
+    syncMode();
   });
 
   document.addEventListener("change", (event) => {
     if (event.target?.id === "mh-check-finals") {
       storageEnabled = event.target.checked === true;
-      cleanAll();
+      syncMode();
     }
   }, true);
 
-  const observer = new MutationObserver(() => {
-    requestAnimationFrame(cleanAll);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) schedule(500);
   });
 
   function start() {
     try {
       chrome.storage.sync.get(["checkFinals"], (data) => {
         storageEnabled = data.checkFinals === true;
-        cleanAll();
+        syncMode();
       });
-    } catch (e) {}
-
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["class", "style"]
-    });
-
-    cleanAll();
-    setTimeout(cleanAll, 300);
-    setTimeout(cleanAll, 1000);
-    setInterval(cleanAll, 1200);
+    } catch (e) {
+      syncMode();
+    }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start, { once: true });
-  } else {
-    start();
-  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
+  else start();
 })();
