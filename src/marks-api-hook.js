@@ -2,10 +2,10 @@
 //  МЭШ – Помощник учителя
 //  Page hook: читает ответы marks из контекста страницы.
 //
-//  ВАЖНО:
-//  - GET marks = источник актуального списка оценок;
-//  - POST/PATCH/DELETE marks = сигнал, что список нужно обновить;
-//  - после изменения оценки перезапрашиваем последний GET marks URL.
+//  Оптимизировано:
+//  - расширение больше НЕ делает самостоятельные повторные GET-запросы к МЭШ;
+//  - только слушает реальные ответы, которые уже сделал сам сайт;
+//  - это снижает риск 504 Gateway Time-out и тормозов интерфейса.
 // ==========================================================
 
 (() => {
@@ -15,10 +15,6 @@
 
   if (window.__meshHelperMarksHookInstalled) return;
   window.__meshHelperMarksHookInstalled = true;
-
-  let lastMarksListUrl = "";
-  let refreshTimer = null;
-  let refreshing = false;
 
   function isMarksListUrl(url) {
     return String(url || "").includes(MARKS_LIST_PART);
@@ -69,60 +65,24 @@
         },
         window.location.origin
       );
-    } catch (error) {
-      console.warn("[МЭШ помощник][marks hook] postMessage error", error);
-    }
+    } catch (error) {}
   }
 
   function postMarks(url, payload) {
-    if (isMarksListUrl(url)) lastMarksListUrl = String(url || "");
     saveDebugMarks(url, payload);
     post("marks-response", url, payload);
   }
 
   function postMutation(url, payload) {
+    // Сообщаем расширению, что МЭШ изменил marks, но сами повторный GET не делаем.
+    // МЭШ после сохранения обычно сам обновляет данные; мы подхватим его настоящий ответ.
     post("marks-mutated", url, payload || {});
-  }
-
-  async function refreshLastMarksList(reason) {
-    if (!lastMarksListUrl || refreshing) return;
-
-    refreshing = true;
-    try {
-      const response = await window.fetch(lastMarksListUrl, {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-        headers: {
-          "Accept": "application/json"
-        }
-      });
-
-      const payload = await response.clone().json();
-      post("marks-refresh", lastMarksListUrl, { reason });
-      postMarks(lastMarksListUrl, payload);
-    } catch (error) {
-      post("marks-refresh-error", lastMarksListUrl, { reason, message: String(error?.message || error) });
-    } finally {
-      refreshing = false;
-    }
-  }
-
-  function scheduleRefresh(reason, delay) {
-    if (!lastMarksListUrl) return;
-    clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => refreshLastMarksList(reason), delay);
-  }
-
-  function scheduleMutationRefresh(url) {
-    postMutation(url, { refreshScheduled: true });
-    scheduleRefresh("after-mutation-250", 250);
-    setTimeout(() => refreshLastMarksList("after-mutation-900"), 900);
-    setTimeout(() => refreshLastMarksList("after-mutation-1800"), 1800);
   }
 
   function readJsonSafely(response, url, isList) {
     try {
+      if (!response || response.status >= 400) return;
+
       response
         .clone()
         .json()
@@ -130,12 +90,8 @@
           if (isList) postMarks(url, payload);
           else postMutation(url, payload);
         })
-        .catch(() => {
-          if (!isList) postMutation(url, {});
-        });
-    } catch (error) {
-      if (!isList) postMutation(url, {});
-    }
+        .catch(() => {});
+    } catch (error) {}
   }
 
   const originalFetch = window.fetch;
@@ -151,7 +107,6 @@
           readJsonSafely(response, url, true);
         } else if (isAnyMarksUrl(url) && method !== "GET") {
           readJsonSafely(response, url, false);
-          scheduleMutationRefresh(url);
         }
       } catch (error) {}
 
@@ -176,27 +131,20 @@
           const url = this.__meshHelperUrl;
           const method = this.__meshHelperMethod || "GET";
           if (!isAnyMarksUrl(url)) return;
+          if (this.status >= 400) return;
 
-          const text = this.responseText;
-          const payload = text ? JSON.parse(text) : {};
+          const body = this.responseText;
+          const payload = body ? JSON.parse(body) : {};
 
           if (isMarksListUrl(url) && method === "GET") {
             postMarks(url, payload);
           } else if (method !== "GET") {
             postMutation(url, payload);
-            scheduleMutationRefresh(url);
           }
-        } catch (error) {
-          if (isAnyMarksUrl(this.__meshHelperUrl) && this.__meshHelperMethod !== "GET") {
-            postMutation(this.__meshHelperUrl, {});
-            scheduleMutationRefresh(this.__meshHelperUrl);
-          }
-        }
+        } catch (error) {}
       });
 
       return originalSend.apply(this, arguments);
     };
   }
-
-  console.log("[МЭШ помощник][marks hook] установлен");
 })();
