@@ -21,10 +21,6 @@
     return cell?.querySelector?.('[data-test-component^="markCell-"]') || null;
   }
 
-  function closestTd(el) {
-    return el?.closest?.("td, th") || null;
-  }
-
   function allRowCells(row) {
     return [...(row?.children || [])].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
   }
@@ -42,14 +38,6 @@
     const raw = text(cell || null);
     const m = raw.match(/[1-5]/);
     return m ? Number(m[0]) : null;
-  }
-
-  function averageValueFromCell(cell) {
-    const raw = text(cell || null).replace(",", ".");
-    const m = raw.match(/\d+(?:\.\d+)?/);
-    if (!m) return null;
-    const n = Number(m[0]);
-    return Number.isFinite(n) && n >= 1 && n <= 5 ? n : null;
   }
 
   function correctFinalFromAverage(avg) {
@@ -107,6 +95,54 @@
     });
   }
 
+  function hasStackIcon(markCell) {
+    if (!markCell) return false;
+    return !!markCell.querySelector("svg") || /stack|misc-stacked|filled-misc-stacked/i.test(markCell.innerHTML || "");
+  }
+
+  function gradesFromLessonCell(cell) {
+    const attr = markAttr(cell);
+    if (!attr || isAverageCell(cell) || isFinalResultAttr(attr) || isFinalSummaryAttr(attr)) return [];
+
+    const markCell = markCellFromTd(cell);
+    if (!markCell) return [];
+
+    const values = [];
+    const spans = [...markCell.querySelectorAll("span")].map(text).filter(Boolean);
+    const source = spans.length ? spans : text(markCell).split(/\s+/).filter(Boolean);
+
+    source.forEach((part) => {
+      const clean = String(part || "").trim();
+      if (/^[1-5]$/.test(clean)) values.push(Number(clean));
+    });
+
+    // Если МЭШ показывает stack-иконку, а видна одна оценка, значит в ячейке есть скрытая/дополнительная.
+    // Для расчета итоговой учитываем ее тем же значением, что видимое значение.
+    if (values.length === 1 && hasStackIcon(markCell)) values.push(values[0]);
+
+    return values;
+  }
+
+  function collectGradesForPeriod(cells, finalIndex) {
+    const grades = [];
+
+    // Идем от итоговой ячейки влево до предыдущей итоговой или до начала строки.
+    // Средний балл пропускаем. Берем только реальные оценочные ячейки периода.
+    for (let i = finalIndex - 1; i >= 0; i -= 1) {
+      const cell = cells[i];
+      const attr = markAttr(cell);
+
+      if (isFinalResultAttr(attr) || isFinalSummaryAttr(attr)) break;
+
+      if (isAverageCell(cell)) continue;
+
+      const vals = gradesFromLessonCell(cell);
+      if (vals.length) grades.unshift(...vals);
+    }
+
+    return grades;
+  }
+
   function checkPeriodFinals(row) {
     const cells = allRowCells(row);
 
@@ -116,16 +152,18 @@
       if (isYearResultAttr(attr)) return;
 
       const current = gradeValueFromCell(cell);
-      const prev = cells[index - 1];
-
-      // Самая безопасная связь: итоговая ячейка стоит сразу после своего «Ср.».
-      // Если слева не average, не угадываем и не подсвечиваем.
-      if (!prev || !isAverageCell(prev) || current === null) {
+      if (current === null) {
         setYellow(cell, false);
         return;
       }
 
-      const avg = averageValueFromCell(prev);
+      const grades = collectGradesForPeriod(cells, index);
+      if (!grades.length) {
+        setYellow(cell, false);
+        return;
+      }
+
+      const avg = grades.reduce((sum, value) => sum + value, 0) / grades.length;
       const expected = correctFinalFromAverage(avg);
       setYellow(cell, expected !== null && current !== expected);
     });
