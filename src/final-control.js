@@ -4,16 +4,15 @@
 //
 //  Оптимизировано:
 //  - синяя подсветка работает только при включенном тумблере «Контроль итоговых»;
-//  - проверка запускается с мягкой задержкой, а не постоянно;
-//  - страховочный интервал сильно увеличен;
+//  - вместо синей заливки используется только рамка, чтобы hover МЭШ не стирал фон;
+//  - проверка запускается с мягкой задержкой;
 //  - модуль не трогает желтую проверку правильности итогов.
 // ==========================================================
 
 (() => {
   const FINAL_MISSING_CLASS = "mesh-helper-final-missing";
   const WRONG_FINAL_CLASS = "mesh-helper-wrong-final-cell";
-  const FINAL_MISSING_BG = "rgba(59, 130, 246, 0.30)";
-  const FINAL_MISSING_OUTLINE = "inset 0 0 0 2px rgba(37, 99, 235, 0.85)";
+  const FINAL_MISSING_OUTLINE = "inset 0 0 0 2px rgba(37, 99, 235, 0.95)";
 
   let storageEnabled = false;
   let timer = null;
@@ -66,7 +65,6 @@
 
   function removeBlueFromElement(el) {
     if (!el || !el.style) return;
-    restoreStyle(el, "background-color", "mhPrevFinalBg");
     restoreStyle(el, "box-shadow", "mhPrevFinalShadow");
     el.classList.remove(FINAL_MISSING_CLASS);
   }
@@ -84,10 +82,8 @@
       if (el.classList.contains(WRONG_FINAL_CLASS)) return;
       if (el.classList.contains(FINAL_MISSING_CLASS)) return;
 
-      rememberStyle(el, "background-color", "mhPrevFinalBg");
       rememberStyle(el, "box-shadow", "mhPrevFinalShadow");
       el.classList.add(FINAL_MISSING_CLASS);
-      el.style.setProperty("background-color", FINAL_MISSING_BG, "important");
       el.style.setProperty("box-shadow", FINAL_MISSING_OUTLINE, "important");
     });
   }
@@ -166,7 +162,6 @@
     characterData: true
   });
 
-  // Редкая страховка вместо постоянного тяжелого цикла.
   setInterval(() => {
     if (!isEnabled()) {
       clearAll();
