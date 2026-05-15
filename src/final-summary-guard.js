@@ -44,6 +44,14 @@
     return m ? Number(m[0]) : null;
   }
 
+  function averageValueFromCell(cell) {
+    const raw = text(cell || null).replace(",", ".");
+    const m = raw.match(/\d+(?:\.\d+)?/);
+    if (!m) return null;
+    const n = Number(m[0]);
+    return Number.isFinite(n) && n >= 1 && n <= 5 ? n : null;
+  }
+
   function correctFinalFromAverage(avg) {
     const n = Number(avg);
     if (!Number.isFinite(n)) return null;
@@ -53,12 +61,12 @@
     return 2;
   }
 
-  function isYearResultAttr(attr) {
-    return attr.includes("yearResult");
+  function isAverageCell(cell) {
+    return markAttr(cell).includes("average");
   }
 
-  function isYearAttestationAttr(attr) {
-    return attr.includes("yearAttestation");
+  function isYearResultAttr(attr) {
+    return attr.includes("yearResult");
   }
 
   function isFinalResultAttr(attr) {
@@ -99,21 +107,27 @@
     });
   }
 
-  function removeWrongYellowFromPeriodFinals(row) {
-    if (!row) return;
+  function checkPeriodFinals(row) {
+    const cells = allRowCells(row);
 
-    [...row.querySelectorAll('[data-test-component^="markCell-"]')].forEach((markCell) => {
-      const attr = markCell.getAttribute("data-test-component") || "";
+    cells.forEach((cell, index) => {
+      const attr = markAttr(cell);
+      if (!isFinalResultAttr(attr)) return;
+      if (isYearResultAttr(attr)) return;
 
-      // Периодовые finalResult пока не проверяем: на разных экранах МЭШ рядом могут быть
-      // разные служебные средние. Оставляем только точные поля Г и И.
-      if (!isFinalResultAttr(attr) || isYearResultAttr(attr)) return;
+      const current = gradeValueFromCell(cell);
+      const prev = cells[index - 1];
 
-      const td = closestTd(markCell);
-      [td, markCell].filter(Boolean).forEach((el) => {
-        el.classList.remove(WRONG_FINAL_CLASS);
-        el.style.removeProperty("background-color");
-      });
+      // Самая безопасная связь: итоговая ячейка стоит сразу после своего «Ср.».
+      // Если слева не average, не угадываем и не подсвечиваем.
+      if (!prev || !isAverageCell(prev) || current === null) {
+        setYellow(cell, false);
+        return;
+      }
+
+      const avg = averageValueFromCell(prev);
+      const expected = correctFinalFromAverage(avg);
+      setYellow(cell, expected !== null && current !== expected);
     });
   }
 
@@ -157,17 +171,20 @@
   }
 
   function applyFinalChecks(row) {
-    if (!isFinalSummaryRow(row)) return;
-
-    removeWrongYellowFromPeriodFinals(row);
+    if (!row) return;
 
     if (!isEnabled()) {
       clearYellow(row);
       return;
     }
 
-    checkYearResult(row);
-    checkYearAttestation(row);
+    if (isFinalSummaryRow(row)) {
+      checkYearResult(row);
+      checkYearAttestation(row);
+      return;
+    }
+
+    checkPeriodFinals(row);
   }
 
   function removeRedFromElement(el) {
