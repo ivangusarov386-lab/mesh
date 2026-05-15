@@ -1,33 +1,22 @@
 (() => {
   const WRONG = 'mesh-helper-wrong-final-cell';
   const YELLOW = 'rgba(250, 204, 21, 0.42)';
-
   let enabled = false;
   let timer = null;
   let observer = null;
 
   const txt = (e) => (e?.innerText || e?.textContent || '').replace(/\s+/g, ' ').trim();
+  const cells = (r) => [...(r?.children || [])].filter((x) => ['TD','TH'].includes(x.tagName));
+  const mark = (c) => c?.querySelector?.('[data-test-component^="markCell-"]') || null;
+  const attr = (c) => mark(c)?.getAttribute?.('data-test-component') || '';
+  const num = (c) => {
+    const m = txt(c).match(/[1-5]/);
+    return m ? Number(m[0]) : null;
+  };
 
   function isEnabled() {
-    const t = document.querySelector('#mh-check-finals');
-    return t ? t.checked === true : enabled === true;
-  }
-
-  function rowCells(row) {
-    return [...(row?.children || [])].filter((x) => ['TD','TH'].includes(x.tagName));
-  }
-
-  function inner(cell) {
-    return cell?.querySelector?.('[data-test-component^="markCell-"]') || null;
-  }
-
-  function attr(cell) {
-    return inner(cell)?.getAttribute?.('data-test-component') || '';
-  }
-
-  function grade(cell) {
-    const m = txt(cell).match(/[1-5]/);
-    return m ? Number(m[0]) : null;
+    const input = document.querySelector('#mh-check-finals');
+    return input ? input.checked === true : enabled === true;
   }
 
   function periodRule(avg) {
@@ -44,132 +33,137 @@
     return 2;
   }
 
-  function paint(cell, bad) {
-    const mark = inner(cell);
-    [cell, mark].filter(Boolean).forEach((el) => {
-      el.classList.toggle(WRONG, !!bad);
-      if (bad) el.style.setProperty('background-color', YELLOW, 'important');
+  function paint(c, bad) {
+    const m = mark(c);
+    [c, m].filter(Boolean).forEach((e) => {
+      e.classList.toggle(WRONG, !!bad);
+      if (bad) e.style.setProperty('background-color', YELLOW, 'important');
       else {
-        el.classList.remove(WRONG);
-        el.style.removeProperty('background-color');
+        e.classList.remove(WRONG);
+        e.style.removeProperty('background-color');
       }
     });
   }
 
-  function lessonGrades(cell) {
-    const a = attr(cell);
-    if (!a || a.includes('average') || a.includes('finalResult') || a.includes('yearResult') || a.includes('yearAttestation') || a.includes('intermediateAttestation')) return [];
+  function hasStack(c) {
+    const m = mark(c);
+    return !!m && (!!m.querySelector('svg') || /stack|misc-stacked|filled-misc-stacked/i.test(m.innerHTML || ''));
+  }
 
-    const vals = [];
-    [...(inner(cell)?.querySelectorAll('span') || [])].map(txt).forEach((v) => {
-      if (/^[1-5]$/.test(v)) vals.push(Number(v));
-    });
+  function gradesFromCell(c) {
+    const a = attr(c);
+    if (!a) return [];
+    if (a.includes('average') || a.includes('finalResult') || a.includes('yearResult') || a.includes('yearExam') || a.includes('yearAttestation') || a.includes('intermediateAttestation')) return [];
 
+    const m = mark(c);
+    if (!m) return [];
+
+    let vals = [...m.querySelectorAll('span')]
+      .map(txt)
+      .filter((v) => /^[1-5]$/.test(v))
+      .map(Number);
+
+    if (!vals.length) {
+      vals = txt(m).split(/\s+/).filter((v) => /^[1-5]$/.test(v)).map(Number);
+    }
+
+    if (vals.length === 1 && hasStack(c)) vals.push(vals[0]);
     return vals;
   }
 
-  function checkPeriodRow(row) {
-    const cells = rowCells(row);
-
-    cells.forEach((cell, index) => {
-      const a = attr(cell);
+  function checkPeriods(row) {
+    const arr = cells(row);
+    arr.forEach((c, i) => {
+      const a = attr(c);
       if (!a.includes('finalResult') || a.includes('yearResult')) return;
 
-      const current = grade(cell);
-      if (current === null) return paint(cell, false);
+      const current = num(c);
+      if (current === null) return paint(c, false);
 
-      const grades = [];
-
-      for (let i = index - 1; i >= 0; i--) {
-        const vals = lessonGrades(cells[i]);
-        if (vals.length) grades.unshift(...vals);
+      const vals = [];
+      for (let x = i - 1; x >= 0; x--) {
+        const aa = attr(arr[x]);
+        if (aa.includes('finalResult') || aa.includes('yearResult') || aa.includes('intermediateAttestation')) break;
+        if (aa.includes('average')) continue;
+        const got = gradesFromCell(arr[x]);
+        if (got.length) vals.unshift(...got);
       }
 
-      if (!grades.length) return paint(cell, false);
-
-      const avg = grades.reduce((s, v) => s + v, 0) / grades.length;
-      paint(cell, periodRule(avg) !== current);
+      if (!vals.length) return paint(c, false);
+      const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+      paint(c, periodRule(avg) !== current);
     });
   }
 
-  function checkSummaryRow(row) {
-    const cells = rowCells(row);
+  function checkSummary(row) {
+    const arr = cells(row);
+    const hasSummary = arr.some((c) => {
+      const a = attr(c);
+      return a.includes('yearResult') || a.includes('yearAttestation') || a.includes('intermediateAttestation');
+    });
+    if (!hasSummary) return;
 
-    const finals = cells
-      .filter((c) => attr(c).includes('finalResult'))
-      .map(grade)
-      .filter((v) => v !== null)
-      .slice(0, 3);
+    const finals = arr.filter((c) => attr(c).includes('finalResult')).map(num).filter((v) => v !== null).slice(0, 3);
+    const paCell = arr.find((c) => attr(c).includes('intermediateAttestation'));
+    const yearCell = arr.find((c) => attr(c).includes('yearResult'));
+    const examCell = arr.find((c) => attr(c).includes('yearExam'));
+    const attCell = arr.find((c) => attr(c).includes('yearAttestation'));
 
-    const paCell = cells.find((c) => attr(c).includes('intermediateAttestation'));
-    const yearCell = cells.find((c) => attr(c).includes('yearResult'));
-    const examCell = cells.find((c) => attr(c).includes('yearExam'));
-    const attCell = cells.find((c) => attr(c).includes('yearAttestation'));
-
-    const pa = grade(paCell);
-    const year = grade(yearCell);
-
+    const pa = num(paCell);
+    const year = num(yearCell);
     if (yearCell && finals.length === 3 && pa !== null && year !== null) {
-      const expectedYear = summaryRule((finals[0] + finals[1] + finals[2] + pa) / 4);
-      paint(yearCell, expectedYear !== year);
+      paint(yearCell, summaryRule((finals[0] + finals[1] + finals[2] + pa) / 4) !== year);
     }
 
-    const exam = grade(examCell);
-    const att = grade(attCell);
-
+    const exam = num(examCell);
+    const att = num(attCell);
     if (attCell && year !== null && att !== null) {
-      const expectedAtt = exam === null ? year : summaryRule((year + exam) / 2);
-      paint(attCell, expectedAtt !== att);
+      paint(attCell, (exam === null ? year : summaryRule((year + exam) / 2)) !== att);
     }
+  }
+
+  function clearYellow() {
+    document.querySelectorAll('.' + WRONG).forEach((e) => {
+      e.classList.remove(WRONG);
+      e.style.removeProperty('background-color');
+    });
   }
 
   function run() {
-    if (!isEnabled()) return;
-
-    document.querySelectorAll('tr').forEach((row) => {
-      checkPeriodRow(row);
-      checkSummaryRow(row);
+    if (!isEnabled()) return clearYellow();
+    document.querySelectorAll('tr').forEach((r) => {
+      checkPeriods(r);
+      checkSummary(r);
     });
   }
 
-  function schedule(delay = 700) {
-    if (!isEnabled()) return;
+  function schedule(delay = 400) {
     clearTimeout(timer);
     timer = setTimeout(run, delay);
   }
 
-  function enableMode() {
-    if (observer) return;
-
-    observer = new MutationObserver(() => schedule(1000));
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-      characterData: true
-    });
-
-    schedule(200);
+  function wake() {
+    if (!isEnabled()) return clearYellow();
+    if (!observer) {
+      observer = new MutationObserver(() => schedule(900));
+      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    }
+    schedule(100);
   }
 
-  function disableMode() {
-    if (observer) {
-      observer.disconnect();
-      observer = null;
-    }
-
+  function sleep() {
+    if (observer) observer.disconnect();
+    observer = null;
     clearTimeout(timer);
-
-    document.querySelectorAll('.' + WRONG).forEach((el) => {
-      el.classList.remove(WRONG);
-      el.style.removeProperty('background-color');
-    });
+    clearYellow();
   }
 
   function sync() {
-    if (isEnabled()) enableMode();
-    else disableMode();
+    if (isEnabled()) wake();
+    else sleep();
   }
 
+  window.addEventListener('mesh-helper-panel-ready', sync);
   window.addEventListener('mesh-helper-finals-toggle', (e) => {
     enabled = e.detail?.enabled === true;
     sync();
@@ -182,12 +176,20 @@
     }
   }, true);
 
+  document.addEventListener('pointerover', (e) => {
+    if (!isEnabled()) return;
+    const r = e.target?.closest?.('tr');
+    if (r) setTimeout(() => { checkPeriods(r); checkSummary(r); }, 80);
+  }, true);
+
   try {
-    chrome.storage.sync.get(['checkFinals'], (data) => {
-      enabled = data.checkFinals === true;
+    chrome.storage.sync.get(['checkFinals'], (d) => {
+      enabled = d.checkFinals === true;
       sync();
     });
   } catch (e) {
     sync();
   }
+
+  setTimeout(sync, 1200);
 })();
