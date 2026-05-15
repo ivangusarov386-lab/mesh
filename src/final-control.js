@@ -1,16 +1,17 @@
 // ==========================================================
 //  МЭШ – Помощник учителя
-//  Контроль итоговых.
+//  Контроль наличия итоговых оценок.
 //
-//  Надежная версия:
-//  - состояние берется из чекбокса и storage;
-//  - ищем именно finalResult;
-//  - проверяем текст только внутри finalResult, а не соседние ячейки;
-//  - при появлении итоговой оценки подсветка снимается автоматически.
+//  Правило:
+//  - синяя подсветка работает только при включенном тумблере «Контроль итоговых»;
+//  - при выключении тумблера подсветка полностью очищается;
+//  - стили не перезаписываются без необходимости, чтобы не было мигания;
+//  - желтую проверку правильности итогов этот модуль не трогает.
 // ==========================================================
 
 (() => {
   const FINAL_MISSING_CLASS = "mesh-helper-final-missing";
+  const WRONG_FINAL_CLASS = "mesh-helper-wrong-final-cell";
   const FINAL_MISSING_BG = "rgba(59, 130, 246, 0.30)";
   const FINAL_MISSING_OUTLINE = "inset 0 0 0 2px rgba(37, 99, 235, 0.85)";
 
@@ -42,14 +43,8 @@
     delete el.dataset[key];
   }
 
-  function finalInner(row) {
-    return row?.querySelector?.('[data-test-component*="finalResult"]') || null;
-  }
-
-  function finalCell(row) {
-    const inner = finalInner(row);
-    if (!inner) return null;
-    return inner.closest("td, th") || inner;
+  function finalInners(row) {
+    return [...(row?.querySelectorAll?.('[data-test-component*="finalResult"]') || [])];
   }
 
   function isStudentRow(row) {
@@ -58,52 +53,78 @@
     return !!row.querySelector?.('[data-test-component^="studentCellInfoComments-"]') || !!row.querySelector?.("span[title]");
   }
 
-  function isFinalFilled(row) {
-    const inner = finalInner(row);
+  function isFinalFilled(inner) {
     if (!inner) return true;
-    return /^[1-5]$/.test(text(inner)) || /\b[1-5]\b/.test(text(inner));
+    const value = text(inner);
+    return /^[1-5]$/.test(value) || /\b[1-5]\b/.test(value);
   }
 
-  function setFinalHighlight(row, on) {
-    const cell = finalCell(row);
-    const inner = finalInner(row);
-    if (!cell || !inner) return;
+  function cellForInner(inner) {
+    return inner?.closest?.("td, th") || inner || null;
+  }
 
-    [cell, inner].forEach((el) => {
-      el.classList.toggle(FINAL_MISSING_CLASS, on);
-      if (on) {
-        rememberStyle(el, "background-color", "mhPrevFinalBg");
-        rememberStyle(el, "box-shadow", "mhPrevFinalShadow");
-        el.style.setProperty("background-color", FINAL_MISSING_BG, "important");
-        el.style.setProperty("box-shadow", FINAL_MISSING_OUTLINE, "important");
-      } else {
-        restoreStyle(el, "background-color", "mhPrevFinalBg");
-        restoreStyle(el, "box-shadow", "mhPrevFinalShadow");
+  function removeBlueFromElement(el) {
+    if (!el || !el.style) return;
+    restoreStyle(el, "background-color", "mhPrevFinalBg");
+    restoreStyle(el, "box-shadow", "mhPrevFinalShadow");
+    el.classList.remove(FINAL_MISSING_CLASS);
+  }
+
+  function setBlueForInner(inner, on) {
+    const cell = cellForInner(inner);
+    const targets = [cell, inner].filter(Boolean);
+
+    targets.forEach((el) => {
+      if (!on) {
+        removeBlueFromElement(el);
+        return;
       }
+
+      // Если ячейка уже желтая из проверки правильности, синюю поверх не ставим.
+      if (el.classList.contains(WRONG_FINAL_CLASS)) return;
+
+      // Уже подсвечено — не перезаписываем стили, чтобы не было мигания.
+      if (el.classList.contains(FINAL_MISSING_CLASS)) return;
+
+      rememberStyle(el, "background-color", "mhPrevFinalBg");
+      rememberStyle(el, "box-shadow", "mhPrevFinalShadow");
+      el.classList.add(FINAL_MISSING_CLASS);
+      el.style.setProperty("background-color", FINAL_MISSING_BG, "important");
+      el.style.setProperty("box-shadow", FINAL_MISSING_OUTLINE, "important");
     });
   }
 
   function clearAll() {
-    document.querySelectorAll(`.${FINAL_MISSING_CLASS}`).forEach((el) => {
-      restoreStyle(el, "background-color", "mhPrevFinalBg");
-      restoreStyle(el, "box-shadow", "mhPrevFinalShadow");
-      el.classList.remove(FINAL_MISSING_CLASS);
-    });
+    document.querySelectorAll(`.${FINAL_MISSING_CLASS}`).forEach(removeBlueFromElement);
   }
 
   function apply() {
-    const enabled = isEnabled();
-    if (!enabled) {
+    if (!isEnabled()) {
       clearAll();
       return;
     }
 
-    const seen = new Set();
-    document.querySelectorAll('[data-test-component*="finalResult"]').forEach((inner) => {
-      const row = inner.closest("tr");
-      if (!isStudentRow(row) || seen.has(row)) return;
-      seen.add(row);
-      setFinalHighlight(row, !isFinalFilled(row));
+    const active = new Set();
+
+    document.querySelectorAll("tr").forEach((row) => {
+      if (!isStudentRow(row)) return;
+
+      finalInners(row).forEach((inner) => {
+        const missing = !isFinalFilled(inner);
+        const cell = cellForInner(inner);
+
+        if (missing) {
+          active.add(inner);
+          if (cell) active.add(cell);
+        }
+
+        setBlueForInner(inner, missing);
+      });
+    });
+
+    // Убираем синюю подсветку с тех элементов, которые уже перестали быть проблемными.
+    document.querySelectorAll(`.${FINAL_MISSING_CLASS}`).forEach((el) => {
+      if (!active.has(el)) removeBlueFromElement(el);
     });
   }
 
@@ -123,28 +144,32 @@
 
   window.addEventListener("mesh-helper-finals-toggle", (event) => {
     storageEnabled = event.detail?.enabled === true;
-    schedule(20);
-    setTimeout(apply, 250);
+    if (!storageEnabled) clearAll();
+    schedule(30);
   });
 
-  window.addEventListener("mesh-helper-marks-updated", () => schedule(80));
-  window.addEventListener("mesh-helper-min-grades-changed", () => schedule(80));
+  window.addEventListener("mesh-helper-marks-updated", () => schedule(100));
+  window.addEventListener("mesh-helper-min-grades-changed", () => schedule(100));
 
   document.addEventListener("change", (event) => {
     if (event.target?.id === "mh-check-finals") {
       storageEnabled = event.target.checked === true;
       chrome.storage.sync.set({ checkFinals: storageEnabled });
-      schedule(20);
+      if (!storageEnabled) clearAll();
+      schedule(30);
     }
   }, true);
 
-  new MutationObserver(() => schedule(180)).observe(document.documentElement, {
+  new MutationObserver(() => schedule(220)).observe(document.documentElement, {
     childList: true,
     subtree: true,
     characterData: true
   });
 
-  setInterval(apply, 1000);
+  setInterval(() => {
+    if (isEnabled()) apply();
+    else clearAll();
+  }, 1800);
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", syncFromStorage, { once: true });
