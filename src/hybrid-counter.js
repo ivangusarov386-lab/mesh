@@ -3,12 +3,13 @@
   const LOW_CELL_CLASS = "mesh-helper-low-grades-cell";
   const LOW_ROW_BG = "rgba(248, 113, 113, 0.22)";
   const WRONG_FINAL_CLASS = "mesh-helper-wrong-final-cell";
-  const WRONG_FINAL_BG = "rgba(250, 204, 21, 0.42)";
   const FOCUS_ROW_CLASS = "mesh-helper-row-focus";
   const ACADEMIC_DEBT_MIN_GRADES = 2;
+
   let timer = null;
   let hoverTimer = null;
   let lastRows = [];
+  let lastFullScanAt = 0;
 
   const text = (el) => (el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
   const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#039;");
@@ -40,6 +41,14 @@
     return disabledBy.includes("FUTURE");
   }
 
+  function isVisibleRow(row) {
+    if (!row?.getBoundingClientRect) return false;
+    const rect = row.getBoundingClientRect();
+    const h = window.innerHeight || document.documentElement.clientHeight || 800;
+    const buffer = 350;
+    return rect.bottom >= -buffer && rect.top <= h + buffer && rect.width > 0 && rect.height > 0;
+  }
+
   function studentId(row) {
     const cell = row?.querySelector?.('[data-test-component^="markCell-"]');
     const attr = cell?.getAttribute?.("data-test-component") || "";
@@ -52,9 +61,17 @@
     return fio ? (fio.getAttribute("title") || text(fio)) : "";
   }
 
+  function allRowCells(row) {
+    return [...(row?.children || [])].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
+  }
+
+  function markCellFromTd(cell) {
+    return cell?.querySelector?.('[data-test-component^="markCell-"]') || null;
+  }
+
   function rowCellsBeforeFinal(row) {
     const result = [];
-    const cells = [...row.children].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
+    const cells = allRowCells(row);
     for (const cell of cells) {
       if (isFinalCell(cell)) break;
       if (isAverageCell(cell)) continue;
@@ -63,34 +80,12 @@
     return result;
   }
 
-  function allRowCells(row) {
-    return [...row.children].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
-  }
-
-  function markCellFromTd(cell) {
-    return cell.querySelector?.('[data-test-component^="markCell-"]') || null;
-  }
-
   function parseLessonId(markCell) {
     const attr = markCell?.getAttribute?.("data-test-component") || "";
     const m = attr.match(/^markCell-\d+_(\d+)_/);
     const id = m ? Number(m[1]) : null;
     return id && id > 100000 ? id : null;
   }
-
-  function correctFinalFromAverage(avg) {
-    if (avg === null || avg === undefined || avg === "") return "";
-    const n = Number(avg);
-    if (!Number.isFinite(n)) return "";
-    if (n >= 4.6) return 5;
-    if (n >= 3.6) return 4;
-    if (n >= 2.6) return 3;
-    return 2;
-  }
-
-  // Желтую проверку итогов выполняет final-summary-guard.js.
-  // Здесь ничего не очищаем, чтобы не было мигания подсветки.
-  function checkFinalCorrectness(row) {}
 
   function buildLessonDateMap(api) {
     const map = new Map();
@@ -113,7 +108,6 @@
       if (!markCell || isFutureLessonCell(markCell)) return;
       const lessonId = parseLessonId(markCell);
       if (!lessonId) return;
-
       ids.add(lessonId);
       const date = byLesson.get(lessonId);
       if (date) dates.add(date);
@@ -147,12 +141,12 @@
       lessons += 1;
 
       const cellText = text(markCell).toLowerCase();
-      if (/(^|\s)н(\s|$)/i.test(cellText) || cellText.includes("н")) absences += 1;
+      if (cellText.includes("н")) absences += 1;
 
       const spans = [...markCell.querySelectorAll("span")].map(text).filter(Boolean);
       const parts = spans.length ? spans : text(markCell).split(" ").map((x) => x.trim()).filter(Boolean);
-
       let visibleGradesInCell = 0;
+
       parts.forEach((v) => {
         if (/^[1-5]$/.test(v)) {
           grades += 1;
@@ -169,6 +163,15 @@
   function parseAverage(value) {
     const n = Number(String(value || "").replace(",", ".").replace(/[^\d.]/g, ""));
     return Number.isFinite(n) ? n : null;
+  }
+
+  function correctFinalFromAverage(avg) {
+    const n = Number(avg);
+    if (!Number.isFinite(n)) return "";
+    if (n >= 4.6) return 5;
+    if (n >= 3.6) return 4;
+    if (n >= 2.6) return 3;
+    return 2;
   }
 
   function averageFromRow(row) {
@@ -189,13 +192,11 @@
   }
 
   function journalMeta() {
-    const titleText = text(document.querySelector("h1")) || text(document.querySelector('[class*="Journal"]')) || document.title || "";
+    const titleText = text(document.querySelector("h1")) || document.title || "";
     const subjectSelect = text(document.querySelector("button[aria-haspopup='listbox']")) || "";
-    const pageText = text(document.body).slice(0, 4000);
-
+    const pageText = text(document.body).slice(0, 2500);
     const classMatch = (titleText + " " + subjectSelect + " " + pageText).match(/\b\d{1,2}\s*[-–—]\s*[А-ЯA-ZЁ][\wА-Яа-яЁё,\s]*\b/);
     const subjectMatch = titleText.match(/Журнал\s+(.+?)\s+\d{1,2}\s*[-–—]/i);
-
     return {
       className: classMatch ? classMatch[0].replace(/\s+/g, " ").trim() : "",
       subject: subjectMatch ? subjectMatch[1].trim() : (subjectSelect || "")
@@ -218,10 +219,8 @@
     api.forEach((mark) => {
       if (Number(mark?.student_profile_id) !== sid) return;
       if (!/^[1-5]$/.test(String(mark?.name || "").trim())) return;
-
       const date = String(mark?.date || "").trim();
       const lessonId = Number(mark?.schedule_lesson_id);
-
       if (lessonId && period.ids.has(lessonId)) byLesson += 1;
       if (date && period.dates.has(date)) byDate += 1;
     });
@@ -243,8 +242,8 @@
   }
 
   function paintElement(el) {
-    if (!el || !el.style) return;
-    if (el.classList.contains(WRONG_FINAL_CLASS)) return;
+    if (!el || !el.style || el.classList.contains(WRONG_FINAL_CLASS)) return;
+    if (el.classList.contains(LOW_CELL_CLASS)) return;
     el.classList.add(LOW_CELL_CLASS);
     el.style.setProperty("background-color", LOW_ROW_BG, "important");
   }
@@ -257,27 +256,8 @@
   function paintHoveredMark(target) {
     const row = target?.closest?.(`tr.${LOW_ROW_CLASS}`);
     if (!row || !isHighlightOn()) return;
-
-    const td = target.closest?.("td, th");
-    const markCell = target.closest?.('[data-test-component^="markCell-"]') || td?.querySelector?.('[data-test-component^="markCell-"]');
-
-    paintRow(row);
-    if (td && !isAverageCell(td) && !isFinalCell(td)) paintElement(td);
-    if (markCell) paintElement(markCell);
-
     clearTimeout(hoverTimer);
-    hoverTimer = setTimeout(() => {
-      paintRow(row);
-      if (td && !isAverageCell(td) && !isFinalCell(td)) paintElement(td);
-      if (markCell) paintElement(markCell);
-    }, 30);
-
-    setTimeout(() => {
-      if (!row.isConnected) return;
-      paintRow(row);
-      if (td?.isConnected && !isAverageCell(td) && !isFinalCell(td)) paintElement(td);
-      if (markCell?.isConnected) paintElement(markCell);
-    }, 120);
+    hoverTimer = setTimeout(() => paintRow(row), 80);
   }
 
   function setHighlight(row, active) {
@@ -285,47 +265,51 @@
     row.classList.toggle(LOW_ROW_CLASS, on);
     targets(row).forEach((el) => {
       if (el.classList.contains(WRONG_FINAL_CLASS)) return;
-      el.classList.toggle(LOW_CELL_CLASS, on);
-      if (on) el.style.setProperty("background-color", LOW_ROW_BG, "important");
+      if (on) paintElement(el);
       else {
         el.style.removeProperty("background-color");
         el.classList.remove(LOW_CELL_CLASS);
         if (el.dataset?.mhPrevBg) delete el.dataset.mhPrevBg;
       }
     });
-    if (!isHighlightOn()) window.dispatchEvent(new CustomEvent("mesh-helper-force-clear-low"));
   }
 
-  function rows() {
+  function buildRow(row, id, meta) {
+    const name = studentName(row);
+    const sid = studentId(row);
+    if (!name || !sid) return null;
+    const stat = rowStats(row);
+    const average = averageFromRow(row);
+    const finalGrade = finalGradeFromRow(row);
+    return {
+      id,
+      row,
+      name,
+      studentId: sid,
+      className: meta.className,
+      subject: meta.subject,
+      average,
+      finalGrade,
+      correctFinal: correctFinalFromAverage(average),
+      risk: stat.gradeCount < ACADEMIC_DEBT_MIN_GRADES ? "Да" : "Нет",
+      absencePercent: stat.lessonCount ? Math.round((stat.absenceCount / stat.lessonCount) * 1000) / 10 : 0,
+      ...stat
+    };
+  }
+
+  function rows(options = {}) {
     const meta = journalMeta();
-    return [...document.querySelectorAll("tr")].map((row, id) => {
-      const name = studentName(row);
-      const sid = studentId(row);
-      if (!name || !sid) return null;
-      checkFinalCorrectness(row);
-      const stat = rowStats(row);
-      const average = averageFromRow(row);
-      const finalGrade = finalGradeFromRow(row);
-      return {
-        id,
-        row,
-        name,
-        studentId: sid,
-        className: meta.className,
-        subject: meta.subject,
-        average,
-        finalGrade,
-        correctFinal: correctFinalFromAverage(average),
-        risk: stat.gradeCount < ACADEMIC_DEBT_MIN_GRADES ? "Да" : "Нет",
-        absencePercent: stat.lessonCount ? Math.round((stat.absenceCount / stat.lessonCount) * 1000) / 10 : 0,
-        ...stat
-      };
-    }).filter(Boolean);
+    const onlyVisible = options.onlyVisible === true;
+    return [...document.querySelectorAll("tr")]
+      .map((row, id) => ({ row, id }))
+      .filter((x) => !onlyVisible || isVisibleRow(x.row))
+      .map((x) => buildRow(x.row, x.id, meta))
+      .filter(Boolean);
   }
 
   function reportRows(mode = "problems") {
     const min = minGrades();
-    const source = lastRows.length ? lastRows : rows();
+    const source = rows({ onlyVisible: false });
     return source
       .filter((x) => mode === "all" || x.gradeCount < min)
       .map((x) => ({
@@ -348,19 +332,16 @@
   }
 
   function downloadCsv(mode) {
-    apply();
     const data = reportRows(mode);
     if (!data.length) {
       alert(mode === "all" ? "Нет данных для выгрузки." : "Проблемных учеников для выгрузки нет.");
       return;
     }
-
     const headers = Object.keys(data[0]);
     const csv = "\ufeff" + [
       headers.map(csvValue).join(";"),
       ...data.map((row) => headers.map((h) => csvValue(row[h])).join(";"))
     ].join("\n");
-
     const meta = journalMeta();
     const date = new Date().toISOString().slice(0, 10);
     const name = mode === "all" ? "ves_klass" : "problemnye";
@@ -391,7 +372,6 @@
 
   function updatePanel(list, min) {
     lastRows = list;
-    window.__MESH_HELPER_REPORT_ROWS__ = () => reportRows("all");
     const panel = document.getElementById("mesh-helper-panel");
     const listEl = panel?.querySelector("#mh-list");
     const summaryEl = panel?.querySelector("#mh-summary");
@@ -404,7 +384,7 @@
     if (titleCount) titleCount.textContent = String(problems.length);
 
     if (!problems.length) {
-      listEl.innerHTML = '<div class="mh-note">Все ученики в норме 👍</div>';
+      listEl.innerHTML = '<div class="mh-note">Все видимые ученики в норме 👍</div>';
       return;
     }
 
@@ -415,7 +395,7 @@
   }
 
   function focusRow(id) {
-    const item = rows().find((x) => x.id === id);
+    const item = rows({ onlyVisible: false }).find((x) => x.id === id);
     if (!item) return;
     item.row.scrollIntoView({ behavior: "smooth", block: "center" });
     item.row.classList.add(FOCUS_ROW_CLASS);
@@ -423,13 +403,16 @@
   }
 
   function apply() {
+    if (document.hidden) return;
     const min = minGrades();
-    const list = rows();
-    list.forEach((x) => setHighlight(x.row, x.gradeCount < min));
-    updatePanel(list, min);
+    const now = Date.now();
+    const liveRows = rows({ onlyVisible: true });
+    liveRows.forEach((x) => setHighlight(x.row, x.gradeCount < min));
+    updatePanel(liveRows, min);
+    lastFullScanAt = now;
   }
 
-  function schedule(delay = 120) {
+  function schedule(delay = 700) {
     clearTimeout(timer);
     timer = setTimeout(apply, delay);
   }
@@ -442,32 +425,26 @@
     focusRow(Number(btn.dataset.hybridId));
   }, true);
 
-  ["pointerover", "mouseover", "mousemove", "mouseenter"].forEach((eventName) => {
-    document.addEventListener(eventName, (e) => paintHoveredMark(e.target), true);
-  });
+  document.addEventListener("pointerover", (e) => paintHoveredMark(e.target), true);
+  document.addEventListener("scroll", () => schedule(450), true);
 
   window.addEventListener("mesh-helper-panel-ready", bindExportButtons);
-  window.addEventListener("mesh-helper-min-grades-changed", () => schedule(40));
-  window.addEventListener("mesh-helper-highlight-toggle", () => schedule(40));
-  window.addEventListener("mesh-helper-marks-updated", () => {
-    schedule(60);
-    setTimeout(apply, 250);
-    setTimeout(apply, 900);
-  });
+  window.addEventListener("mesh-helper-min-grades-changed", () => schedule(250));
+  window.addEventListener("mesh-helper-highlight-toggle", () => schedule(250));
+  window.addEventListener("mesh-helper-marks-updated", () => schedule(900));
   window.addEventListener("message", (e) => {
-    if (e.source === window && e.data?.source === "mesh-helper-marks-hook" && e.data?.type === "marks-response") {
-      schedule(80);
-      setTimeout(apply, 300);
-      setTimeout(apply, 900);
-    }
+    if (e.source === window && e.data?.source === "mesh-helper-marks-hook" && e.data?.type === "marks-response") schedule(900);
   });
 
-  new MutationObserver(() => schedule(180)).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  setInterval(apply, 1200);
+  new MutationObserver(() => schedule(900)).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => schedule(200), { once: true });
-  else schedule(200);
+  setInterval(() => {
+    if (document.hidden) return;
+    if (Date.now() - lastFullScanAt > 10000) apply();
+  }, 10000);
 
-  setTimeout(apply, 1500);
-  setTimeout(apply, 3500);
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => schedule(600), { once: true });
+  else schedule(600);
+
+  setTimeout(apply, 2000);
 })();
