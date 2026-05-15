@@ -78,24 +78,6 @@
     return id && id > 100000 ? id : null;
   }
 
-  function cellByComponent(row, needle) {
-    return allRowCells(row).find((cell) => {
-      const markCell = markCellFromTd(cell);
-      const attr = markCell?.getAttribute?.("data-test-component") || "";
-      return attr.includes(needle);
-    }) || null;
-  }
-
-  function markCellAttr(cell) {
-    return markCellFromTd(cell)?.getAttribute?.("data-test-component") || "";
-  }
-
-  function gradeValueFromCell(cell) {
-    const raw = text(cell || null);
-    const m = raw.match(/[1-5]/);
-    return m ? Number(m[0]) : null;
-  }
-
   function correctFinalFromAverage(avg) {
     if (avg === null || avg === undefined || avg === "") return "";
     const n = Number(avg);
@@ -106,33 +88,9 @@
     return 2;
   }
 
-  function paintWrongFinal(cell, active) {
-    if (!cell) return;
-    const markCell = markCellFromTd(cell);
-    [cell, markCell].filter(Boolean).forEach((el) => {
-      el.classList.toggle(WRONG_FINAL_CLASS, !!active);
-      if (active) el.style.setProperty("background-color", WRONG_FINAL_BG, "important");
-      else {
-        el.style.removeProperty("background-color");
-        el.classList.remove(WRONG_FINAL_CLASS);
-      }
-    });
-  }
-
-  function clearWrongFinal(row) {
-    row.querySelectorAll?.(`.${WRONG_FINAL_CLASS}`).forEach((el) => {
-      el.classList.remove(WRONG_FINAL_CLASS);
-      el.style.removeProperty("background-color");
-    });
-  }
-
-  // Старая проверка периодовых итогов отключена.
-  // Причина: МЭШ на разных экранах по-разному располагает столбцы «Ср.» и «Итог»,
-  // из-за чего появлялись ложные желтые подсветки.
-  // Точную проверку Г/И выполняет final-summary-guard.js и только по тумблеру «Контроль итоговых».
-  function checkFinalCorrectness(row) {
-    clearWrongFinal(row);
-  }
+  // Желтую проверку итогов выполняет final-summary-guard.js.
+  // Здесь ничего не очищаем, чтобы не было мигания подсветки.
+  function checkFinalCorrectness(row) {}
 
   function buildLessonDateMap(api) {
     const map = new Map();
