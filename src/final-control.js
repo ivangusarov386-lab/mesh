@@ -2,11 +2,11 @@
 //  МЭШ – Помощник учителя
 //  Контроль наличия итоговых оценок.
 //
-//  Правило:
+//  Оптимизировано:
 //  - синяя подсветка работает только при включенном тумблере «Контроль итоговых»;
-//  - при выключении тумблера подсветка полностью очищается;
-//  - стили не перезаписываются без необходимости, чтобы не было мигания;
-//  - желтую проверку правильности итогов этот модуль не трогает.
+//  - проверка запускается с мягкой задержкой, а не постоянно;
+//  - страховочный интервал сильно увеличен;
+//  - модуль не трогает желтую проверку правильности итогов.
 // ==========================================================
 
 (() => {
@@ -17,6 +17,7 @@
 
   let storageEnabled = false;
   let timer = null;
+  let lastRunAt = 0;
 
   function text(el) {
     return (el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
@@ -80,10 +81,7 @@
         return;
       }
 
-      // Если ячейка уже желтая из проверки правильности, синюю поверх не ставим.
       if (el.classList.contains(WRONG_FINAL_CLASS)) return;
-
-      // Уже подсвечено — не перезаписываем стили, чтобы не было мигания.
       if (el.classList.contains(FINAL_MISSING_CLASS)) return;
 
       rememberStyle(el, "background-color", "mhPrevFinalBg");
@@ -99,11 +97,14 @@
   }
 
   function apply() {
+    if (document.hidden) return;
+
     if (!isEnabled()) {
       clearAll();
       return;
     }
 
+    lastRunAt = Date.now();
     const active = new Set();
 
     document.querySelectorAll("tr").forEach((row) => {
@@ -122,13 +123,12 @@
       });
     });
 
-    // Убираем синюю подсветку с тех элементов, которые уже перестали быть проблемными.
     document.querySelectorAll(`.${FINAL_MISSING_CLASS}`).forEach((el) => {
       if (!active.has(el)) removeBlueFromElement(el);
     });
   }
 
-  function schedule(delay = 120) {
+  function schedule(delay = 600) {
     clearTimeout(timer);
     timer = setTimeout(apply, delay);
   }
@@ -138,38 +138,46 @@
       storageEnabled = data.checkFinals === true;
       const input = document.querySelector("#mh-check-finals");
       if (input) input.checked = storageEnabled;
-      schedule(30);
+      schedule(120);
     });
   }
 
   window.addEventListener("mesh-helper-finals-toggle", (event) => {
     storageEnabled = event.detail?.enabled === true;
     if (!storageEnabled) clearAll();
-    schedule(30);
+    schedule(120);
   });
 
-  window.addEventListener("mesh-helper-marks-updated", () => schedule(100));
-  window.addEventListener("mesh-helper-min-grades-changed", () => schedule(100));
+  window.addEventListener("mesh-helper-marks-updated", () => schedule(700));
+  window.addEventListener("mesh-helper-min-grades-changed", () => schedule(700));
 
   document.addEventListener("change", (event) => {
     if (event.target?.id === "mh-check-finals") {
       storageEnabled = event.target.checked === true;
       chrome.storage.sync.set({ checkFinals: storageEnabled });
       if (!storageEnabled) clearAll();
-      schedule(30);
+      schedule(120);
     }
   }, true);
 
-  new MutationObserver(() => schedule(220)).observe(document.documentElement, {
+  new MutationObserver(() => schedule(900)).observe(document.documentElement, {
     childList: true,
     subtree: true,
     characterData: true
   });
 
+  // Редкая страховка вместо постоянного тяжелого цикла.
   setInterval(() => {
-    if (isEnabled()) apply();
-    else clearAll();
-  }, 1800);
+    if (!isEnabled()) {
+      clearAll();
+      return;
+    }
+    if (Date.now() - lastRunAt > 8000) apply();
+  }, 8000);
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) schedule(300);
+  });
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", syncFromStorage, { once: true });
@@ -177,6 +185,6 @@
     syncFromStorage();
   }
 
-  setTimeout(syncFromStorage, 700);
-  setTimeout(apply, 1800);
+  setTimeout(syncFromStorage, 900);
+  setTimeout(apply, 2200);
 })();
