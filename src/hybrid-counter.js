@@ -126,49 +126,12 @@
     });
   }
 
-  function checkPeriodFinals(row) {
-    let lastAverage = null;
-    allRowCells(row).forEach((cell) => {
-      const attr = markCellAttr(cell);
-      if (isAverageCell(cell)) {
-        lastAverage = parseAverage(text(cell));
-        return;
-      }
-
-      if (!attr.includes("finalResult")) return;
-      if (attr.includes("year") || attr.includes("Attestation")) return;
-
-      const current = gradeValueFromCell(cell);
-      const expected = correctFinalFromAverage(lastAverage);
-      const wrong = current !== null && expected !== "" && current !== expected;
-      paintWrongFinal(cell, wrong);
-      lastAverage = null;
-    });
-  }
-
-  function checkYearResult(row) {
-    const finalCells = allRowCells(row).filter((cell) => markCellAttr(cell).includes("finalResult"));
-    const finalValues = finalCells.map(gradeValueFromCell).filter((v) => v !== null);
-    const paCell = cellByComponent(row, "intermediateAttestation");
-    const yearCell = cellByComponent(row, "yearResult");
-    const pa = gradeValueFromCell(paCell);
-    const currentYear = gradeValueFromCell(yearCell);
-
-    if (!yearCell || currentYear === null || finalValues.length < 3 || pa === null) {
-      paintWrongFinal(yearCell, false);
-      return;
-    }
-
-    const values = [...finalValues.slice(0, 3), pa];
-    const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-    const expectedYear = correctFinalFromAverage(avg);
-    paintWrongFinal(yearCell, expectedYear !== "" && currentYear !== expectedYear);
-  }
-
+  // Старая проверка периодовых итогов отключена.
+  // Причина: МЭШ на разных экранах по-разному располагает столбцы «Ср.» и «Итог»,
+  // из-за чего появлялись ложные желтые подсветки.
+  // Точную проверку Г/И выполняет final-summary-guard.js и только по тумблеру «Контроль итоговых».
   function checkFinalCorrectness(row) {
     clearWrongFinal(row);
-    checkPeriodFinals(row);
-    checkYearResult(row);
   }
 
   function buildLessonDateMap(api) {
