@@ -3,6 +3,7 @@
   const PANEL_ID = "mesh-helper-panel";
   const MINI_MIN_ID = "mh-mini-min";
   let panelAttempts = 0;
+  let minSaveTimer = null;
 
   function ensureTitle(panel) {
     const title = panel.querySelector(".mh-title");
@@ -17,12 +18,22 @@
     if (min && String(min.value) !== String(value)) min.value = value;
   }
 
-  function saveMin(panel, rawValue) {
+  function normalizeMin(rawValue) {
     const n = Number(rawValue || DEFAULT_MIN);
-    const value = Number.isFinite(n) && n > 0 ? n : DEFAULT_MIN;
-    syncMiniMin(panel, value);
-    chrome.storage.sync.set({ minGrades: value });
+    return Number.isFinite(n) && n > 0 ? n : DEFAULT_MIN;
+  }
+
+  function notifyMinChanged() {
     window.dispatchEvent(new CustomEvent("mesh-helper-min-grades-changed"));
+    setTimeout(() => window.dispatchEvent(new CustomEvent("mesh-helper-min-grades-changed")), 120);
+  }
+
+  function saveMin(panel, rawValue) {
+    const value = normalizeMin(rawValue);
+    syncMiniMin(panel, value);
+    clearTimeout(minSaveTimer);
+    minSaveTimer = setTimeout(() => chrome.storage.sync.set({ minGrades: value }), 120);
+    notifyMinChanged();
   }
 
   function ensureMiniMin(panel) {
@@ -44,6 +55,7 @@
       wrap.addEventListener(eventName, (e) => e.stopPropagation());
     });
 
+    mini.addEventListener("input", () => saveMin(panel, mini.value));
     mini.addEventListener("change", () => saveMin(panel, mini.value));
     mini.addEventListener("keydown", (e) => {
       e.stopPropagation();
@@ -175,7 +187,8 @@
 
     if (minInput && minInput.dataset.ready !== "1") {
       minInput.dataset.ready = "1";
-      minInput.addEventListener("change", () => syncMiniMin(panel, minInput.value));
+      minInput.addEventListener("input", () => saveMin(panel, minInput.value));
+      minInput.addEventListener("change", () => saveMin(panel, minInput.value));
       minInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
