@@ -16,7 +16,7 @@
   const isHighlightOn = () => window.__MESH_HELPER_HIGHLIGHT_LOW_ENABLED__ !== false;
 
   function minGrades() {
-    const n = Number(document.querySelector("#mh-min")?.value || 5);
+    const n = Number(document.querySelector("#mh-min")?.value || document.querySelector("#mh-mini-min")?.value || 5);
     return Number.isFinite(n) && n > 0 ? n : 5;
   }
 
@@ -394,6 +394,20 @@
     }).join("");
   }
 
+  function fastApplyFromCache() {
+    if (document.hidden) return;
+    const min = minGrades();
+    const cached = lastRows.filter((x) => x?.row?.isConnected && isVisibleRow(x.row));
+
+    if (!cached.length) {
+      schedule(120);
+      return;
+    }
+
+    cached.forEach((x) => setHighlight(x.row, x.gradeCount < min));
+    updatePanel(cached, min);
+  }
+
   function focusRow(id) {
     const item = rows({ onlyVisible: false }).find((x) => x.id === id);
     if (!item) return;
@@ -429,7 +443,7 @@
   document.addEventListener("scroll", () => schedule(450), true);
 
   window.addEventListener("mesh-helper-panel-ready", bindExportButtons);
-  window.addEventListener("mesh-helper-min-grades-changed", () => schedule(250));
+  window.addEventListener("mesh-helper-min-grades-changed", fastApplyFromCache);
   window.addEventListener("mesh-helper-highlight-toggle", () => schedule(250));
   window.addEventListener("mesh-helper-marks-updated", () => schedule(900));
   window.addEventListener("message", (e) => {
