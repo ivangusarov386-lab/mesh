@@ -15,7 +15,7 @@
   };
 
   function isEnabled() {
-    const input = document.querySelector('#mh-check-finals');
+    const input = document.querySelector('#mh-check-correct-finals');
     return input ? input.checked === true : enabled === true;
   }
 
@@ -164,13 +164,13 @@
   }
 
   window.addEventListener('mesh-helper-panel-ready', sync);
-  window.addEventListener('mesh-helper-finals-toggle', (e) => {
+  window.addEventListener('mesh-helper-correct-finals-toggle', (e) => {
     enabled = e.detail?.enabled === true;
     sync();
   });
 
   document.addEventListener('change', (e) => {
-    if (e.target?.id === 'mh-check-finals') {
+    if (e.target?.id === 'mh-check-correct-finals') {
       enabled = e.target.checked === true;
       sync();
     }
@@ -183,8 +183,8 @@
   }, true);
 
   try {
-    chrome.storage.sync.get(['checkFinals'], (d) => {
-      enabled = d.checkFinals === true;
+    chrome.storage.sync.get(['checkCorrectFinals'], (d) => {
+      enabled = d.checkCorrectFinals === true;
       sync();
     });
   } catch (e) {
