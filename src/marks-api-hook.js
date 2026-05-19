@@ -2,10 +2,12 @@
 //  МЭШ – Помощник учителя
 //  Page hook: читает ответы marks из контекста страницы.
 //
-//  Оптимизировано:
-//  - расширение больше НЕ делает самостоятельные повторные GET-запросы к МЭШ;
-//  - только слушает реальные ответы, которые уже сделал сам сайт;
-//  - это снижает риск 504 Gateway Time-out и тормозов интерфейса.
+//  Production-safe версия:
+//  - НЕ трогает посторонние fetch-запросы страницы;
+//  - НЕ ждёт и НЕ оборачивает Яндекс.Метрику, Kaspersky, аналитику, CDN;
+//  - работает только с API оценок МЭШ;
+//  - расширение не делает самостоятельные повторные GET-запросы к МЭШ;
+//  - только слушает реальные ответы, которые уже сделал сам сайт.
 // ==========================================================
 
 (() => {
@@ -16,12 +18,24 @@
   if (window.__meshHelperMarksHookInstalled) return;
   window.__meshHelperMarksHookInstalled = true;
 
+  function normalizeUrl(input) {
+    try {
+      if (typeof input === "string") return input;
+      if (input?.url) return String(input.url);
+    } catch (error) {}
+    return "";
+  }
+
   function isMarksListUrl(url) {
     return String(url || "").includes(MARKS_LIST_PART);
   }
 
   function isAnyMarksUrl(url) {
     return String(url || "").includes(MARKS_ANY_PART);
+  }
+
+  function isTargetMarksUrl(url) {
+    return isAnyMarksUrl(url);
   }
 
   function extractMarks(payload) {
@@ -74,8 +88,6 @@
   }
 
   function postMutation(url, payload) {
-    // Сообщаем расширению, что МЭШ изменил marks, но сами повторный GET не делаем.
-    // МЭШ после сохранения обычно сам обновляет данные; мы подхватим его настоящий ответ.
     post("marks-mutated", url, payload || {});
   }
 
@@ -96,21 +108,28 @@
 
   const originalFetch = window.fetch;
   if (typeof originalFetch === "function") {
-    window.fetch = async function meshHelperFetchHook(input, init) {
-      const response = await originalFetch.apply(this, arguments);
+    window.fetch = function meshHelperFetchHook(input, init) {
+      const url = normalizeUrl(input);
 
-      try {
-        const url = typeof input === "string" ? input : input?.url;
-        const method = String(init?.method || input?.method || "GET").toUpperCase();
+      // Критично: чужие запросы возвращаем напрямую, без await и без обработки.
+      // Так мы не попадаем в stack trace Яндекс.Метрики/Kaspersky/CSP.
+      if (!isTargetMarksUrl(url)) {
+        return originalFetch.apply(this, arguments);
+      }
 
-        if (isMarksListUrl(url) && method === "GET") {
-          readJsonSafely(response, url, true);
-        } else if (isAnyMarksUrl(url) && method !== "GET") {
-          readJsonSafely(response, url, false);
-        }
-      } catch (error) {}
+      const method = String(init?.method || input?.method || "GET").toUpperCase();
 
-      return response;
+      return originalFetch.apply(this, arguments).then((response) => {
+        try {
+          if (isMarksListUrl(url) && method === "GET") {
+            readJsonSafely(response, url, true);
+          } else if (method !== "GET") {
+            readJsonSafely(response, url, false);
+          }
+        } catch (error) {}
+
+        return response;
+      });
     };
   }
 
@@ -126,11 +145,15 @@
     };
 
     OriginalXHR.prototype.send = function meshHelperXhrSend() {
+      if (!isTargetMarksUrl(this.__meshHelperUrl)) {
+        return originalSend.apply(this, arguments);
+      }
+
       this.addEventListener("load", function () {
         try {
           const url = this.__meshHelperUrl;
           const method = this.__meshHelperMethod || "GET";
-          if (!isAnyMarksUrl(url)) return;
+          if (!isTargetMarksUrl(url)) return;
           if (this.status >= 400) return;
 
           const body = this.responseText;
