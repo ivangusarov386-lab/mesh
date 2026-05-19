@@ -96,6 +96,31 @@
     });
   }
 
+  function setupExportMenu(panel) {
+    const toggle = panel.querySelector("#mh-export-toggle");
+    const menu = panel.querySelector(".mh-export-menu");
+    if (!toggle || !menu || toggle.dataset.ready === "1") return;
+
+    toggle.dataset.ready = "1";
+    toggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const open = panel.classList.toggle("mh-export-open");
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+
+    menu.addEventListener("click", (e) => {
+      e.stopPropagation();
+      panel.classList.remove("mh-export-open");
+      toggle.setAttribute("aria-expanded", "false");
+    });
+
+    document.addEventListener("click", () => {
+      panel.classList.remove("mh-export-open");
+      toggle.setAttribute("aria-expanded", "false");
+    });
+  }
+
   function setupDrag(panel) {
     if (panel.dataset.mhDragReady === "1") return;
     panel.dataset.mhDragReady = "1";
@@ -150,20 +175,35 @@
       panel.id = PANEL_ID;
       panel.innerHTML = `
         <div class="mh-header"><div class="mh-title">Помощник учителя</div></div>
+
         <div class="mh-section mh-settings">
-          <label class="mh-label" for="mh-min">Минимум оценок за период</label>
+          <label class="mh-label" for="mh-min">Минимум оценок</label>
           <div class="mh-settings-row"><input id="mh-min" type="number" min="1"><button id="mh-save" type="button">Сохранить</button></div>
         </div>
-        <div class="mh-section mh-final-settings">
-          <label class="mh-toggle-row" for="mh-check-finals"><input id="mh-check-finals" type="checkbox"><span>Контроль итоговых</span></label>
-          <label class="mh-toggle-row" for="mh-check-correct-finals"><input id="mh-check-correct-finals" type="checkbox"><span>Проверка правильности итогов</span></label>
-          <div class="mh-note">Синяя рамка — итог не выставлен. Жёлтая подсветка — итог выставлен не по расчёту.</div>
+
+        <div class="mh-section mh-checks">
+          <div class="mh-section-title">
+            <span>Проверка оценок</span>
+            <button class="mh-help" type="button" aria-label="Справка">?</button>
+            <div class="mh-help-popover">
+              <b>Подсветка недобора</b> — красная подсветка учеников, у которых меньше оценок, чем указано в минимуме.<br><br>
+              <b>Контроль итогов</b> — синяя рамка, если итоговая оценка или «Г» не выставлены.<br><br>
+              <b>Проверка итогов</b> — жёлтая подсветка, если итог выставлен не по расчёту.
+            </div>
+          </div>
+          <label class="mh-toggle-row" for="mh-highlight-low"><input id="mh-highlight-low" type="checkbox"><span>Подсветка недобора</span></label>
+          <label class="mh-toggle-row" for="mh-check-finals"><input id="mh-check-finals" type="checkbox"><span>Контроль итогов</span></label>
+          <label class="mh-toggle-row" for="mh-check-correct-finals"><input id="mh-check-correct-finals" type="checkbox"><span>Проверка итогов</span></label>
         </div>
-        <div class="mh-section">
+
+        <div class="mh-section mh-results">
           <div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div>
-          <div class="mh-export-row">
-            <button id="mh-export-problems" class="mh-export" type="button">Выгрузить проблемных</button>
-            <button id="mh-export-all" class="mh-export" type="button">Выгрузить весь класс</button>
+          <div class="mh-export-wrap">
+            <button id="mh-export-toggle" class="mh-export-toggle" type="button" aria-expanded="false">Экспорт ▼</button>
+            <div class="mh-export-menu">
+              <button id="mh-export-problems" class="mh-export" type="button">Выгрузить проблемных</button>
+              <button id="mh-export-all" class="mh-export" type="button">Выгрузить весь класс</button>
+            </div>
           </div>
           <div id="mh-list" class="mh-list"></div>
         </div>
@@ -174,6 +214,7 @@
     ensureTitle(panel);
     ensureMiniMin(panel);
     setupCollapse(panel);
+    setupExportMenu(panel);
     setupDrag(panel);
 
     const minInput = panel.querySelector("#mh-min");
