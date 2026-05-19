@@ -151,7 +151,8 @@
         </div>
         <div class="mh-section mh-final-settings">
           <label class="mh-toggle-row" for="mh-check-finals"><input id="mh-check-finals" type="checkbox"><span>Контроль итоговых</span></label>
-          <div class="mh-note">Если итоговая не выставлена — ячейка «Итог» подсветится синим.</div>
+          <label class="mh-toggle-row" for="mh-check-correct-finals"><input id="mh-check-correct-finals" type="checkbox"><span>Проверка правильности итогов</span></label>
+          <div class="mh-note">Синяя рамка — итог не выставлен. Жёлтая подсветка — итог выставлен не по расчёту.</div>
         </div>
         <div class="mh-section">
           <div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div>
@@ -173,11 +174,13 @@
     const minInput = panel.querySelector("#mh-min");
     const save = panel.querySelector("#mh-save");
     const finals = panel.querySelector("#mh-check-finals");
+    const correctFinals = panel.querySelector("#mh-check-correct-finals");
 
-    chrome.storage.sync.get(["minGrades", "checkFinals"], (data) => {
+    chrome.storage.sync.get(["minGrades", "checkFinals", "checkCorrectFinals"], (data) => {
       const value = typeof data.minGrades === "number" ? data.minGrades : DEFAULT_MIN;
       syncMiniMin(panel, value);
       if (finals) finals.checked = data.checkFinals === true;
+      if (correctFinals) correctFinals.checked = data.checkCorrectFinals === true;
     });
 
     if (save && save.dataset.ready !== "1") {
@@ -203,6 +206,14 @@
       finals.addEventListener("change", () => {
         chrome.storage.sync.set({ checkFinals: finals.checked });
         window.dispatchEvent(new CustomEvent("mesh-helper-finals-toggle", { detail: { enabled: finals.checked } }));
+      });
+    }
+
+    if (correctFinals && correctFinals.dataset.ready !== "1") {
+      correctFinals.dataset.ready = "1";
+      correctFinals.addEventListener("change", () => {
+        chrome.storage.sync.set({ checkCorrectFinals: correctFinals.checked });
+        window.dispatchEvent(new CustomEvent("mesh-helper-correct-finals-toggle", { detail: { enabled: correctFinals.checked } }));
       });
     }
 
