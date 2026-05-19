@@ -8,6 +8,8 @@
 
   let timer = null;
   let hoverTimer = null;
+  let rowTimer = null;
+  let pendingRows = new Set();
   let lastRows = [];
   let lastFullScanAt = 0;
 
@@ -394,6 +396,11 @@
     }).join("");
   }
 
+  function panelFromCache(min) {
+    const visible = lastRows.filter((x) => x?.row?.isConnected && isVisibleRow(x.row));
+    updatePanel(visible, min);
+  }
+
   function fastApplyFromCache() {
     if (document.hidden) return;
     const min = minGrades();
@@ -406,6 +413,52 @@
 
     cached.forEach((x) => setHighlight(x.row, x.gradeCount < min));
     updatePanel(cached, min);
+  }
+
+  function refreshRows(rowSet) {
+    if (document.hidden || !rowSet?.size) return;
+    const min = minGrades();
+    const meta = journalMeta();
+    const next = lastRows.filter((x) => x?.row?.isConnected);
+
+    rowSet.forEach((row) => {
+      if (!row?.isConnected || !isVisibleRow(row)) return;
+      const id = studentId(row);
+      if (!id) return;
+      const index = next.findIndex((x) => x.studentId === id);
+      const built = buildRow(row, index >= 0 ? next[index].id : next.length, meta);
+      if (!built) return;
+      if (index >= 0) next[index] = built;
+      else next.push(built);
+      setHighlight(built.row, built.gradeCount < min);
+    });
+
+    lastRows = next;
+    panelFromCache(min);
+  }
+
+  function scheduleRows(rowsToUpdate) {
+    rowsToUpdate.forEach((row) => pendingRows.add(row));
+    clearTimeout(rowTimer);
+    rowTimer = setTimeout(() => {
+      const rowsNow = new Set(pendingRows);
+      pendingRows.clear();
+      refreshRows(rowsNow);
+    }, 180);
+  }
+
+  function collectRowsFromMutations(mutations) {
+    const changed = new Set();
+    for (const mutation of mutations) {
+      const base = mutation.target?.closest?.("tr");
+      if (base) changed.add(base);
+      mutation.addedNodes?.forEach?.((node) => {
+        if (node.nodeType !== 1) return;
+        if (node.matches?.("tr")) changed.add(node);
+        node.querySelectorAll?.("tr").forEach((row) => changed.add(row));
+      });
+    }
+    return changed;
   }
 
   function focusRow(id) {
@@ -450,7 +503,12 @@
     if (e.source === window && e.data?.source === "mesh-helper-marks-hook" && e.data?.type === "marks-response") schedule(900);
   });
 
-  new MutationObserver(() => schedule(900)).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  new MutationObserver((mutations) => {
+    const changedRows = collectRowsFromMutations(mutations);
+    if (!changedRows.size) return;
+    if (changedRows.size > 12) schedule(900);
+    else scheduleRows(changedRows);
+  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
 
   setInterval(() => {
     if (document.hidden) return;
