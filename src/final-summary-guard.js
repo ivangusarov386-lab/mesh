@@ -19,6 +19,33 @@
     return input ? input.checked === true : enabled === true;
   }
 
+  function marks() {
+    const main = window.__MESH_HELPER_MARKS__;
+    if (main && Array.isArray(main.marks) && main.marks.length) return main.marks;
+    const debug = window.__MESH_HELPER_MARKS_DEBUG__;
+    if (debug && Array.isArray(debug.marks) && debug.marks.length) return debug.marks;
+    return [];
+  }
+
+  function studentId(row) {
+    const cell = row?.querySelector?.('[data-test-component^="markCell-"]');
+    const a = cell?.getAttribute?.('data-test-component') || '';
+    const m = a.match(/^markCell-(\d+)_/);
+    return m ? Number(m[1]) : null;
+  }
+
+  function lessonIdFromCell(c) {
+    const a = attr(c);
+    const m = a.match(/^markCell-\d+_(\d+)_/);
+    const id = m ? Number(m[1]) : null;
+    return id && id > 100000 ? id : null;
+  }
+
+  function isFuture(c) {
+    const m = mark(c);
+    return String(m?.getAttribute?.('data-disabled-by') || '').toUpperCase().includes('FUTURE');
+  }
+
   function periodRule(avg) {
     if (avg >= 4.6) return 5;
     if (avg >= 3.6) return 4;
@@ -50,45 +77,64 @@
     return !!m && (!!m.querySelector('svg') || /stack|misc-stacked|filled-misc-stacked/i.test(m.innerHTML || ''));
   }
 
-  function gradesFromCell(c) {
+  function domGradesFromCell(c) {
     const a = attr(c);
     if (!a) return [];
     if (a.includes('average') || a.includes('finalResult') || a.includes('yearResult') || a.includes('yearExam') || a.includes('yearAttestation') || a.includes('intermediateAttestation')) return [];
-
     const m = mark(c);
     if (!m) return [];
+    let vals = [...m.querySelectorAll('span')].map(txt).filter((v) => /^[1-5]$/.test(v)).map(Number);
+    if (!vals.length) vals = txt(m).split(/\s+/).filter((v) => /^[1-5]$/.test(v)).map(Number);
+    if (vals.length === 1 && hasStack(c)) vals.push(vals[0]);
+    return vals;
+  }
 
-    let vals = [...m.querySelectorAll('span')]
-      .map(txt)
+  function periodLessonIds(arr, finalIndex) {
+    const ids = new Set();
+    for (let x = finalIndex - 1; x >= 0; x--) {
+      const a = attr(arr[x]);
+      if (a.includes('finalResult') || a.includes('yearResult') || a.includes('intermediateAttestation')) break;
+      if (a.includes('average')) continue;
+      if (isFuture(arr[x])) continue;
+      const id = lessonIdFromCell(arr[x]);
+      if (id) ids.add(id);
+    }
+    return ids;
+  }
+
+  function gradesFromMarks(student, lessonIds) {
+    if (!student || !lessonIds?.size) return [];
+    return marks()
+      .filter((m) => Number(m?.student_profile_id) === student)
+      .filter((m) => lessonIds.has(Number(m?.schedule_lesson_id)))
+      .map((m) => String(m?.name || '').trim())
       .filter((v) => /^[1-5]$/.test(v))
       .map(Number);
+  }
 
-    if (!vals.length) {
-      vals = txt(m).split(/\s+/).filter((v) => /^[1-5]$/.test(v)).map(Number);
+  function fallbackDomPeriodGrades(arr, finalIndex) {
+    const vals = [];
+    for (let x = finalIndex - 1; x >= 0; x--) {
+      const a = attr(arr[x]);
+      if (a.includes('finalResult') || a.includes('yearResult') || a.includes('intermediateAttestation')) break;
+      if (a.includes('average')) continue;
+      const got = domGradesFromCell(arr[x]);
+      if (got.length) vals.unshift(...got);
     }
-
-    if (vals.length === 1 && hasStack(c)) vals.push(vals[0]);
     return vals;
   }
 
   function checkPeriods(row) {
     const arr = cells(row);
+    const sid = studentId(row);
     arr.forEach((c, i) => {
       const a = attr(c);
       if (!a.includes('finalResult') || a.includes('yearResult')) return;
-
       const current = num(c);
       if (current === null) return paint(c, false);
-
-      const vals = [];
-      for (let x = i - 1; x >= 0; x--) {
-        const aa = attr(arr[x]);
-        if (aa.includes('finalResult') || aa.includes('yearResult') || aa.includes('intermediateAttestation')) break;
-        if (aa.includes('average')) continue;
-        const got = gradesFromCell(arr[x]);
-        if (got.length) vals.unshift(...got);
-      }
-
+      const ids = periodLessonIds(arr, i);
+      let vals = gradesFromMarks(sid, ids);
+      if (!vals.length) vals = fallbackDomPeriodGrades(arr, i);
       if (!vals.length) return paint(c, false);
       const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
       paint(c, periodRule(avg) !== current);
@@ -102,24 +148,26 @@
       return a.includes('yearResult') || a.includes('yearAttestation') || a.includes('intermediateAttestation');
     });
     if (!hasSummary) return;
-
     const finals = arr.filter((c) => attr(c).includes('finalResult')).map(num).filter((v) => v !== null).slice(0, 3);
     const paCell = arr.find((c) => attr(c).includes('intermediateAttestation'));
     const yearCell = arr.find((c) => attr(c).includes('yearResult'));
     const examCell = arr.find((c) => attr(c).includes('yearExam'));
     const attCell = arr.find((c) => attr(c).includes('yearAttestation'));
-
     const pa = num(paCell);
     const year = num(yearCell);
     if (yearCell && finals.length === 3 && pa !== null && year !== null) {
       paint(yearCell, summaryRule((finals[0] + finals[1] + finals[2] + pa) / 4) !== year);
     }
-
     const exam = num(examCell);
     const att = num(attCell);
     if (attCell && year !== null && att !== null) {
       paint(attCell, (exam === null ? year : summaryRule((year + exam) / 2)) !== att);
     }
+  }
+
+  function checkRow(row) {
+    checkPeriods(row);
+    checkSummary(row);
   }
 
   function clearYellow() {
@@ -131,13 +179,10 @@
 
   function run() {
     if (!isEnabled()) return clearYellow();
-    document.querySelectorAll('tr').forEach((r) => {
-      checkPeriods(r);
-      checkSummary(r);
-    });
+    document.querySelectorAll('tr').forEach(checkRow);
   }
 
-  function schedule(delay = 400) {
+  function schedule(delay = 250) {
     clearTimeout(timer);
     timer = setTimeout(run, delay);
   }
@@ -145,10 +190,10 @@
   function wake() {
     if (!isEnabled()) return clearYellow();
     if (!observer) {
-      observer = new MutationObserver(() => schedule(900));
+      observer = new MutationObserver(() => schedule(700));
       observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
     }
-    schedule(100);
+    schedule(50);
   }
 
   function sleep() {
@@ -168,6 +213,10 @@
     enabled = e.detail?.enabled === true;
     sync();
   });
+  window.addEventListener('mesh-helper-marks-updated', () => schedule(200));
+  window.addEventListener('message', (e) => {
+    if (e.source === window && e.data?.source === 'mesh-helper-marks-hook' && e.data?.type === 'marks-response') schedule(200);
+  });
 
   document.addEventListener('change', (e) => {
     if (e.target?.id === 'mh-check-correct-finals') {
@@ -179,7 +228,7 @@
   document.addEventListener('pointerover', (e) => {
     if (!isEnabled()) return;
     const r = e.target?.closest?.('tr');
-    if (r) setTimeout(() => { checkPeriods(r); checkSummary(r); }, 80);
+    if (r) setTimeout(() => checkRow(r), 50);
   }, true);
 
   try {
