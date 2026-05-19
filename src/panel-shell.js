@@ -28,6 +28,11 @@
     setTimeout(() => window.dispatchEvent(new CustomEvent("mesh-helper-min-grades-changed")), 120);
   }
 
+  function notifyFinalsState(finals, correctFinals) {
+    window.dispatchEvent(new CustomEvent("mesh-helper-finals-toggle", { detail: { enabled: finals?.checked === true } }));
+    window.dispatchEvent(new CustomEvent("mesh-helper-correct-finals-toggle", { detail: { enabled: correctFinals?.checked === true } }));
+  }
+
   function saveMin(panel, rawValue) {
     const value = normalizeMin(rawValue);
     syncMiniMin(panel, value);
@@ -181,6 +186,7 @@
       syncMiniMin(panel, value);
       if (finals) finals.checked = data.checkFinals === true;
       if (correctFinals) correctFinals.checked = data.checkCorrectFinals === true;
+      notifyFinalsState(finals, correctFinals);
     });
 
     if (save && save.dataset.ready !== "1") {
@@ -218,6 +224,7 @@
     }
 
     window.dispatchEvent(new CustomEvent("mesh-helper-panel-ready"));
+    setTimeout(() => notifyFinalsState(finals, correctFinals), 80);
     return panel;
   }
 
