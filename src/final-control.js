@@ -5,7 +5,8 @@
 //  Оптимизировано:
 //  - синяя подсветка работает только при включенном тумблере «Контроль итоговых»;
 //  - вместо синей заливки используется только рамка, чтобы hover МЭШ не стирал фон;
-//  - проверка запускается с мягкой задержкой;
+//  - проверяет итоговые за периоды и годовую «Г»;
+//  - при включении тумблера запускается сразу;
 //  - модуль не трогает желтую проверку правильности итогов.
 // ==========================================================
 
@@ -44,12 +45,15 @@
   }
 
   function finalInners(row) {
-    return [...(row?.querySelectorAll?.('[data-test-component*="finalResult"]') || [])];
+    return [...(row?.querySelectorAll?.([
+      '[data-test-component*="finalResult"]',
+      '[data-test-component*="yearResult"]'
+    ].join(',')) || [])];
   }
 
   function isStudentRow(row) {
     if (!row) return false;
-    if (!row.querySelector?.('[data-test-component*="finalResult"]')) return false;
+    if (!finalInners(row).length) return false;
     return !!row.querySelector?.('[data-test-component^="studentCellInfoComments-"]') || !!row.querySelector?.("span[title]");
   }
 
@@ -92,6 +96,22 @@
     document.querySelectorAll(`.${FINAL_MISSING_CLASS}`).forEach(removeBlueFromElement);
   }
 
+  function checkRow(row, active) {
+    if (!isStudentRow(row)) return;
+
+    finalInners(row).forEach((inner) => {
+      const missing = !isFinalFilled(inner);
+      const cell = cellForInner(inner);
+
+      if (missing) {
+        active.add(inner);
+        if (cell) active.add(cell);
+      }
+
+      setBlueForInner(inner, missing);
+    });
+  }
+
   function apply() {
     if (document.hidden) return;
 
@@ -102,29 +122,14 @@
 
     lastRunAt = Date.now();
     const active = new Set();
-
-    document.querySelectorAll("tr").forEach((row) => {
-      if (!isStudentRow(row)) return;
-
-      finalInners(row).forEach((inner) => {
-        const missing = !isFinalFilled(inner);
-        const cell = cellForInner(inner);
-
-        if (missing) {
-          active.add(inner);
-          if (cell) active.add(cell);
-        }
-
-        setBlueForInner(inner, missing);
-      });
-    });
+    document.querySelectorAll("tr").forEach((row) => checkRow(row, active));
 
     document.querySelectorAll(`.${FINAL_MISSING_CLASS}`).forEach((el) => {
       if (!active.has(el)) removeBlueFromElement(el);
     });
   }
 
-  function schedule(delay = 600) {
+  function schedule(delay = 120) {
     clearTimeout(timer);
     timer = setTimeout(apply, delay);
   }
@@ -134,29 +139,32 @@
       storageEnabled = data.checkFinals === true;
       const input = document.querySelector("#mh-check-finals");
       if (input) input.checked = storageEnabled;
-      schedule(120);
+      schedule(50);
     });
   }
 
   window.addEventListener("mesh-helper-finals-toggle", (event) => {
     storageEnabled = event.detail?.enabled === true;
     if (!storageEnabled) clearAll();
-    schedule(120);
+    else apply();
   });
 
-  window.addEventListener("mesh-helper-marks-updated", () => schedule(700));
-  window.addEventListener("mesh-helper-min-grades-changed", () => schedule(700));
+  window.addEventListener("mesh-helper-marks-updated", () => schedule(250));
+  window.addEventListener("mesh-helper-min-grades-changed", () => schedule(250));
+  window.addEventListener("mesh-helper-panel-ready", () => schedule(50));
 
   document.addEventListener("change", (event) => {
     if (event.target?.id === "mh-check-finals") {
       storageEnabled = event.target.checked === true;
       chrome.storage.sync.set({ checkFinals: storageEnabled });
       if (!storageEnabled) clearAll();
-      schedule(120);
+      else apply();
     }
   }, true);
 
-  new MutationObserver(() => schedule(900)).observe(document.documentElement, {
+  new MutationObserver(() => {
+    if (isEnabled()) schedule(250);
+  }).observe(document.documentElement, {
     childList: true,
     subtree: true,
     characterData: true
@@ -171,7 +179,7 @@
   }, 8000);
 
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) schedule(300);
+    if (!document.hidden) schedule(100);
   });
 
   if (document.readyState === "loading") {
@@ -180,6 +188,6 @@
     syncFromStorage();
   }
 
-  setTimeout(syncFromStorage, 900);
-  setTimeout(apply, 2200);
+  setTimeout(syncFromStorage, 500);
+  setTimeout(apply, 900);
 })();
