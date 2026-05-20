@@ -58,6 +58,34 @@
   box-shadow: 0 1px 2px rgba(15, 23, 42, .05);
 }
 
+.mh-checks-toggle {
+  width: 100%;
+  height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.mh-checks-toggle:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.mh-checks-menu {
+  display: none;
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+#mesh-helper-panel.mh-checks-open .mh-checks-menu {
+  display: block;
+}
+
 .mh-label,
 .mh-section-title {
   position: relative;
@@ -126,177 +154,3 @@
 .mh-toggle-row:hover { background: rgba(37, 99, 235, .06); }
 .mh-toggle-row input { width: 16px; height: 16px; margin: 0; accent-color: #2563eb; cursor: pointer; }
 .mh-toggle-row span { font-size: 13px; font-weight: 650; line-height: 1.2; color: #0f172a; }
-
-.mh-help {
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 1px solid #cbd5e1;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #475569;
-  font-size: 11px;
-  font-weight: 900;
-  line-height: 16px;
-  cursor: help;
-}
-
-.mh-help-popover {
-  position: absolute;
-  top: 28px;
-  left: 0;
-  right: 0;
-  display: none;
-  padding: 10px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 12px;
-  background: rgba(255,255,255,.98);
-  box-shadow: 0 12px 28px rgba(15,23,42,.18);
-  color: #334155;
-  font-size: 12px;
-  line-height: 1.35;
-  text-transform: none;
-  letter-spacing: 0;
-  z-index: 1000006;
-}
-
-.mh-help:hover + .mh-help-popover,
-.mh-help:focus + .mh-help-popover,
-.mh-help-popover:hover { display: block; }
-
-.mh-subtitle { margin-bottom: 9px; font-size: 13px; font-weight: 800; color: #0f172a; }
-
-.mh-export-wrap { position: relative; margin-bottom: 10px; }
-
-.mh-export-toggle {
-  width: 100%;
-  height: 32px;
-  border: 1px solid #cbd5e1;
-  border-radius: 11px;
-  background: #ffffff;
-  color: #0f172a;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(15,23,42,.06);
-}
-
-.mh-export-toggle:hover { background: #f8fafc; border-color: #94a3b8; }
-
-.mh-export-menu {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 38px;
-  display: none;
-  padding: 6px;
-  border: 1px solid #cbd5e1;
-  border-radius: 13px;
-  background: #ffffff;
-  box-shadow: 0 12px 24px rgba(15,23,42,.18);
-  z-index: 1000005;
-}
-
-#mesh-helper-panel.mh-export-open .mh-export-menu { display: block; }
-
-.mh-export-menu .mh-export {
-  display: block;
-  width: 100%;
-  margin: 0;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 9px;
-  background: transparent;
-  color: #0f172a;
-  text-align: left;
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.mh-export-menu .mh-export:hover { background: rgba(37,99,235,.08); }
-
-.mh-list { margin-top: 8px; border-top: 1px solid #e2e8f0; }
-.mh-note { padding: 8px 0; color: #64748b; font-size: 12px; }
-
-.mh-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
-.mh-item-text { max-width: 180px; }
-.mh-name { font-weight: 700; font-size: 13px; }
-.mh-count { font-size: 12px; color: #64748b; }
-
-.mh-goto {
-  padding: 4px 10px;
-  border: none;
-  border-radius: 999px;
-  background: #0f766e;
-  color: #ffffff;
-  cursor: pointer;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.mesh-helper-low-grades-row { box-shadow: inset 4px 0 0 #ef4444 !important; }
-.mesh-helper-low-grades-cell { background-color: rgba(248, 113, 113, .22) !important; }
-.mesh-helper-low-grades-cell:hover { background-color: rgba(248, 113, 113, .22) !important; }
-
-.mh-mini-min-wrap { display: none !important; }
-
-#mesh-helper-panel.mh-collapsed-top .mh-section,
-#mesh-helper-panel.mh-collapsed-top #mh-list,
-#mesh-helper-panel.mh-collapsed-top #mh-summary,
-#mesh-helper-panel.mh-collapsed-top .mh-export-wrap { display: none !important; }
-
-#mesh-helper-panel.mh-collapsed-top {
-  position: fixed;
-  top: 46px;
-  right: 12px;
-  height: 38px !important;
-  min-height: 38px !important;
-  width: 300px !important;
-  padding: 0 !important;
-  border-radius: 999px !important;
-  overflow: hidden !important;
-  background: linear-gradient(180deg, #ff4a4a 0%, #df0000 55%, #ad0000 100%) !important;
-  box-shadow: 0 6px 14px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.42), inset 0 -2px 0 rgba(0,0,0,.25) !important;
-}
-
-#mesh-helper-panel.mh-collapsed-top .mh-header {
-  height: 100%;
-  padding: 0 44px 0 74px !important;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  cursor: move !important;
-}
-
-#mesh-helper-panel.mh-collapsed-top .mh-title { color: #fff !important; text-align: center; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
-#mesh-helper-panel.mh-collapsed-top .mh-title-main { font-size: 13px !important; font-weight: 900 !important; line-height: 1.05 !important; }
-#mesh-helper-panel.mh-collapsed-top .mh-title-sub { margin-top: 1px !important; font-size: 10px !important; font-weight: 800 !important; line-height: 1.05 !important; opacity: .9; }
-
-#mesh-helper-panel.mh-collapsed-top .mh-collapse-btn {
-  top: 50% !important;
-  right: 10px !important;
-  transform: translateY(-50%) !important;
-  width: 26px !important;
-  height: 26px !important;
-  padding: 0 !important;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,.18) !important;
-  color: #fff !important;
-}
-
-#mesh-helper-panel.mh-collapsed-top .mh-mini-min-wrap {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex !important;
-  align-items: center;
-  gap: 4px;
-  z-index: 1000005;
-}
-
-.mh-mini-min-label { font-size: 10px; font-weight: 800; color: rgba(255,255,255,.92); text-shadow: 0 1px 0 rgba(0,0,0,.3); }
-.mh-mini-min { width: 34px !important; height: 20px !important; border: none !important; border-radius: 8px !important; text-align: center; font-size: 11px !important; font-weight: 800; padding: 0 !important; background: rgba(255,255,255,.95) !important; color: #111827 !important; outline: none !important; box-shadow: inset 0 1px 2px rgba(0,0,0,.15); }
