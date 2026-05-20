@@ -25,7 +25,8 @@
         "src/final-control.js",
         "src/highlight-toggle.js",
         "src/clean-panel.js",
-        "src/final-summary-guard.js"
+        "src/final-summary-guard.js",
+        "src/selection-export.js"
       ],
       "css": ["src/panel.css"],
       "run_at": "document_idle"
