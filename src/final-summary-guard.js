@@ -59,29 +59,53 @@
     return Math.round((raw + EPS) * 10) / 10;
   }
 
-  function periodRuleFromGrades(vals) {
-    const n = roundedTenthAverage(vals);
+  function ruleFromAverage(avg, period = true) {
+    const n = Number.isFinite(Number(avg)) ? Math.round((Number(avg) + EPS) * 10) / 10 : null;
     if (n === null) return null;
-    if (n + EPS >= 4.6) return 5;
-    if (n + EPS >= 3.6) return 4;
-    if (n + EPS >= 2.6) return 3;
+    const high = period ? 4.6 : 4.5;
+    const mid = period ? 3.6 : 3.5;
+    const low = period ? 2.6 : 2.5;
+    if (n + EPS >= high) return 5;
+    if (n + EPS >= mid) return 4;
+    if (n + EPS >= low) return 3;
     return 2;
+  }
+
+  function periodRuleFromGrades(vals) {
+    return ruleFromAverage(roundedTenthAverage(vals), true);
   }
 
   function summaryRule(avg) {
-    const n = Number.isFinite(Number(avg)) ? Math.round((Number(avg) + EPS) * 10) / 10 : null;
-    if (n === null) return null;
-    if (n + EPS >= 4.5) return 5;
-    if (n + EPS >= 3.5) return 4;
-    if (n + EPS >= 2.5) return 3;
-    return 2;
+    return ruleFromAverage(avg, false);
   }
 
-  function setState(c, state) {
+  function parseVisibleAverage(c) {
+    const m = txt(c).replace(',', '.').match(/\b[1-5](?:\.\d{1,2})?\b/);
+    if (!m) return null;
+    const n = Number(m[0]);
+    return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round((n + EPS) * 10) / 10 : null;
+  }
+
+  function visibleAverageNearFinal(arr, finalIndex) {
+    const offsets = [1, -1, 2, -2, 3, -3];
+    for (const offset of offsets) {
+      const c = arr[finalIndex + offset];
+      if (!c) continue;
+      const a = attr(c);
+      if (!a.includes('average') && !/\d,[\d]/.test(txt(c))) continue;
+      const avg = parseVisibleAverage(c);
+      if (avg !== null) return avg;
+    }
+    return null;
+  }
+
+  function setState(c, state, hint = '') {
     const m = mark(c);
     [c, m].filter(Boolean).forEach((e) => {
       e.classList.remove(WRONG, CORRECT);
       e.style.removeProperty('background-color');
+      if (hint) e.setAttribute('title', hint);
+      else e.removeAttribute('title');
       if (state === 'wrong') {
         e.classList.add(WRONG);
         e.style.setProperty('background-color', YELLOW, 'important');
@@ -146,7 +170,7 @@
     const ids = periodLessonIds(arr, finalIndex);
     let vals = gradesFromMarks(sid, ids);
     if (!vals.length) vals = fallbackDomPeriodGrades(arr, finalIndex);
-    return periodRuleFromGrades(vals);
+    return { expected: periodRuleFromGrades(vals), avg: roundedTenthAverage(vals), count: vals.length };
   }
 
   function checkPeriods(row) {
@@ -157,9 +181,16 @@
       if (!a.includes('finalResult') || a.includes('yearResult')) return;
       const current = num(c);
       if (current === null) return setState(c, 'clear');
-      const expected = expectedPeriodGrade(arr, i, sid);
+      const result = expectedPeriodGrade(arr, i, sid);
+      let expected = result.expected;
+      const visibleAvg = visibleAverageNearFinal(arr, i);
+      const visibleExpected = visibleAvg === null ? null : ruleFromAverage(visibleAvg, true);
+
+      if (expected !== current && visibleExpected === current) expected = current;
       if (expected === null) return setState(c, 'clear');
-      setState(c, expected === current ? 'correct' : 'wrong');
+
+      const hint = `Проверка итогов: средний ${result.avg ?? '—'}; оценок ${result.count}; ожидается ${expected}; стоит ${current}${visibleAvg !== null ? `; рядом средний ${visibleAvg}` : ''}`;
+      setState(c, expected === current ? 'correct' : 'wrong', hint);
     });
   }
 
@@ -178,14 +209,16 @@
     const pa = num(paCell);
     const year = num(yearCell);
     if (yearCell && finals.length === 3 && pa !== null && year !== null) {
-      const expected = summaryRule((finals[0] + finals[1] + finals[2] + pa) / 4);
-      setState(yearCell, expected === year ? 'correct' : 'wrong');
+      const avg = (finals[0] + finals[1] + finals[2] + pa) / 4;
+      const expected = summaryRule(avg);
+      setState(yearCell, expected === year ? 'correct' : 'wrong', `Проверка Г: средний ${Math.round((avg + EPS) * 10) / 10}; ожидается ${expected}; стоит ${year}`);
     }
     const exam = num(examCell);
     const att = num(attCell);
     if (attCell && year !== null && att !== null) {
-      const expected = exam === null ? year : summaryRule((year + exam) / 2);
-      setState(attCell, expected === att ? 'correct' : 'wrong');
+      const avg = exam === null ? year : (year + exam) / 2;
+      const expected = exam === null ? year : summaryRule(avg);
+      setState(attCell, expected === att ? 'correct' : 'wrong', `Проверка итоговой аттестации: ожидается ${expected}; стоит ${att}`);
     }
   }
 
@@ -198,6 +231,7 @@
     document.querySelectorAll('.' + WRONG + ', .' + CORRECT).forEach((e) => {
       e.classList.remove(WRONG, CORRECT);
       e.style.removeProperty('background-color');
+      e.removeAttribute('title');
     });
   }
 
