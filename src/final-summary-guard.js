@@ -52,21 +52,14 @@
     return String(m?.getAttribute?.('data-disabled-by') || '').toUpperCase().includes('FUTURE');
   }
 
-  function parseAvg(value) {
-    const raw = String(value || '').replace(',', '.');
-    const match = raw.match(/\b[1-5](?:\.\d{1,2})?\b/);
-    if (!match) return null;
-    const n = Number(match[0]);
-    return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round((n + EPS) * 100) / 100 : null;
+  function roundedTenthAverage(vals) {
+    if (!vals?.length) return null;
+    const raw = vals.reduce((s, v) => s + v, 0) / vals.length;
+    return Math.round((raw + EPS) * 10) / 10;
   }
 
-  function roundAvg(avg) {
-    const n = Number(avg);
-    return Number.isFinite(n) ? Math.round((n + EPS) * 100) / 100 : null;
-  }
-
-  function periodRule(avg) {
-    const n = roundAvg(avg);
+  function periodRuleFromGrades(vals) {
+    const n = roundedTenthAverage(vals);
     if (n === null) return null;
     if (n + EPS >= 4.6) return 5;
     if (n + EPS >= 3.6) return 4;
@@ -75,7 +68,7 @@
   }
 
   function summaryRule(avg) {
-    const n = roundAvg(avg);
+    const n = Number.isFinite(Number(avg)) ? Math.round((Number(avg) + EPS) * 10) / 10 : null;
     if (n === null) return null;
     if (n + EPS >= 4.5) return 5;
     if (n + EPS >= 3.5) return 4;
@@ -111,17 +104,6 @@
     if (!vals.length) vals = txt(m).split(/\s+/).filter((v) => /^[1-5]$/.test(v)).map(Number);
     if (vals.length === 1 && hasStack(c)) vals.push(vals[0]);
     return vals;
-  }
-
-  function visibleAverageBeforeFinal(arr, finalIndex) {
-    for (let x = finalIndex - 1; x >= 0; x--) {
-      const a = attr(arr[x]);
-      if (a.includes('finalResult') || a.includes('yearResult') || a.includes('intermediateAttestation')) break;
-      if (!a.includes('average')) continue;
-      const avg = parseAvg(txt(arr[x]));
-      if (avg !== null) return avg;
-    }
-    return null;
   }
 
   function periodLessonIds(arr, finalIndex) {
@@ -160,16 +142,10 @@
   }
 
   function expectedPeriodGrade(arr, finalIndex, sid) {
-    const meshAverage = visibleAverageBeforeFinal(arr, finalIndex);
-    if (meshAverage !== null) return periodRule(meshAverage);
-
     const ids = periodLessonIds(arr, finalIndex);
     let vals = gradesFromMarks(sid, ids);
     if (!vals.length) vals = fallbackDomPeriodGrades(arr, finalIndex);
-    if (!vals.length) return null;
-
-    const avg = roundAvg(vals.reduce((s, v) => s + v, 0) / vals.length);
-    return periodRule(avg);
+    return periodRuleFromGrades(vals);
   }
 
   function checkPeriods(row) {
@@ -274,12 +250,6 @@
       return;
     }
     if (isEnabled() && e.target?.closest?.('tr')) schedule(120);
-  }, true);
-
-  document.addEventListener('pointerover', (e) => {
-    if (!isEnabled()) return;
-    const r = e.target?.closest?.('tr');
-    if (r) setTimeout(() => checkRow(r), 50);
   }, true);
 
   try {
