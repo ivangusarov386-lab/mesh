@@ -1,5 +1,6 @@
 (() => {
   const WRONG = 'mesh-helper-wrong-final-cell';
+  const CORRECT = 'mesh-helper-correct-final-cell';
   const YELLOW = 'rgba(250, 204, 21, 0.42)';
   const EPS = 0.000001;
   let enabled = false;
@@ -76,16 +77,16 @@
     return 2;
   }
 
-  function paint(c, bad) {
+  function setState(c, state) {
     const m = mark(c);
     [c, m].filter(Boolean).forEach((e) => {
-      if (bad) {
+      e.classList.remove(WRONG, CORRECT);
+      e.style.removeProperty('background-color');
+      if (state === 'wrong') {
         e.classList.add(WRONG);
         e.style.setProperty('background-color', YELLOW, 'important');
-      } else {
-        e.classList.remove(WRONG);
-        e.style.removeProperty('background-color');
       }
+      if (state === 'correct') e.classList.add(CORRECT);
     });
   }
 
@@ -155,9 +156,10 @@
       const a = attr(c);
       if (!a.includes('finalResult') || a.includes('yearResult')) return;
       const current = num(c);
-      if (current === null) return paint(c, false);
+      if (current === null) return setState(c, 'clear');
       const expected = expectedPeriodGrade(arr, i, sid);
-      paint(c, expected !== null && expected !== current);
+      if (expected === null) return setState(c, 'clear');
+      setState(c, expected === current ? 'correct' : 'wrong');
     });
   }
 
@@ -176,12 +178,14 @@
     const pa = num(paCell);
     const year = num(yearCell);
     if (yearCell && finals.length === 3 && pa !== null && year !== null) {
-      paint(yearCell, summaryRule((finals[0] + finals[1] + finals[2] + pa) / 4) !== year);
+      const expected = summaryRule((finals[0] + finals[1] + finals[2] + pa) / 4);
+      setState(yearCell, expected === year ? 'correct' : 'wrong');
     }
     const exam = num(examCell);
     const att = num(attCell);
     if (attCell && year !== null && att !== null) {
-      paint(attCell, (exam === null ? year : summaryRule((year + exam) / 2)) !== att);
+      const expected = exam === null ? year : summaryRule((year + exam) / 2);
+      setState(attCell, expected === att ? 'correct' : 'wrong');
     }
   }
 
@@ -190,37 +194,37 @@
     checkSummary(row);
   }
 
-  function clearYellow() {
-    document.querySelectorAll('.' + WRONG).forEach((e) => {
-      e.classList.remove(WRONG);
+  function clearAll() {
+    document.querySelectorAll('.' + WRONG + ', .' + CORRECT).forEach((e) => {
+      e.classList.remove(WRONG, CORRECT);
       e.style.removeProperty('background-color');
     });
   }
 
   function run() {
-    if (!isEnabled()) return clearYellow();
+    if (!isEnabled()) return clearAll();
     document.querySelectorAll('tr').forEach(checkRow);
   }
 
-  function schedule(delay = 120) {
+  function schedule(delay = 90) {
     clearTimeout(timer);
     timer = setTimeout(run, delay);
   }
 
   function wake() {
-    if (!isEnabled()) return clearYellow();
+    if (!isEnabled()) return clearAll();
     if (!observer) {
-      observer = new MutationObserver(() => schedule(180));
+      observer = new MutationObserver(() => schedule(160));
       observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
     }
-    schedule(50);
+    schedule(30);
   }
 
   function sleep() {
     if (observer) observer.disconnect();
     observer = null;
     clearTimeout(timer);
-    clearYellow();
+    clearAll();
   }
 
   function sync() {
@@ -233,14 +237,13 @@
     enabled = e.detail?.enabled === true;
     sync();
   });
-  window.addEventListener('mesh-helper-marks-updated', () => schedule(120));
+  window.addEventListener('mesh-helper-marks-updated', () => schedule(90));
   window.addEventListener('message', (e) => {
-    if (e.source === window && e.data?.source === 'mesh-helper-marks-hook' && e.data?.type === 'marks-response') schedule(120);
+    if (e.source === window && e.data?.source === 'mesh-helper-marks-hook' && e.data?.type === 'marks-response') schedule(90);
   });
 
   document.addEventListener('input', (e) => {
-    if (!isEnabled()) return;
-    if (e.target?.closest?.('tr')) schedule(120);
+    if (isEnabled() && e.target?.closest?.('tr')) schedule(90);
   }, true);
 
   document.addEventListener('change', (e) => {
@@ -249,7 +252,7 @@
       sync();
       return;
     }
-    if (isEnabled() && e.target?.closest?.('tr')) schedule(120);
+    if (isEnabled() && e.target?.closest?.('tr')) schedule(90);
   }, true);
 
   try {
