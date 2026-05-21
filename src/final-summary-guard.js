@@ -52,6 +52,14 @@
     return String(m?.getAttribute?.('data-disabled-by') || '').toUpperCase().includes('FUTURE');
   }
 
+  function parseAvg(value) {
+    const raw = String(value || '').replace(',', '.');
+    const match = raw.match(/\b[1-5](?:\.\d{1,2})?\b/);
+    if (!match) return null;
+    const n = Number(match[0]);
+    return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round((n + EPS) * 100) / 100 : null;
+  }
+
   function roundAvg(avg) {
     const n = Number(avg);
     return Number.isFinite(n) ? Math.round((n + EPS) * 100) / 100 : null;
@@ -105,6 +113,17 @@
     return vals;
   }
 
+  function visibleAverageBeforeFinal(arr, finalIndex) {
+    for (let x = finalIndex - 1; x >= 0; x--) {
+      const a = attr(arr[x]);
+      if (a.includes('finalResult') || a.includes('yearResult') || a.includes('intermediateAttestation')) break;
+      if (!a.includes('average')) continue;
+      const avg = parseAvg(txt(arr[x]));
+      if (avg !== null) return avg;
+    }
+    return null;
+  }
+
   function periodLessonIds(arr, finalIndex) {
     const ids = new Set();
     for (let x = finalIndex - 1; x >= 0; x--) {
@@ -140,6 +159,19 @@
     return vals;
   }
 
+  function expectedPeriodGrade(arr, finalIndex, sid) {
+    const meshAverage = visibleAverageBeforeFinal(arr, finalIndex);
+    if (meshAverage !== null) return periodRule(meshAverage);
+
+    const ids = periodLessonIds(arr, finalIndex);
+    let vals = gradesFromMarks(sid, ids);
+    if (!vals.length) vals = fallbackDomPeriodGrades(arr, finalIndex);
+    if (!vals.length) return null;
+
+    const avg = roundAvg(vals.reduce((s, v) => s + v, 0) / vals.length);
+    return periodRule(avg);
+  }
+
   function checkPeriods(row) {
     const arr = cells(row);
     const sid = studentId(row);
@@ -148,12 +180,7 @@
       if (!a.includes('finalResult') || a.includes('yearResult')) return;
       const current = num(c);
       if (current === null) return paint(c, false);
-      const ids = periodLessonIds(arr, i);
-      let vals = gradesFromMarks(sid, ids);
-      if (!vals.length) vals = fallbackDomPeriodGrades(arr, i);
-      if (!vals.length) return paint(c, false);
-      const avg = roundAvg(vals.reduce((s, v) => s + v, 0) / vals.length);
-      const expected = periodRule(avg);
+      const expected = expectedPeriodGrade(arr, i, sid);
       paint(c, expected !== null && expected !== current);
     });
   }
