@@ -1,6 +1,7 @@
 (() => {
   const WRONG = 'mesh-helper-wrong-final-cell';
   const YELLOW = 'rgba(250, 204, 21, 0.42)';
+  const EPS = 0.000001;
   let enabled = false;
   let timer = null;
   let observer = null;
@@ -8,7 +9,12 @@
   const txt = (e) => (e?.innerText || e?.textContent || '').replace(/\s+/g, ' ').trim();
   const cells = (r) => [...(r?.children || [])].filter((x) => ['TD','TH'].includes(x.tagName));
   const mark = (c) => c?.querySelector?.('[data-test-component^="markCell-"]') || null;
-  const attr = (c) => mark(c)?.getAttribute?.('data-test-component') || '';
+  const attr = (c) => {
+    const direct = c?.getAttribute?.('data-test-component') || '';
+    if (direct) return direct;
+    const special = c?.querySelector?.('[data-test-component*="finalResult"], [data-test-component*="yearResult"], [data-test-component*="yearExam"], [data-test-component*="yearAttestation"], [data-test-component*="intermediateAttestation"], [data-test-component*="average"], [data-test-component^="markCell-"]');
+    return special?.getAttribute?.('data-test-component') || mark(c)?.getAttribute?.('data-test-component') || '';
+  };
   const num = (c) => {
     const m = txt(c).match(/[1-5]/);
     return m ? Number(m[0]) : null;
@@ -46,26 +52,36 @@
     return String(m?.getAttribute?.('data-disabled-by') || '').toUpperCase().includes('FUTURE');
   }
 
+  function roundAvg(avg) {
+    const n = Number(avg);
+    return Number.isFinite(n) ? Math.round((n + EPS) * 100) / 100 : null;
+  }
+
   function periodRule(avg) {
-    if (avg >= 4.6) return 5;
-    if (avg >= 3.6) return 4;
-    if (avg >= 2.6) return 3;
+    const n = roundAvg(avg);
+    if (n === null) return null;
+    if (n + EPS >= 4.6) return 5;
+    if (n + EPS >= 3.6) return 4;
+    if (n + EPS >= 2.6) return 3;
     return 2;
   }
 
   function summaryRule(avg) {
-    if (avg >= 4.5) return 5;
-    if (avg >= 3.5) return 4;
-    if (avg >= 2.5) return 3;
+    const n = roundAvg(avg);
+    if (n === null) return null;
+    if (n + EPS >= 4.5) return 5;
+    if (n + EPS >= 3.5) return 4;
+    if (n + EPS >= 2.5) return 3;
     return 2;
   }
 
   function paint(c, bad) {
     const m = mark(c);
     [c, m].filter(Boolean).forEach((e) => {
-      e.classList.toggle(WRONG, !!bad);
-      if (bad) e.style.setProperty('background-color', YELLOW, 'important');
-      else {
+      if (bad) {
+        e.classList.add(WRONG);
+        e.style.setProperty('background-color', YELLOW, 'important');
+      } else {
         e.classList.remove(WRONG);
         e.style.removeProperty('background-color');
       }
@@ -136,8 +152,9 @@
       let vals = gradesFromMarks(sid, ids);
       if (!vals.length) vals = fallbackDomPeriodGrades(arr, i);
       if (!vals.length) return paint(c, false);
-      const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
-      paint(c, periodRule(avg) !== current);
+      const avg = roundAvg(vals.reduce((s, v) => s + v, 0) / vals.length);
+      const expected = periodRule(avg);
+      paint(c, expected !== null && expected !== current);
     });
   }
 
@@ -182,7 +199,7 @@
     document.querySelectorAll('tr').forEach(checkRow);
   }
 
-  function schedule(delay = 250) {
+  function schedule(delay = 120) {
     clearTimeout(timer);
     timer = setTimeout(run, delay);
   }
@@ -190,7 +207,7 @@
   function wake() {
     if (!isEnabled()) return clearYellow();
     if (!observer) {
-      observer = new MutationObserver(() => schedule(700));
+      observer = new MutationObserver(() => schedule(180));
       observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
     }
     schedule(50);
@@ -213,16 +230,23 @@
     enabled = e.detail?.enabled === true;
     sync();
   });
-  window.addEventListener('mesh-helper-marks-updated', () => schedule(200));
+  window.addEventListener('mesh-helper-marks-updated', () => schedule(120));
   window.addEventListener('message', (e) => {
-    if (e.source === window && e.data?.source === 'mesh-helper-marks-hook' && e.data?.type === 'marks-response') schedule(200);
+    if (e.source === window && e.data?.source === 'mesh-helper-marks-hook' && e.data?.type === 'marks-response') schedule(120);
   });
+
+  document.addEventListener('input', (e) => {
+    if (!isEnabled()) return;
+    if (e.target?.closest?.('tr')) schedule(120);
+  }, true);
 
   document.addEventListener('change', (e) => {
     if (e.target?.id === 'mh-check-correct-finals') {
       enabled = e.target.checked === true;
       sync();
+      return;
     }
+    if (isEnabled() && e.target?.closest?.('tr')) schedule(120);
   }, true);
 
   document.addEventListener('pointerover', (e) => {
