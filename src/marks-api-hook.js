@@ -1,19 +1,16 @@
-// ==========================================================
-//  МЭШ – Помощник учителя
-//  Page hook: читает ответы marks из контекста страницы.
-//
-//  Production-safe версия:
-//  - НЕ трогает посторонние fetch-запросы страницы;
-//  - НЕ ждёт и НЕ оборачивает Яндекс.Метрику, Kaspersky, аналитику, CDN;
-//  - работает только с API оценок МЭШ;
-//  - расширение не делает самостоятельные повторные GET-запросы к МЭШ;
-//  - только слушает реальные ответы, которые уже сделал сам сайт.
-// ==========================================================
-
 (() => {
   const SOURCE = "mesh-helper-marks-hook";
+  const API_PREFIX = "/api/ej/core/teacher/v1/";
   const MARKS_LIST_PART = "/api/ej/core/teacher/v1/marks?";
   const MARKS_ANY_PART = "/api/ej/core/teacher/v1/marks";
+  const EXTRA_PARTS = [
+    "/groups",
+    "/student_profiles",
+    "/average_marks_overall",
+    "/average_marks_theme_overall",
+    "/attestation_periods_schedules",
+    "/attestation_periods_schedule"
+  ];
 
   if (window.__meshHelperMarksHookInstalled) return;
   window.__meshHelperMarksHookInstalled = true;
@@ -34,8 +31,14 @@
     return String(url || "").includes(MARKS_ANY_PART);
   }
 
-  function isTargetMarksUrl(url) {
-    return isAnyMarksUrl(url);
+  function isExtraApiUrl(url) {
+    const value = String(url || "");
+    if (!value.includes(API_PREFIX)) return false;
+    return EXTRA_PARTS.some((part) => value.includes(API_PREFIX + part.replace(/^\//, "")) || value.includes(part));
+  }
+
+  function isTargetUrl(url) {
+    return isAnyMarksUrl(url) || isExtraApiUrl(url);
   }
 
   function extractMarks(payload) {
@@ -53,7 +56,6 @@
     try {
       const marks = extractMarks(payload);
       if (!marks.length) return;
-
       window.__MESH_HELPER_MARKS_DEBUG__ = {
         loadedAt: Date.now(),
         url: String(url || ""),
@@ -69,40 +71,28 @@
 
   function post(type, url, payload) {
     try {
-      window.postMessage(
-        {
-          source: SOURCE,
-          type,
-          url: String(url || ""),
-          payload,
-          at: Date.now()
-        },
-        window.location.origin
-      );
+      window.postMessage({ source: SOURCE, type, url: String(url || ""), payload, at: Date.now() }, window.location.origin);
     } catch (error) {}
   }
 
   function postMarks(url, payload) {
     saveDebugMarks(url, payload);
     post("marks-response", url, payload);
+    post("api-response", url, payload);
   }
 
   function postMutation(url, payload) {
     post("marks-mutated", url, payload || {});
   }
 
-  function readJsonSafely(response, url, isList) {
+  function readJsonSafely(response, url, kind) {
     try {
       if (!response || response.status >= 400) return;
-
-      response
-        .clone()
-        .json()
-        .then((payload) => {
-          if (isList) postMarks(url, payload);
-          else postMutation(url, payload);
-        })
-        .catch(() => {});
+      response.clone().json().then((payload) => {
+        if (kind === "marks") postMarks(url, payload);
+        else if (kind === "api") post("api-response", url, payload);
+        else postMutation(url, payload);
+      }).catch(() => {});
     } catch (error) {}
   }
 
@@ -110,24 +100,14 @@
   if (typeof originalFetch === "function") {
     window.fetch = function meshHelperFetchHook(input, init) {
       const url = normalizeUrl(input);
-
-      // Критично: чужие запросы возвращаем напрямую, без await и без обработки.
-      // Так мы не попадаем в stack trace Яндекс.Метрики/Kaspersky/CSP.
-      if (!isTargetMarksUrl(url)) {
-        return originalFetch.apply(this, arguments);
-      }
-
+      if (!isTargetUrl(url)) return originalFetch.apply(this, arguments);
       const method = String(init?.method || input?.method || "GET").toUpperCase();
-
       return originalFetch.apply(this, arguments).then((response) => {
         try {
-          if (isMarksListUrl(url) && method === "GET") {
-            readJsonSafely(response, url, true);
-          } else if (method !== "GET") {
-            readJsonSafely(response, url, false);
-          }
+          if (isMarksListUrl(url) && method === "GET") readJsonSafely(response, url, "marks");
+          else if (method === "GET" && isExtraApiUrl(url)) readJsonSafely(response, url, "api");
+          else if (method !== "GET" && isAnyMarksUrl(url)) readJsonSafely(response, url, "mutation");
         } catch (error) {}
-
         return response;
       });
     };
@@ -137,36 +117,24 @@
   if (typeof OriginalXHR === "function") {
     const originalOpen = OriginalXHR.prototype.open;
     const originalSend = OriginalXHR.prototype.send;
-
     OriginalXHR.prototype.open = function meshHelperXhrOpen(method, url) {
       this.__meshHelperUrl = url;
       this.__meshHelperMethod = String(method || "GET").toUpperCase();
       return originalOpen.apply(this, arguments);
     };
-
     OriginalXHR.prototype.send = function meshHelperXhrSend() {
-      if (!isTargetMarksUrl(this.__meshHelperUrl)) {
-        return originalSend.apply(this, arguments);
-      }
-
+      if (!isTargetUrl(this.__meshHelperUrl)) return originalSend.apply(this, arguments);
       this.addEventListener("load", function () {
         try {
           const url = this.__meshHelperUrl;
           const method = this.__meshHelperMethod || "GET";
-          if (!isTargetMarksUrl(url)) return;
-          if (this.status >= 400) return;
-
-          const body = this.responseText;
-          const payload = body ? JSON.parse(body) : {};
-
-          if (isMarksListUrl(url) && method === "GET") {
-            postMarks(url, payload);
-          } else if (method !== "GET") {
-            postMutation(url, payload);
-          }
+          if (!isTargetUrl(url) || this.status >= 400) return;
+          const payload = this.responseText ? JSON.parse(this.responseText) : {};
+          if (isMarksListUrl(url) && method === "GET") postMarks(url, payload);
+          else if (method === "GET" && isExtraApiUrl(url)) post("api-response", url, payload);
+          else if (method !== "GET" && isAnyMarksUrl(url)) postMutation(url, payload);
         } catch (error) {}
       });
-
       return originalSend.apply(this, arguments);
     };
   }
