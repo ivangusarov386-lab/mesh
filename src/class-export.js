@@ -22,6 +22,24 @@
     return [];
   }
 
+  function normalizeText(value) {
+    return String(value || "")
+      .replace(/\s+/g, " ")
+      .replace(/[–—]/g, "-")
+      .trim();
+  }
+
+  function getPeriods() {
+    const store = apiStore();
+    const direct = asArray(store.periods);
+    if (direct.length) return direct;
+
+    const raw = store.raw || {};
+    return Object.entries(raw)
+      .filter(([key]) => key.includes("attestation_periods"))
+      .flatMap(([, payload]) => asArray(payload));
+  }
+
   function getGroups() {
     const store = apiStore();
     const direct = asArray(store.groups);
@@ -34,7 +52,7 @@
   }
 
   function getSubjectName(group) {
-    return String(
+    return normalizeText(
       group?.subject_name ||
       group?.subject?.name ||
       group?.subject?.title ||
@@ -42,7 +60,7 @@
       group?.name ||
       group?.title ||
       "Без названия"
-    ).trim();
+    );
   }
 
   function getJournalId(group) {
@@ -123,7 +141,8 @@
     window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ = {
       checkedAt: Date.now(),
       teacherMode,
-      journals
+      journals,
+      periods: getPeriods()
     };
 
     console.log("[МЭШ помощник][class-export] journals:", journals);
