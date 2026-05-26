@@ -111,6 +111,42 @@
     return normalizeText(group?.group_name || group?.groupName || group?.name || group?.title || "");
   }
 
+  function isDomSubject(value) {
+    const v = normalizeText(value);
+    const lower = v.toLowerCase();
+    if (!v || v.length < 3 || v.length > 90) return false;
+    if (/^\d/.test(v)) return false;
+    if (["все", "мой класс", "журналы класса", "направления", "классы"].includes(lower)) return false;
+    if (lower.includes("помощник") || lower.includes("проверить") || lower.includes("скачать")) return false;
+    if (lower.includes("ученик") || lower.includes("журналов") || lower.includes("классов")) return false;
+    if (lower.includes("откройте") || lower.includes("дождитесь") || lower.includes("режим найден")) return false;
+    return true;
+  }
+
+  function collectDomJournals() {
+    const lines = (document.body?.innerText || "")
+      .split(/\n+/)
+      .map(normalizeText)
+      .filter(Boolean);
+    const start = lines.findIndex((line) => line.toLowerCase() === "журналы класса");
+    const source = start >= 0 ? lines.slice(start + 1) : [];
+    const bySubject = new Map();
+
+    source.forEach((line) => {
+      if (!isDomSubject(line) || bySubject.size >= 40) return;
+      const key = `${line.toLowerCase()}:${bySubject.size + 1}`;
+      bySubject.set(key, {
+        journalId: `dom-${bySubject.size + 1}`,
+        subject: line,
+        groupName: "со страницы",
+        periodCount: getPeriods().length,
+        raw: { source: "dom", subject_name: line }
+      });
+    });
+
+    return [...bySubject.values()];
+  }
+
   function collectJournals() {
     const groups = getGroups();
     const periodCount = getPeriods().length;
@@ -133,7 +169,8 @@
       }
     });
 
-    return [...byKey.values()].sort((a, b) => a.subject.localeCompare(b.subject, "ru"));
+    const apiJournals = [...byKey.values()].sort((a, b) => a.subject.localeCompare(b.subject, "ru"));
+    return apiJournals.length ? apiJournals : collectDomJournals();
   }
 
   function isClassTeacherMode() {
@@ -144,7 +181,8 @@
       url.includes("klass") ||
       pageText.includes("классное руководство") ||
       pageText.includes("мой класс") ||
-      pageText.includes("классный руководитель")
+      pageText.includes("классный руководитель") ||
+      pageText.includes("журналы класса")
     );
   }
 
@@ -246,7 +284,7 @@
     } else if (!journals.length) {
       setStatus(`Режим найден, но список журналов пока пуст. Учеников: ${rows.length}.`, "warn");
     } else {
-      setStatus(`Период: ${period?.title || "не определен"}. Ученики: ${rows.length}. Итоги: ${finalErrors}, Н 50%+: ${absenceRisks}.`, "ok");
+      setStatus(`Журналы: ${journals.length}. Ученики: ${rows.length}. Итоги: ${finalErrors}, Н 50%+: ${absenceRisks}.`, "ok");
     }
 
     window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ = {
