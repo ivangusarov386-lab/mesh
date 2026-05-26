@@ -16,6 +16,20 @@
     return Array.isArray(debug.journals) ? debug.journals : [];
   }
 
+  function buildRowsForJournal(journal) {
+    const debug = getDebug();
+    const builder = window.__MESH_HELPER_CLASS_DATA__?.buildCurrentPeriodRows;
+
+    if (typeof builder !== "function") return getRows();
+
+    return builder({
+      students: Array.isArray(debug.students) ? debug.students : [],
+      period: debug.currentPeriod || null,
+      finalMarks: Array.isArray(debug.finalMarks) ? debug.finalMarks : [],
+      journal
+    });
+  }
+
   function refreshExportData() {
     const checkButton = document.getElementById("mh-class-export-btn");
     if (!checkButton) return;
@@ -38,9 +52,10 @@
 
     if (subject) {
       journals.forEach((journal) => {
+        const subjectRows = buildRowsForJournal(journal);
         const sheet = subject.buildSubjectSheet({
           subjectName: journal.subject || "Предмет",
-          rows
+          rows: subjectRows
         });
         if (sheet) sheets.push(sheet);
       });
@@ -53,7 +68,7 @@
       sheets
     );
 
-    debug.exportType = "workbook-multi-sheet";
+    debug.exportType = "workbook-multi-sheet-subjects";
     debug.exportedAt = Date.now();
     debug.exportedSheets = sheets.length;
     return true;
