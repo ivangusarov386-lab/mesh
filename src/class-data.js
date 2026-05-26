@@ -27,16 +27,22 @@
     return normalizeText(period?.title || period?.name || period?.period_name || period?.periodName || period?.number || "Текущий период");
   }
 
+  function getPeriodId(period) {
+    const source = period?.raw || period || {};
+    return source?.id || source?.period_id || source?.periodId || source?.attestation_period_id || source?.attestationPeriodId || null;
+  }
+
   function resolveCurrentPeriod(periods = [], now = new Date()) {
     const list = Array.isArray(periods) ? periods : [];
     const normalized = list
       .map((period) => ({
         raw: period,
+        id: getPeriodId(period),
         title: getPeriodTitle(period),
         start: getPeriodStart(period),
         end: getPeriodEnd(period)
       }))
-      .filter((period) => period.start || period.end);
+      .filter((period) => period.start || period.end || period.id);
 
     const active = normalized.find((period) => {
       const afterStart = !period.start || now >= period.start;
@@ -82,6 +88,21 @@
 
   function getMarkValue(mark) {
     return normalizeText(mark?.name || mark?.value || mark?.mark || mark?.mark_value || mark?.markValue || "");
+  }
+
+  function getFinalValue(item) {
+    return normalizeText(item?.name || item?.value || item?.mark || item?.final_mark || item?.finalMark || item?.mark_value || item?.markValue || "");
+  }
+
+  function getFinalPeriodId(item) {
+    return item?.period_id || item?.periodId || item?.attestation_period_id || item?.attestationPeriodId || item?.attestation_period?.id || null;
+  }
+
+  function getFinalKind(item) {
+    const value = normalizeText(item?.type || item?.kind || item?.period_type || item?.periodType || item?.title || item?.name || "").toLowerCase();
+    if (value.includes("год") || value === "г") return "year";
+    if (value.includes("па")) return "pa";
+    return "period";
   }
 
   function isGrade(value) {
@@ -173,7 +194,26 @@
     );
   }
 
-  function buildCurrentPeriodRows({ students = [], period = null } = {}) {
+  function resolveFinalMarksForStudent({ studentId, finalMarks = [], period = null } = {}) {
+    const sid = String(studentId || "");
+    const items = (Array.isArray(finalMarks) ? finalMarks : [])
+      .filter((item) => String(getStudentId(item) || "") === sid);
+
+    const periodId = period?.id ? String(period.id) : "";
+    const current = items.find((item) => periodId && String(getFinalPeriodId(item) || "") === periodId) ||
+      items.find((item) => getFinalKind(item) === "period");
+    const pa = items.find((item) => getFinalKind(item) === "pa");
+    const year = items.find((item) => getFinalKind(item) === "year");
+
+    return {
+      current: getFinalValue(current),
+      pa: getFinalValue(pa),
+      year: getFinalValue(year),
+      raw: items
+    };
+  }
+
+  function buildCurrentPeriodRows({ students = [], period = null, finalMarks = [] } = {}) {
     return students.map((student) => {
       const periodMarks = (student.marks || []).filter((mark) => isInPeriod(mark, period));
       const grades = periodMarks.map(getMarkValue).filter(isGrade).map(Number);
@@ -181,6 +221,8 @@
       const lessonsFact = periodMarks.length;
       const avg = grades.length ? grades.reduce((sum, grade) => sum + grade, 0) / grades.length : null;
       const absencePercent = lessonsFact ? Math.round((absences / lessonsFact) * 1000) / 10 : 0;
+      const calculatedFinal = possibleFinal(avg);
+      const finals = resolveFinalMarksForStudent({ studentId: student.id, finalMarks, period });
 
       return {
         studentId: student.id,
@@ -188,12 +230,17 @@
         grades,
         gradesText: grades.length ? grades.join(", ") : "",
         average: avg === null ? "" : Math.round(avg * 100) / 100,
-        possibleFinal: possibleFinal(avg),
+        possibleFinal: calculatedFinal,
+        currentFinal: finals.current,
+        paFinal: finals.pa,
+        yearFinal: finals.year,
+        finalMismatch: finals.current && calculatedFinal && String(finals.current) !== String(calculatedFinal),
         absences,
         lessonsFact,
         absencePercent,
         absenceRisk: absencePercent >= 50,
-        rawStudent: student
+        rawStudent: student,
+        rawFinalMarks: finals.raw
       };
     });
   }
@@ -205,6 +252,7 @@
     getStudentId,
     getStudentName,
     buildStudentsMap,
-    buildCurrentPeriodRows
+    buildCurrentPeriodRows,
+    resolveFinalMarksForStudent
   };
 })();
