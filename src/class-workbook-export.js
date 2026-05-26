@@ -2,9 +2,20 @@
   if (window.__meshHelperWorkbookExportInstalled) return;
   window.__meshHelperWorkbookExportInstalled = true;
 
+  function getRows() {
+    const debug = window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ || {};
+    return Array.isArray(debug.rows) ? debug.rows : [];
+  }
+
+  function refreshExportData() {
+    const checkButton = document.getElementById("mh-class-export-btn");
+    if (!checkButton) return;
+    checkButton.click();
+  }
+
   function exportSummaryWorkbook() {
     const debug = window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ || {};
-    const rows = Array.isArray(debug.rows) ? debug.rows : [];
+    const rows = getRows();
     const workbook = window.__MESH_HELPER_CLASS_WORKBOOK__;
     const summary = window.__MESH_HELPER_CLASS_SUMMARY_SHEET__;
 
@@ -30,12 +41,20 @@
     button.dataset.workbookReady = "1";
 
     button.addEventListener("click", (event) => {
-      const exported = exportSummaryWorkbook();
-      if (!exported) return;
-
       event.preventDefault();
       event.stopImmediatePropagation();
       event.stopPropagation();
+
+      if (!getRows().length) refreshExportData();
+      const exported = exportSummaryWorkbook();
+
+      if (!exported) {
+        const status = document.getElementById("mh-class-export-status");
+        if (status) {
+          status.textContent = "Сначала дождитесь загрузки данных класса и попробуйте скачать Excel ещё раз.";
+          status.dataset.tone = "warn";
+        }
+      }
     }, true);
   }
 
