@@ -2,9 +2,18 @@
   if (window.__meshHelperWorkbookExportInstalled) return;
   window.__meshHelperWorkbookExportInstalled = true;
 
+  function getDebug() {
+    return window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ || {};
+  }
+
   function getRows() {
-    const debug = window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ || {};
+    const debug = getDebug();
     return Array.isArray(debug.rows) ? debug.rows : [];
+  }
+
+  function getJournals() {
+    const debug = getDebug();
+    return Array.isArray(debug.journals) ? debug.journals : [];
   }
 
   function refreshExportData() {
@@ -14,23 +23,39 @@
   }
 
   function exportSummaryWorkbook() {
-    const debug = window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ || {};
+    const debug = getDebug();
     const rows = getRows();
+    const journals = getJournals();
     const workbook = window.__MESH_HELPER_CLASS_WORKBOOK__;
     const summary = window.__MESH_HELPER_CLASS_SUMMARY_SHEET__;
+    const subject = window.__MESH_HELPER_CLASS_SUBJECT_SHEET__;
 
     if (!workbook || !summary || !rows.length) return false;
 
-    const sheet = summary.buildSummarySheet(rows);
-    if (!sheet) return false;
+    const sheets = [];
+    const summarySheet = summary.buildSummarySheet(rows);
+    if (summarySheet) sheets.push(summarySheet);
+
+    if (subject) {
+      journals.forEach((journal) => {
+        const sheet = subject.buildSubjectSheet({
+          subjectName: journal.subject || "Предмет",
+          rows
+        });
+        if (sheet) sheets.push(sheet);
+      });
+    }
+
+    if (!sheets.length) return false;
 
     workbook.downloadWorkbook(
       `mesh_class_workbook_${new Date().toISOString().slice(0, 10)}.xls`,
-      [sheet]
+      sheets
     );
 
-    debug.exportType = "workbook-summary";
+    debug.exportType = "workbook-multi-sheet";
     debug.exportedAt = Date.now();
+    debug.exportedSheets = sheets.length;
     return true;
   }
 
