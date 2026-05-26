@@ -25,17 +25,24 @@
   }
 
   function isMarksListUrl(url) {
-    return String(url || "").includes(MARKS_LIST_PART);
+    return String(url || "").includes(MARKS_LIST_PART) || /(^|\/)marks\?/.test(String(url || ""));
   }
 
   function isAnyMarksUrl(url) {
-    return String(url || "").includes(MARKS_ANY_PART);
+    return String(url || "").includes(MARKS_ANY_PART) || /(^|\/)marks(\?|$)/.test(String(url || ""));
   }
 
   function isExtraApiUrl(url) {
     const value = String(url || "");
-    if (!value.includes(API_PREFIX)) return false;
-    return EXTRA_PARTS.some((part) => value.includes(API_PREFIX + part.replace(/^\//, "")) || value.includes(part));
+    const lower = value.toLowerCase();
+
+    if (value.includes(API_PREFIX)) {
+      return EXTRA_PARTS.some((part) => value.includes(API_PREFIX + part.replace(/^\//, "")) || value.includes(part));
+    }
+
+    return [
+      /(^|\/)groups\?/, /(^|\/)student_profiles\?/, /(^|\/)average_marks_overall\?/, /(^|\/)average_marks_theme_overall\?/, /(^|\/)attestation_periods_schedules\?/, /(^|\/)attestation_periods_schedule\?/, /(^|\/)final_marks\?/
+    ].some((pattern) => pattern.test(lower));
   }
 
   function isTargetUrl(url) {
@@ -50,6 +57,8 @@
     if (Array.isArray(payload?.response)) return payload.response;
     if (Array.isArray(payload?.data?.items)) return payload.data.items;
     if (Array.isArray(payload?.payload?.items)) return payload.payload.items;
+    if (Array.isArray(payload?.response?.items)) return payload.response.items;
+    if (Array.isArray(payload?.result?.items)) return payload.result.items;
     return [];
   }
 
