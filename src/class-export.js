@@ -127,7 +127,12 @@
     }
 
     list.innerHTML = journals
-      .map((item) => `<div class="mh-class-subject"><span>${escapeHtml(item.subject)}</span><b>${escapeHtml(item.journalId || "id?")}</b></div>`)
+      .map((item, index) => `
+        <div class="mh-class-subject">
+          <div><strong>${index + 1}. ${escapeHtml(item.subject)}</strong></div>
+          <div class="mh-class-meta">journalId: ${escapeHtml(item.journalId || "id?")} · периодов: ${escapeHtml(item.periodCount || 0)}</div>
+          ${item.groupName ? `<div class="mh-class-meta">группа: ${escapeHtml(item.groupName)}</div>` : ""}
+        </div>`)
       .join("");
   }
 
@@ -150,7 +155,7 @@
     } else if (!journals.length) {
       setStatus("Режим найден, но список журналов пока пуст. Обновите/откройте список предметов.", "warn");
     } else {
-      setStatus(`Готово: найдено журналов/предметов — ${journals.length}. XLSX подключим следующим шагом.`, "ok");
+      setStatus(`Preview готов: найдено предметов — ${journals.length}. Проверьте список ниже.`, "ok");
     }
 
     window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ = {
@@ -198,8 +203,8 @@
         <span class="mh-class-arrow">▼</span>
       </div>
       <div class="mh-class-menu">
-        <button id="mh-class-export-btn" class="mh-class-export-btn" type="button">Выгрузить класс</button>
-        <div id="mh-class-export-status" class="mh-class-status" data-tone="muted">Этап 1: проверка режима и сбор списка журналов.</div>
+        <button id="mh-class-export-btn" class="mh-class-export-btn" type="button">Проверить журналы</button>
+        <div id="mh-class-export-status" class="mh-class-status" data-tone="muted">Этап 1.3: preview списка предметов.</div>
         <div id="mh-class-export-list" class="mh-class-list"></div>
       </div>`;
 
