@@ -43,6 +43,7 @@
         "src/selection-export.js",
         "src/class-data.js",
         "src/class-workbook.js",
+        "src/class-summary-sheet.js",
         "src/class-export.js"
       ],
       "css": [
