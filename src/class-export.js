@@ -56,6 +56,11 @@
     return direct.length ? direct : readRawByName("average_marks");
   }
 
+  function getFinalMarks() {
+    const direct = asArray(apiStore().finalMarks);
+    return direct.length ? direct : readRawByName("final_marks");
+  }
+
   function getMarks() {
     const direct = asArray(apiStore().marks);
     if (direct.length) return direct;
@@ -240,7 +245,8 @@
       periods: getPeriods(),
       studentProfiles: getStudentProfiles(),
       marks: getMarks(),
-      averageMarks: getAverageMarks()
+      averageMarks: getAverageMarks(),
+      finalMarks: getFinalMarks()
     };
 
     console.log("[МЭШ помощник][class-export] rows:", rows);
@@ -264,6 +270,7 @@
       studentProfiles: getStudentProfiles(),
       marks: getMarks(),
       averageMarks: getAverageMarks(),
+      finalMarks: getFinalMarks(),
       exportType: "excel-html"
     };
   }
