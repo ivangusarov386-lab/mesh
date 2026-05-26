@@ -9,7 +9,8 @@
     "/average_marks_overall",
     "/average_marks_theme_overall",
     "/attestation_periods_schedules",
-    "/attestation_periods_schedule"
+    "/attestation_periods_schedule",
+    "/final_marks"
   ];
 
   if (window.__meshHelperMarksHookInstalled) return;
