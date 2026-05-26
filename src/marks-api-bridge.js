@@ -45,11 +45,15 @@
         groups: [],
         studentProfiles: [],
         averageMarks: [],
+        finalMarks: [],
         periods: [],
         marks: [],
         raw: {},
         urls: {}
       };
+    }
+    if (!Array.isArray(window.__MESH_HELPER_API__.finalMarks)) {
+      window.__MESH_HELPER_API__.finalMarks = [];
     }
     return window.__MESH_HELPER_API__;
   }
@@ -59,6 +63,7 @@
     if (value.includes("/groups")) return "groups";
     if (value.includes("/student_profiles")) return "studentProfiles";
     if (value.includes("/average_marks_overall") || value.includes("/average_marks_theme_overall")) return "averageMarks";
+    if (value.includes("/final_marks")) return "finalMarks";
     if (value.includes("/attestation_periods_schedules") || value.includes("/attestation_periods_schedule")) return "periods";
     if (value.includes("/marks")) return "marks";
     return "raw";
