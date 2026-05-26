@@ -44,6 +44,7 @@
         "src/class-data.js",
         "src/class-workbook.js",
         "src/class-summary-sheet.js",
+        "src/class-subject-sheet.js",
         "src/class-export.js",
         "src/class-workbook-export.js"
       ],
