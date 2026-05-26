@@ -3,9 +3,10 @@
 //  Bridge: получает актуальный список marks из page context.
 //
 //  ВАЖНО:
-//  - обрабатываем только реальные ответы списка marks;
+//  - обрабатываем реальные ответы списка marks;
+//  - api-response складываем отдельно для отчета классного руководителя;
 //  - события marks-mutated / refresh-error НЕ затирают старые marks;
-//  - после mutation hook сам перезапрашивает последний marks URL.
+//  - текущая подсветка продолжает работать от window.__MESH_HELPER_MARKS__.
 // ==========================================================
 
 (() => {
@@ -35,6 +36,56 @@
     if (Array.isArray(payload?.data?.items)) return payload.data.items;
     if (Array.isArray(payload?.payload?.items)) return payload.payload.items;
     return [];
+  }
+
+  function ensureApiStore() {
+    if (!window.__MESH_HELPER_API__) {
+      window.__MESH_HELPER_API__ = {
+        loadedAt: null,
+        groups: [],
+        studentProfiles: [],
+        averageMarks: [],
+        periods: [],
+        marks: [],
+        raw: {},
+        urls: {}
+      };
+    }
+    return window.__MESH_HELPER_API__;
+  }
+
+  function apiKindFromUrl(url) {
+    const value = String(url || "").toLowerCase();
+    if (value.includes("/groups")) return "groups";
+    if (value.includes("/student_profiles")) return "studentProfiles";
+    if (value.includes("/average_marks_overall") || value.includes("/average_marks_theme_overall")) return "averageMarks";
+    if (value.includes("/attestation_periods_schedules") || value.includes("/attestation_periods_schedule")) return "periods";
+    if (value.includes("/marks")) return "marks";
+    return "raw";
+  }
+
+  function storeApiResponse(url, payload, meta) {
+    const store = ensureApiStore();
+    const kind = apiKindFromUrl(url);
+    const list = extractMarks(payload);
+    const key = `${kind}:${String(url || "")}`;
+
+    store.loadedAt = Date.now();
+    store.raw[key] = payload;
+    store.urls[kind] = String(url || "");
+
+    if (kind !== "raw") {
+      store[kind] = list.length ? list : payload;
+    }
+
+    window.dispatchEvent(new CustomEvent("mesh-helper-api-updated", {
+      detail: {
+        kind,
+        count: Array.isArray(store[kind]) ? store[kind].length : 0,
+        url: String(url || ""),
+        at: meta?.at || Date.now()
+      }
+    }));
   }
 
   function buildStats(marks) {
@@ -74,6 +125,8 @@
       meta: meta || {}
     };
 
+    storeApiResponse(meta?.url, marks, meta);
+
     window.dispatchEvent(new CustomEvent("mesh-helper-marks-updated", {
       detail: { count: marks.length, students: Object.keys(stats).length }
     }));
@@ -88,6 +141,11 @@
     if (!data || data.source !== SOURCE) return;
 
     try {
+      if (data.type === "api-response") {
+        storeApiResponse(data.url, data.payload, { type: data.type, url: data.url, at: data.at });
+        return;
+      }
+
       if (data.type !== "marks-response") {
         if (data.type === "marks-mutated") {
           console.log("[МЭШ помощник][bridge] изменение marks, жду refresh");
@@ -104,5 +162,6 @@
     }
   });
 
+  ensureApiStore();
   injectHook();
 })();
