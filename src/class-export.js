@@ -74,6 +74,16 @@
     });
   }
 
+  function currentPeriod() {
+    const resolver = window.__MESH_HELPER_CLASS_DATA__?.resolveCurrentPeriod;
+    return typeof resolver === "function" ? resolver(getPeriods()) : null;
+  }
+
+  function currentRows(students, period) {
+    const builder = window.__MESH_HELPER_CLASS_DATA__?.buildCurrentPeriodRows;
+    return typeof builder === "function" ? builder({ students, period }) : [];
+  }
+
   function getSubjectName(group) {
     return normalizeText(
       group?.subject_name ||
@@ -167,33 +177,36 @@
       .replace(/\"/g, "&quot;");
   }
 
-  function downloadExcelHtml(journals) {
+  function downloadExcelHtml(journals, rows, period) {
     if (!journals.length) {
       setStatus("Нет журналов для выгрузки. Сначала откройте список предметов класса.", "warn");
       return;
     }
 
-    const rows = journals.map((item, index) => `
+    const title = period?.title || "Текущий период";
+    const bodyRows = rows.length ? rows.map((row, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(row.fio)}</td>
+        <td>${escapeHtml(row.gradesText)}</td>
+        <td>${escapeHtml(row.average)}</td>
+        <td>${escapeHtml(row.absences)}</td>
+        <td>${escapeHtml(String(row.absencePercent).replace(".", ",") + "%")}</td>
+        <td>${escapeHtml(row.possibleFinal)}</td>
+      </tr>`).join("") : journals.map((item, index) => `
       <tr>
         <td>${index + 1}</td>
         <td>${escapeHtml(item.subject)}</td>
-        <td>${escapeHtml(item.groupName || "")}</td>
-        <td>${escapeHtml(item.journalId || "")}</td>
-        <td>${escapeHtml(item.periodCount || 0)}</td>
-        <td></td>
-        <td></td>
-        <td></td>
-        <td></td>
-        <td></td>
+        <td colspan="5">Данные учеников пока не загружены</td>
       </tr>`).join("");
 
-    const html = `<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px}td,th{border:1px solid #999;padding:6px}th{background:#eaf2ff;font-weight:700}</style></head><body><table><tr><th>№</th><th>Предмет</th><th>Группа</th><th>journalId</th><th>Периодов</th><th>ФИО</th><th>Оценки периода</th><th>Средний</th><th>Итог</th><th>% Н</th></tr>${rows}</table></body></html>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px}td,th{border:1px solid #999;padding:6px}th{background:#eaf2ff;font-weight:700}.risk{background:#ffd6d6}</style></head><body><h3>МЭШ — отчет класса: ${escapeHtml(title)}</h3><table><tr><th>№</th><th>ФИО</th><th>Оценки</th><th>Средний балл</th><th>Н по факту</th><th>Н % по факту</th><th>Расчетный итог</th></tr>${bodyRows}</table></body></html>`;
 
     const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `mesh_class_export_${new Date().toISOString().slice(0, 10)}.xls`;
+    a.download = `mesh_class_period_${new Date().toISOString().slice(0, 10)}.xls`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -203,16 +216,18 @@
   function handleExportClick() {
     const journals = collectJournals();
     const students = buildStudents();
+    const period = currentPeriod();
+    const rows = currentRows(students, period);
     const teacherMode = isClassTeacherMode();
 
     renderSubjects(journals);
 
     if (!teacherMode) {
-      setStatus(`Режим классного руководителя не подтверждён. Журналов: ${journals.length}, учеников: ${students.length}.`, "warn");
+      setStatus(`Режим классного руководителя не подтверждён. Журналов: ${journals.length}, учеников: ${rows.length}.`, "warn");
     } else if (!journals.length) {
-      setStatus(`Режим найден, но список журналов пока пуст. Учеников: ${students.length}.`, "warn");
+      setStatus(`Режим найден, но список журналов пока пуст. Учеников: ${rows.length}.`, "warn");
     } else {
-      setStatus(`Данные собраны: предметов — ${journals.length}, учеников — ${students.length}.`, "ok");
+      setStatus(`Период: ${period?.title || "не определен"}. Предметов — ${journals.length}, учеников — ${rows.length}.`, "ok");
     }
 
     window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ = {
@@ -220,25 +235,31 @@
       teacherMode,
       journals,
       students,
+      rows,
+      currentPeriod: period,
       periods: getPeriods(),
       studentProfiles: getStudentProfiles(),
       marks: getMarks(),
       averageMarks: getAverageMarks()
     };
 
-    console.log("[МЭШ помощник][class-export] journals:", journals, "students:", students);
+    console.log("[МЭШ помощник][class-export] rows:", rows);
   }
 
   function handleDownloadClick() {
     const journals = collectJournals();
     const students = buildStudents();
+    const period = currentPeriod();
+    const rows = currentRows(students, period);
     renderSubjects(journals);
-    downloadExcelHtml(journals);
+    downloadExcelHtml(journals, rows, period);
     window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ = {
       checkedAt: Date.now(),
       teacherMode: isClassTeacherMode(),
       journals,
       students,
+      rows,
+      currentPeriod: period,
       periods: getPeriods(),
       studentProfiles: getStudentProfiles(),
       marks: getMarks(),
