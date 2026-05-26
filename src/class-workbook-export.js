@@ -16,6 +16,17 @@
     return Array.isArray(debug.journals) ? debug.journals : [];
   }
 
+  function hasSubjectData(row) {
+    return Boolean(
+      row?.grades?.length ||
+      row?.gradesText ||
+      row?.absences ||
+      row?.currentFinal ||
+      row?.paFinal ||
+      row?.yearFinal
+    );
+  }
+
   function buildRowsForJournal(journal) {
     const debug = getDebug();
     const builder = window.__MESH_HELPER_CLASS_DATA__?.buildCurrentPeriodRows;
@@ -27,7 +38,7 @@
       period: debug.currentPeriod || null,
       finalMarks: Array.isArray(debug.finalMarks) ? debug.finalMarks : [],
       journal
-    });
+    }).filter(hasSubjectData);
   }
 
   function refreshExportData() {
@@ -53,6 +64,8 @@
     if (subject) {
       journals.forEach((journal) => {
         const subjectRows = buildRowsForJournal(journal);
+        if (!subjectRows.length) return;
+
         const sheet = subject.buildSubjectSheet({
           subjectName: journal.subject || "Предмет",
           rows: subjectRows
