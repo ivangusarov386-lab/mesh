@@ -80,6 +80,36 @@
     );
   }
 
+  function getMarkValue(mark) {
+    return normalizeText(mark?.name || mark?.value || mark?.mark || mark?.mark_value || mark?.markValue || "");
+  }
+
+  function isGrade(value) {
+    return /^[1-5]$/.test(String(value || "").trim());
+  }
+
+  function isAbsence(value) {
+    return String(value || "").toLowerCase().includes("н");
+  }
+
+  function isInPeriod(item, period) {
+    if (!period) return true;
+    const date = parseDate(item?.date || item?.mark_date || item?.lesson_date || item?.created_at || item?.updated_at);
+    if (!date) return true;
+    const afterStart = !period.start || date >= period.start;
+    const beforeEnd = !period.end || date <= period.end;
+    return afterStart && beforeEnd;
+  }
+
+  function possibleFinal(avg) {
+    const n = Number(avg);
+    if (!Number.isFinite(n)) return "";
+    if (n >= 4.6) return 5;
+    if (n >= 3.6) return 4;
+    if (n >= 2.6) return 3;
+    return 2;
+  }
+
   function buildStudentsMap({
     studentProfiles = [],
     marks = [],
@@ -143,12 +173,38 @@
     );
   }
 
+  function buildCurrentPeriodRows({ students = [], period = null } = {}) {
+    return students.map((student) => {
+      const periodMarks = (student.marks || []).filter((mark) => isInPeriod(mark, period));
+      const grades = periodMarks.map(getMarkValue).filter(isGrade).map(Number);
+      const absences = periodMarks.map(getMarkValue).filter(isAbsence).length;
+      const lessonsFact = periodMarks.length;
+      const avg = grades.length ? grades.reduce((sum, grade) => sum + grade, 0) / grades.length : null;
+      const absencePercent = lessonsFact ? Math.round((absences / lessonsFact) * 1000) / 10 : 0;
+
+      return {
+        studentId: student.id,
+        fio: student.fio,
+        grades,
+        gradesText: grades.length ? grades.join(", ") : "",
+        average: avg === null ? "" : Math.round(avg * 100) / 100,
+        possibleFinal: possibleFinal(avg),
+        absences,
+        lessonsFact,
+        absencePercent,
+        absenceRisk: absencePercent >= 50,
+        rawStudent: student
+      };
+    });
+  }
+
   window.__MESH_HELPER_CLASS_DATA__ = {
     normalizeText,
     parseDate,
     resolveCurrentPeriod,
     getStudentId,
     getStudentName,
-    buildStudentsMap
+    buildStudentsMap,
+    buildCurrentPeriodRows
   };
 })();
