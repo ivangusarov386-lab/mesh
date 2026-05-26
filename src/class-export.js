@@ -144,6 +144,39 @@
       .replace(/\"/g, "&quot;");
   }
 
+  function downloadExcelHtml(journals) {
+    if (!journals.length) {
+      setStatus("Нет журналов для выгрузки. Сначала откройте список предметов класса.", "warn");
+      return;
+    }
+
+    const rows = journals.map((item, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(item.subject)}</td>
+        <td>${escapeHtml(item.groupName || "")}</td>
+        <td>${escapeHtml(item.journalId || "")}</td>
+        <td>${escapeHtml(item.periodCount || 0)}</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>`).join("");
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px}td,th{border:1px solid #999;padding:6px}th{background:#eaf2ff;font-weight:700}</style></head><body><table><tr><th>№</th><th>Предмет</th><th>Группа</th><th>journalId</th><th>Периодов</th><th>ФИО</th><th>Оценки периода</th><th>Средний</th><th>Итог</th><th>% Н</th></tr>${rows}</table></body></html>`;
+
+    const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `mesh_class_export_${new Date().toISOString().slice(0, 10)}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   function handleExportClick() {
     const journals = collectJournals();
     const teacherMode = isClassTeacherMode();
@@ -166,6 +199,19 @@
     };
 
     console.log("[МЭШ помощник][class-export] journals:", journals);
+  }
+
+  function handleDownloadClick() {
+    const journals = collectJournals();
+    renderSubjects(journals);
+    downloadExcelHtml(journals);
+    window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ = {
+      checkedAt: Date.now(),
+      teacherMode: isClassTeacherMode(),
+      journals,
+      periods: getPeriods(),
+      exportType: "excel-html"
+    };
   }
 
   function setupToggle(panel, toggle) {
@@ -204,7 +250,8 @@
       </div>
       <div class="mh-class-menu">
         <button id="mh-class-export-btn" class="mh-class-export-btn" type="button">Проверить журналы</button>
-        <div id="mh-class-export-status" class="mh-class-status" data-tone="muted">Этап 1.3: preview списка предметов.</div>
+        <button id="mh-class-download-btn" class="mh-class-export-btn" type="button">Скачать Excel</button>
+        <div id="mh-class-export-status" class="mh-class-status" data-tone="muted">Этап 1.4: первая Excel-выгрузка.</div>
         <div id="mh-class-export-list" class="mh-class-list"></div>
       </div>`;
 
@@ -214,12 +261,18 @@
 
     const toggle = section.querySelector("#mh-class-toggle");
     const button = section.querySelector("#mh-class-export-btn");
+    const downloadButton = section.querySelector("#mh-class-download-btn");
 
     setupToggle(panel, toggle);
     button?.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
       handleExportClick();
+    });
+    downloadButton?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      handleDownloadClick();
     });
   }
 
