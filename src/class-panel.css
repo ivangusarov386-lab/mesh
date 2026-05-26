@@ -1,0 +1,106 @@
+.mh-class-export {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .05);
+}
+
+.mh-class-toggle {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15,23,42,.06);
+  box-sizing: border-box;
+}
+
+.mh-class-toggle:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.mh-class-menu {
+  display: none;
+  margin-top: 10px;
+}
+
+#mesh-helper-panel.mh-class-open .mh-class-menu {
+  display: block;
+}
+
+.mh-class-export-btn {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  display: block;
+  border: none;
+  border-radius: 11px;
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(37, 99, 235, .22);
+}
+
+.mh-class-export-btn + .mh-class-export-btn {
+  margin-top: 8px;
+}
+
+.mh-class-status {
+  margin-top: 8px;
+  padding: 9px 10px;
+  border-radius: 11px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.32;
+  white-space: normal;
+}
+
+.mh-class-status[data-tone="ok"] {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.mh-class-status[data-tone="warn"] {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
+.mh-class-list {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.mh-class-subject,
+.mh-class-empty {
+  padding: 8px 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: rgba(255,255,255,.78);
+  font-size: 12px;
+  line-height: 1.28;
+}
+
+.mh-class-meta {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 11px;
+}
