@@ -64,6 +64,16 @@
     return readRawByName("/marks");
   }
 
+  function buildStudents() {
+    const builder = window.__MESH_HELPER_CLASS_DATA__?.buildStudentsMap;
+    if (typeof builder !== "function") return [];
+    return builder({
+      studentProfiles: getStudentProfiles(),
+      marks: getMarks(),
+      averageMarks: getAverageMarks()
+    });
+  }
+
   function getSubjectName(group) {
     return normalizeText(
       group?.subject_name ||
@@ -192,39 +202,43 @@
 
   function handleExportClick() {
     const journals = collectJournals();
+    const students = buildStudents();
     const teacherMode = isClassTeacherMode();
 
     renderSubjects(journals);
 
     if (!teacherMode) {
-      setStatus(`Режим классного руководителя не подтверждён. Найдено журналов: ${journals.length}.`, "warn");
+      setStatus(`Режим классного руководителя не подтверждён. Журналов: ${journals.length}, учеников: ${students.length}.`, "warn");
     } else if (!journals.length) {
-      setStatus("Режим найден, но список журналов пока пуст. Обновите/откройте список предметов.", "warn");
+      setStatus(`Режим найден, но список журналов пока пуст. Учеников: ${students.length}.`, "warn");
     } else {
-      setStatus(`Preview готов: найдено предметов — ${journals.length}. Проверьте список ниже.`, "ok");
+      setStatus(`Данные собраны: предметов — ${journals.length}, учеников — ${students.length}.`, "ok");
     }
 
     window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ = {
       checkedAt: Date.now(),
       teacherMode,
       journals,
+      students,
       periods: getPeriods(),
       studentProfiles: getStudentProfiles(),
       marks: getMarks(),
       averageMarks: getAverageMarks()
     };
 
-    console.log("[МЭШ помощник][class-export] journals:", journals);
+    console.log("[МЭШ помощник][class-export] journals:", journals, "students:", students);
   }
 
   function handleDownloadClick() {
     const journals = collectJournals();
+    const students = buildStudents();
     renderSubjects(journals);
     downloadExcelHtml(journals);
     window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ = {
       checkedAt: Date.now(),
       teacherMode: isClassTeacherMode(),
       journals,
+      students,
       periods: getPeriods(),
       studentProfiles: getStudentProfiles(),
       marks: getMarks(),
