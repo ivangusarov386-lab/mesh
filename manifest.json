@@ -41,6 +41,7 @@
         "src/clean-panel.js",
         "src/final-summary-guard.js",
         "src/selection-export.js",
+        "src/class-data.js",
         "src/class-export.js"
       ],
       "css": [
