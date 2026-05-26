@@ -64,19 +64,34 @@
   }
 
   function getJournalId(group) {
-    return group?.journal_id || group?.journalId || group?.id || group?.group_id || group?.groupId || null;
+    const value = group?.journal_id || group?.journalId || group?.id || group?.group_id || group?.groupId || null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : value;
+  }
+
+  function getGroupName(group) {
+    return normalizeText(group?.group_name || group?.groupName || group?.name || group?.title || "");
   }
 
   function collectJournals() {
     const groups = getGroups();
+    const periodCount = getPeriods().length;
     const byKey = new Map();
 
     groups.forEach((group) => {
       const journalId = getJournalId(group);
       const subject = getSubjectName(group);
-      const key = `${journalId || "no-id"}:${subject}`;
+      if (!journalId || !subject) return;
+
+      const key = `${journalId}:${subject.toLowerCase()}`;
       if (!byKey.has(key)) {
-        byKey.set(key, { journalId, subject, raw: group });
+        byKey.set(key, {
+          journalId,
+          subject,
+          groupName: getGroupName(group),
+          periodCount,
+          raw: group
+        });
       }
     });
 
