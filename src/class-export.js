@@ -86,7 +86,7 @@
 
   function currentRows(students, period) {
     const builder = window.__MESH_HELPER_CLASS_DATA__?.buildCurrentPeriodRows;
-    return typeof builder === "function" ? builder({ students, period }) : [];
+    return typeof builder === "function" ? builder({ students, period, finalMarks: getFinalMarks() }) : [];
   }
 
   function getSubjectName(group) {
@@ -182,6 +182,10 @@
       .replace(/\"/g, "&quot;");
   }
 
+  function percentText(value) {
+    return String(value ?? 0).replace(".", ",") + "%";
+  }
+
   function downloadExcelHtml(journals, rows, period) {
     if (!journals.length) {
       setStatus("Нет журналов для выгрузки. Сначала откройте список предметов класса.", "warn");
@@ -189,23 +193,31 @@
     }
 
     const title = period?.title || "Текущий период";
-    const bodyRows = rows.length ? rows.map((row, index) => `
-      <tr>
-        <td>${index + 1}</td>
-        <td>${escapeHtml(row.fio)}</td>
-        <td>${escapeHtml(row.gradesText)}</td>
-        <td>${escapeHtml(row.average)}</td>
-        <td>${escapeHtml(row.absences)}</td>
-        <td>${escapeHtml(String(row.absencePercent).replace(".", ",") + "%")}</td>
-        <td>${escapeHtml(row.possibleFinal)}</td>
-      </tr>`).join("") : journals.map((item, index) => `
+    const bodyRows = rows.length ? rows.map((row, index) => {
+      const trClass = row.absenceRisk ? "risk-row" : "";
+      const finalClass = row.finalMismatch ? "bad-final" : "";
+      const absenceClass = row.absenceRisk ? "bad-absence" : "";
+      return `
+        <tr class="${trClass}">
+          <td>${index + 1}</td>
+          <td>${escapeHtml(row.fio)}</td>
+          <td>${escapeHtml(row.gradesText)}</td>
+          <td>${escapeHtml(row.average)}</td>
+          <td>${escapeHtml(row.absences)}</td>
+          <td class="${absenceClass}">${escapeHtml(percentText(row.absencePercent))}</td>
+          <td class="${finalClass}">${escapeHtml(row.currentFinal)}</td>
+          <td>${escapeHtml(row.possibleFinal)}</td>
+          <td>${escapeHtml(row.paFinal)}</td>
+          <td>${escapeHtml(row.yearFinal)}</td>
+        </tr>`;
+    }).join("") : journals.map((item, index) => `
       <tr>
         <td>${index + 1}</td>
         <td>${escapeHtml(item.subject)}</td>
-        <td colspan="5">Данные учеников пока не загружены</td>
+        <td colspan="8">Данные учеников пока не загружены</td>
       </tr>`).join("");
 
-    const html = `<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px}td,th{border:1px solid #999;padding:6px}th{background:#eaf2ff;font-weight:700}.risk{background:#ffd6d6}</style></head><body><h3>МЭШ — отчет класса: ${escapeHtml(title)}</h3><table><tr><th>№</th><th>ФИО</th><th>Оценки</th><th>Средний балл</th><th>Н по факту</th><th>Н % по факту</th><th>Расчетный итог</th></tr>${bodyRows}</table></body></html>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px}td,th{border:1px solid #999;padding:6px}th{background:#eaf2ff;font-weight:700}.risk-row{background:#fff1f1}.bad-absence{background:#ffd6d6;font-weight:700}.bad-final{background:#ffe08a;font-weight:700}</style></head><body><h3>МЭШ — отчет класса: ${escapeHtml(title)}</h3><table><thead><tr><th>№</th><th>ФИО</th><th>Оценки</th><th>Средний балл</th><th>Н по факту</th><th>Н % по факту</th><th>Итог текущего периода</th><th>Расчетный итог</th><th>ПА</th><th>Г</th></tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
 
     const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -224,6 +236,8 @@
     const period = currentPeriod();
     const rows = currentRows(students, period);
     const teacherMode = isClassTeacherMode();
+    const finalErrors = rows.filter((row) => row.finalMismatch).length;
+    const absenceRisks = rows.filter((row) => row.absenceRisk).length;
 
     renderSubjects(journals);
 
@@ -232,7 +246,7 @@
     } else if (!journals.length) {
       setStatus(`Режим найден, но список журналов пока пуст. Учеников: ${rows.length}.`, "warn");
     } else {
-      setStatus(`Период: ${period?.title || "не определен"}. Предметов — ${journals.length}, учеников — ${rows.length}.`, "ok");
+      setStatus(`Период: ${period?.title || "не определен"}. Ученики: ${rows.length}. Итоги: ${finalErrors}, Н 50%+: ${absenceRisks}.`, "ok");
     }
 
     window.__MESH_HELPER_CLASS_EXPORT_DEBUG__ = {
