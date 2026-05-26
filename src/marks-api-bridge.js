@@ -1,11 +1,11 @@
 // ==========================================================
 //  МЭШ – Помощник учителя
-//  Bridge: получает актуальный список marks из page context.
+//  Bridge: получает актуальные ответы API из page context.
 //
 //  ВАЖНО:
 //  - обрабатываем реальные ответы списка marks;
 //  - api-response складываем отдельно для отчета классного руководителя;
-//  - события marks-mutated / refresh-error НЕ затирают старые marks;
+//  - events marks-mutated / refresh-error НЕ затирают старые marks;
 //  - текущая подсветка продолжает работать от window.__MESH_HELPER_MARKS__.
 // ==========================================================
 
@@ -27,15 +27,28 @@
     }
   }
 
-  function extractMarks(payload) {
+  function extractList(payload) {
     if (Array.isArray(payload)) return payload;
     if (Array.isArray(payload?.data)) return payload.data;
     if (Array.isArray(payload?.items)) return payload.items;
     if (Array.isArray(payload?.marks)) return payload.marks;
+    if (Array.isArray(payload?.groups)) return payload.groups;
     if (Array.isArray(payload?.response)) return payload.response;
+    if (Array.isArray(payload?.payload)) return payload.payload;
+    if (Array.isArray(payload?.result)) return payload.result;
     if (Array.isArray(payload?.data?.items)) return payload.data.items;
+    if (Array.isArray(payload?.data?.groups)) return payload.data.groups;
     if (Array.isArray(payload?.payload?.items)) return payload.payload.items;
+    if (Array.isArray(payload?.payload?.groups)) return payload.payload.groups;
+    if (Array.isArray(payload?.response?.items)) return payload.response.items;
+    if (Array.isArray(payload?.response?.groups)) return payload.response.groups;
+    if (Array.isArray(payload?.result?.items)) return payload.result.items;
+    if (Array.isArray(payload?.result?.groups)) return payload.result.groups;
     return [];
+  }
+
+  function extractMarks(payload) {
+    return extractList(payload);
   }
 
   function ensureApiStore() {
@@ -72,7 +85,7 @@
   function storeApiResponse(url, payload, meta) {
     const store = ensureApiStore();
     const kind = apiKindFromUrl(url);
-    const list = extractMarks(payload);
+    const list = extractList(payload);
     const key = `${kind}:${String(url || "")}`;
 
     store.loadedAt = Date.now();
