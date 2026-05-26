@@ -3,22 +3,36 @@
   "name": "МЭШ — Помощник учителя",
   "description": "Подсветка учеников с малым количеством оценок, анализ пропусков и экспорт в Excel в журнале school.mos.ru.",
   "version": "1.3.0",
-  "host_permissions": ["https://school.mos.ru/*"],
-  "permissions": ["storage"],
+  "host_permissions": [
+    "https://school.mos.ru/*"
+  ],
+  "permissions": [
+    "storage"
+  ],
   "web_accessible_resources": [
     {
-      "resources": ["src/marks-api-hook.js"],
-      "matches": ["https://school.mos.ru/*"]
+      "resources": [
+        "src/marks-api-hook.js"
+      ],
+      "matches": [
+        "https://school.mos.ru/*"
+      ]
     }
   ],
   "content_scripts": [
     {
-      "matches": ["https://school.mos.ru/*"],
-      "js": ["src/marks-api-bridge.js"],
+      "matches": [
+        "https://school.mos.ru/*"
+      ],
+      "js": [
+        "src/marks-api-bridge.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["https://school.mos.ru/*"],
+      "matches": [
+        "https://school.mos.ru/*"
+      ],
       "js": [
         "src/panel-shell.js",
         "src/hybrid-counter.js",
@@ -26,9 +40,12 @@
         "src/highlight-toggle.js",
         "src/clean-panel.js",
         "src/final-summary-guard.js",
-        "src/selection-export.js"
+        "src/selection-export.js",
+        "src/class-export.js"
       ],
-      "css": ["src/panel.css"],
+      "css": [
+        "src/panel.css"
+      ],
       "run_at": "document_idle"
     }
   ]
