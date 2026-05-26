@@ -86,6 +86,28 @@
     );
   }
 
+  function getJournalId(value) {
+    const id = value?.journal_id ||
+      value?.journalId ||
+      value?.subject_journal_id ||
+      value?.subjectJournalId ||
+      value?.group_id ||
+      value?.groupId ||
+      value?.education_group_id ||
+      value?.educationGroupId ||
+      null;
+
+    const numeric = Number(id);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : id;
+  }
+
+  function sameJournal(item, journal) {
+    if (!journal?.journalId) return true;
+    const itemJournalId = getJournalId(item);
+    if (!itemJournalId) return true;
+    return String(itemJournalId) === String(journal.journalId);
+  }
+
   function getMarkValue(mark) {
     return normalizeText(mark?.name || mark?.value || mark?.mark || mark?.mark_value || mark?.markValue || "");
   }
@@ -194,10 +216,11 @@
     );
   }
 
-  function resolveFinalMarksForStudent({ studentId, finalMarks = [], period = null } = {}) {
+  function resolveFinalMarksForStudent({ studentId, finalMarks = [], period = null, journal = null } = {}) {
     const sid = String(studentId || "");
     const items = (Array.isArray(finalMarks) ? finalMarks : [])
-      .filter((item) => String(getStudentId(item) || "") === sid);
+      .filter((item) => String(getStudentId(item) || "") === sid)
+      .filter((item) => sameJournal(item, journal));
 
     const periodId = period?.id ? String(period.id) : "";
     const current = items.find((item) => periodId && String(getFinalPeriodId(item) || "") === periodId) ||
@@ -213,16 +236,18 @@
     };
   }
 
-  function buildCurrentPeriodRows({ students = [], period = null, finalMarks = [] } = {}) {
+  function buildCurrentPeriodRows({ students = [], period = null, finalMarks = [], journal = null } = {}) {
     return students.map((student) => {
-      const periodMarks = (student.marks || []).filter((mark) => isInPeriod(mark, period));
+      const periodMarks = (student.marks || [])
+        .filter((mark) => sameJournal(mark, journal))
+        .filter((mark) => isInPeriod(mark, period));
       const grades = periodMarks.map(getMarkValue).filter(isGrade).map(Number);
       const absences = periodMarks.map(getMarkValue).filter(isAbsence).length;
       const lessonsFact = periodMarks.length;
       const avg = grades.length ? grades.reduce((sum, grade) => sum + grade, 0) / grades.length : null;
       const absencePercent = lessonsFact ? Math.round((absences / lessonsFact) * 1000) / 10 : 0;
       const calculatedFinal = possibleFinal(avg);
-      const finals = resolveFinalMarksForStudent({ studentId: student.id, finalMarks, period });
+      const finals = resolveFinalMarksForStudent({ studentId: student.id, finalMarks, period, journal });
 
       return {
         studentId: student.id,
@@ -239,6 +264,8 @@
         lessonsFact,
         absencePercent,
         absenceRisk: absencePercent >= 50,
+        journalId: journal?.journalId || "",
+        subject: journal?.subject || "",
         rawStudent: student,
         rawFinalMarks: finals.raw
       };
@@ -251,6 +278,7 @@
     resolveCurrentPeriod,
     getStudentId,
     getStudentName,
+    getJournalId,
     buildStudentsMap,
     buildCurrentPeriodRows,
     resolveFinalMarksForStudent
