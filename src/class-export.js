@@ -29,26 +29,39 @@
       .trim();
   }
 
-  function getPeriods() {
-    const store = apiStore();
-    const direct = asArray(store.periods);
-    if (direct.length) return direct;
-
-    const raw = store.raw || {};
+  function readRawByName(name) {
+    const raw = apiStore().raw || {};
     return Object.entries(raw)
-      .filter(([key]) => key.includes("attestation_periods"))
+      .filter(([key]) => key.includes(name))
       .flatMap(([, payload]) => asArray(payload));
   }
 
-  function getGroups() {
-    const store = apiStore();
-    const direct = asArray(store.groups);
-    if (direct.length) return direct;
+  function getPeriods() {
+    const direct = asArray(apiStore().periods);
+    return direct.length ? direct : readRawByName("attestation_periods");
+  }
 
-    const raw = store.raw || {};
-    return Object.entries(raw)
-      .filter(([key]) => key.includes("groups"))
-      .flatMap(([, payload]) => asArray(payload));
+  function getGroups() {
+    const direct = asArray(apiStore().groups);
+    return direct.length ? direct : readRawByName("groups");
+  }
+
+  function getStudentProfiles() {
+    const direct = asArray(apiStore().studentProfiles);
+    return direct.length ? direct : readRawByName("student_profiles");
+  }
+
+  function getAverageMarks() {
+    const direct = asArray(apiStore().averageMarks);
+    return direct.length ? direct : readRawByName("average_marks");
+  }
+
+  function getMarks() {
+    const direct = asArray(apiStore().marks);
+    if (direct.length) return direct;
+    const current = window.__MESH_HELPER_MARKS__?.marks;
+    if (Array.isArray(current) && current.length) return current;
+    return readRawByName("/marks");
   }
 
   function getSubjectName(group) {
@@ -195,7 +208,10 @@
       checkedAt: Date.now(),
       teacherMode,
       journals,
-      periods: getPeriods()
+      periods: getPeriods(),
+      studentProfiles: getStudentProfiles(),
+      marks: getMarks(),
+      averageMarks: getAverageMarks()
     };
 
     console.log("[МЭШ помощник][class-export] journals:", journals);
@@ -210,6 +226,9 @@
       teacherMode: isClassTeacherMode(),
       journals,
       periods: getPeriods(),
+      studentProfiles: getStudentProfiles(),
+      marks: getMarks(),
+      averageMarks: getAverageMarks(),
       exportType: "excel-html"
     };
   }
@@ -251,7 +270,7 @@
       <div class="mh-class-menu">
         <button id="mh-class-export-btn" class="mh-class-export-btn" type="button">Проверить журналы</button>
         <button id="mh-class-download-btn" class="mh-class-export-btn" type="button">Скачать Excel</button>
-        <div id="mh-class-export-status" class="mh-class-status" data-tone="muted">Этап 1.4: первая Excel-выгрузка.</div>
+        <div id="mh-class-export-status" class="mh-class-status" data-tone="muted">Этап 1.5: сбор данных журналов.</div>
         <div id="mh-class-export-list" class="mh-class-list"></div>
       </div>`;
 
