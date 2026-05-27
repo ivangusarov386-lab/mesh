@@ -85,6 +85,29 @@
     });
   }
 
+  function buildJournalOnlyRows(journals) {
+    return journals.map((journal, index) => ({
+      studentId: journal.journalId || index + 1,
+      fio: journal.subject || "Предмет",
+      grades: [],
+      gradesText: `Журнал ID: ${journal.journalId || ""}`,
+      average: "",
+      possibleFinal: "",
+      currentFinal: "",
+      paFinal: "",
+      yearFinal: "",
+      finalMismatch: false,
+      absences: "",
+      lessonsFact: "",
+      absencePercent: "",
+      absenceRisk: false,
+      journalId: journal.journalId || "",
+      subject: journal.subject || "",
+      rawStudent: journal,
+      rawFinalMarks: []
+    }));
+  }
+
   function refreshExportData() {
     const checkButton = document.getElementById("mh-class-export-btn");
     if (!checkButton) return false;
@@ -99,12 +122,13 @@
     const workbook = window.__MESH_HELPER_CLASS_WORKBOOK__;
     const summary = window.__MESH_HELPER_CLASS_SUMMARY_SHEET__;
     const subject = window.__MESH_HELPER_CLASS_SUBJECT_SHEET__;
+    const exportRows = rows.length ? rows : buildJournalOnlyRows(journals);
 
-    if (!workbook || !summary || !rows.length) return false;
+    if (!workbook || !summary || !exportRows.length) return false;
 
     const sheets = [];
     const usedNames = new Set();
-    const summarySheet = summary.buildSummarySheet(rows);
+    const summarySheet = summary.buildSummarySheet(exportRows);
     if (summarySheet) {
       usedNames.add("свод");
       sheets.push(summarySheet);
@@ -112,7 +136,7 @@
 
     if (subject) {
       journals.forEach((journal) => {
-        const subjectRows = buildRowsForJournal(journal);
+        const subjectRows = rows.length ? buildRowsForJournal(journal) : [buildJournalOnlyRows([journal])[0]];
         const sheetName = uniqueSheetName(journal.subject || "Предмет", usedNames);
         const sheet = subject.buildSubjectSheet({ subjectName: sheetName, rows: subjectRows });
         if (sheet) sheets.push(sheet);
@@ -123,7 +147,7 @@
 
     workbook.downloadWorkbook(`mesh_class_workbook_${new Date().toISOString().slice(0, 10)}.xls`, sheets);
 
-    debug.exportType = "workbook-multi-sheet-subjects-all-students";
+    debug.exportType = rows.length ? "workbook-multi-sheet-subjects-all-students" : "workbook-journals-only";
     debug.exportedAt = Date.now();
     debug.exportedSheets = sheets.length;
     return true;
@@ -144,22 +168,18 @@
 
       refreshExportData();
       await wait(500);
-      setProgress(35, "Проверяю журналы и учеников");
+      setProgress(45, "Проверяю журналы и учеников");
 
       refreshExportData();
       await wait(900);
-      setProgress(70, "Формирую Excel-файл");
+      setProgress(80, "Формирую Excel-файл");
 
       const rows = getRows();
       const journals = getJournals();
 
-      if (!rows.length) {
-        setProgress(100, "Данные класса не готовы");
-        if (journals.length) {
-          setStatus(`Журналы найдены: ${journals.length}, но ученики/оценки ещё не загружены. Откройте любой журнал класса, дождитесь загрузки учеников и нажмите «Скачать Excel» ещё раз.`, "warn");
-        } else {
-          setStatus("Журналы пока не найдены. Откройте страницу «Журналы класса» и нажмите «Проверить журналы» ещё раз.", "warn");
-        }
+      if (!rows.length && !journals.length) {
+        setProgress(100, "Данные не найдены");
+        setStatus("Журналы пока не найдены. Откройте страницу «Журналы класса» и нажмите «Проверить журналы» ещё раз.", "warn");
         await wait(1200);
         clearProgress();
         return;
@@ -167,7 +187,13 @@
 
       const exported = exportSummaryWorkbook();
       setProgress(100, exported ? "Файл сформирован" : "Не удалось сформировать файл");
-      setStatus(exported ? "Excel-файл сформирован и скачивается." : "Не удалось сформировать Excel. Попробуйте обновить страницу МЭШ.", exported ? "ok" : "warn");
+      if (exported && rows.length) {
+        setStatus("Excel-файл сформирован и скачивается.", "ok");
+      } else if (exported) {
+        setStatus(`Excel сформирован по списку журналов: ${journals.length}. Для оценок и ФИО откройте предметный журнал, дождитесь загрузки и скачайте ещё раз.`, "warn");
+      } else {
+        setStatus("Не удалось сформировать Excel. Попробуйте обновить страницу МЭШ.", "warn");
+      }
       await wait(900);
       clearProgress();
     } finally {
