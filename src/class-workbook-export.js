@@ -16,6 +16,29 @@
     return Array.isArray(debug.journals) ? debug.journals : [];
   }
 
+  function cleanSheetName(value) {
+    return String(value || "Предмет")
+      .replace(/[\\/:*?\[\]]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 24) || "Предмет";
+  }
+
+  function uniqueSheetName(baseName, used) {
+    const base = cleanSheetName(baseName);
+    let name = base;
+    let index = 2;
+
+    while (used.has(name.toLowerCase())) {
+      const suffix = ` ${index}`;
+      name = `${base.slice(0, 31 - suffix.length)}${suffix}`;
+      index += 1;
+    }
+
+    used.add(name.toLowerCase());
+    return name;
+  }
+
   function buildRowsForJournal(journal) {
     const debug = getDebug();
     const builder = window.__MESH_HELPER_CLASS_DATA__?.buildCurrentPeriodRows;
@@ -47,14 +70,19 @@
     if (!workbook || !summary || !rows.length) return false;
 
     const sheets = [];
+    const usedNames = new Set();
     const summarySheet = summary.buildSummarySheet(rows);
-    if (summarySheet) sheets.push(summarySheet);
+    if (summarySheet) {
+      usedNames.add("свод");
+      sheets.push(summarySheet);
+    }
 
     if (subject) {
       journals.forEach((journal) => {
         const subjectRows = buildRowsForJournal(journal);
+        const sheetName = uniqueSheetName(journal.subject || "Предмет", usedNames);
         const sheet = subject.buildSubjectSheet({
-          subjectName: journal.subject || "Предмет",
+          subjectName: sheetName,
           rows: subjectRows
         });
         if (sheet) sheets.push(sheet);
