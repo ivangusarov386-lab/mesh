@@ -157,6 +157,22 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  async function runAutoLoader(journals) {
+    const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
+    if (!loader || typeof loader.loadJournals !== "function" || !journals.length) return null;
+
+    setStatus(`Автозагрузка данных: 0 / ${journals.length} журналов…`, "muted");
+    setProgress(20, `Автозагрузка данных: 0 / ${journals.length}`);
+
+    return loader.loadJournals(journals, (event) => {
+      const state = event?.state;
+      if (!state) return;
+      const percent = 20 + Math.round((state.done / Math.max(1, state.total)) * 55);
+      setProgress(percent, `Автозагрузка данных: ${state.done} / ${state.total}`);
+      setStatus(`Автозагрузка данных: ${state.done} / ${state.total} журналов. Успешно: ${state.ok}, ошибок: ${state.failed}.`, state.failed ? "warn" : "muted");
+    });
+  }
+
   async function prepareAndExport(button) {
     if (button.dataset.loading === "1") return;
     button.dataset.loading = "1";
@@ -164,18 +180,23 @@
 
     try {
       setStatus("Подготовка скачивания… собираю данные класса.", "muted");
-      setProgress(10, "Подготовка скачивания");
+      setProgress(8, "Подготовка скачивания");
 
       refreshExportData();
       await wait(500);
-      setProgress(45, "Проверяю журналы и учеников");
+      let journals = getJournals();
 
-      refreshExportData();
-      await wait(900);
-      setProgress(80, "Формирую Excel-файл");
+      if (journals.length) {
+        await runAutoLoader(journals);
+        await wait(500);
+        refreshExportData();
+        await wait(700);
+      }
+
+      setProgress(85, "Формирую Excel-файл");
 
       const rows = getRows();
-      const journals = getJournals();
+      journals = getJournals();
 
       if (!rows.length && !journals.length) {
         setProgress(100, "Данные не найдены");
@@ -188,9 +209,9 @@
       const exported = exportSummaryWorkbook();
       setProgress(100, exported ? "Файл сформирован" : "Не удалось сформировать файл");
       if (exported && rows.length) {
-        setStatus("Excel-файл сформирован и скачивается.", "ok");
+        setStatus(`Excel-файл сформирован. Строк: ${rows.length}.`, "ok");
       } else if (exported) {
-        setStatus(`Excel сформирован по списку журналов: ${journals.length}. Для оценок и ФИО откройте предметный журнал, дождитесь загрузки и скачайте ещё раз.`, "warn");
+        setStatus(`Excel сформирован по списку журналов: ${journals.length}. Автозагрузка не вернула учеников/оценки — нужно уточнить URL API.`, "warn");
       } else {
         setStatus("Не удалось сформировать Excel. Попробуйте обновить страницу МЭШ.", "warn");
       }
