@@ -35,13 +35,7 @@
   function resolveCurrentPeriod(periods = [], now = new Date()) {
     const list = Array.isArray(periods) ? periods : [];
     const normalized = list
-      .map((period) => ({
-        raw: period,
-        id: getPeriodId(period),
-        title: getPeriodTitle(period),
-        start: getPeriodStart(period),
-        end: getPeriodEnd(period)
-      }))
+      .map((period) => ({ raw: period, id: getPeriodId(period), title: getPeriodTitle(period), start: getPeriodStart(period), end: getPeriodEnd(period) }))
       .filter((period) => period.start || period.end || period.id);
 
     const active = normalized.find((period) => {
@@ -51,52 +45,27 @@
     });
 
     if (active) return active;
-
-    return normalized
-      .filter((period) => period.start && period.start <= now)
-      .sort((a, b) => b.start - a.start)[0] || normalized[0] || null;
+    return normalized.filter((period) => period.start && period.start <= now).sort((a, b) => b.start - a.start)[0] || normalized[0] || null;
   }
 
   function getStudentId(value) {
-    const id = value?.student_profile_id ||
-      value?.studentProfileId ||
-      value?.profile_id ||
-      value?.student_id ||
-      value?.studentId ||
-      value?.id ||
-      null;
-
+    const id = value?.student_profile_id || value?.studentProfileId || value?.profile_id || value?.student_id || value?.studentId || value?.person_id || value?.personId || value?.id || null;
     const numeric = Number(id);
     return Number.isFinite(numeric) && numeric > 0 ? numeric : id;
   }
 
   function getStudentName(profile) {
+    const source = profile?.student_profile || profile?.studentProfile || profile?.student || profile?.person || profile?.profile || profile || {};
     return normalizeText(
-      profile?.fio ||
-      profile?.full_name ||
-      profile?.fullName ||
-      profile?.student_name ||
-      profile?.name ||
-      [
-        profile?.last_name || profile?.lastName,
-        profile?.first_name || profile?.firstName,
-        profile?.middle_name || profile?.middleName
-      ].filter(Boolean).join(" ") ||
+      source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName || source?.name ||
+      profile?.fio || profile?.full_name || profile?.fullName || profile?.student_name || profile?.studentName || profile?.display_name || profile?.displayName || profile?.name ||
+      [source?.last_name || source?.lastName || profile?.last_name || profile?.lastName, source?.first_name || source?.firstName || profile?.first_name || profile?.firstName, source?.middle_name || source?.middleName || profile?.middle_name || profile?.middleName].filter(Boolean).join(" ") ||
       "Без ФИО"
     );
   }
 
   function getJournalId(value) {
-    const id = value?.journal_id ||
-      value?.journalId ||
-      value?.subject_journal_id ||
-      value?.subjectJournalId ||
-      value?.group_id ||
-      value?.groupId ||
-      value?.education_group_id ||
-      value?.educationGroupId ||
-      null;
-
+    const id = value?.journal_id || value?.journalId || value?.subject_journal_id || value?.subjectJournalId || value?.group_id || value?.groupId || value?.education_group_id || value?.educationGroupId || null;
     const numeric = Number(id);
     return Number.isFinite(numeric) && numeric > 0 ? numeric : id;
   }
@@ -153,94 +122,55 @@
     return 2;
   }
 
-  function buildStudentsMap({
-    studentProfiles = [],
-    marks = [],
-    averageMarks = []
-  } = {}) {
+  function makeStudent(id, source = null) {
+    return { id, fio: getStudentName(source), marks: [], average: null, rawProfile: source };
+  }
+
+  function buildStudentsMap({ studentProfiles = [], marks = [], averageMarks = [] } = {}) {
     const students = new Map();
 
     studentProfiles.forEach((profile) => {
       const id = getStudentId(profile);
       if (!id) return;
-
-      students.set(String(id), {
-        id,
-        fio: getStudentName(profile),
-        marks: [],
-        average: null,
-        rawProfile: profile
-      });
+      students.set(String(id), makeStudent(id, profile));
     });
 
     marks.forEach((mark) => {
       const id = getStudentId(mark);
       if (!id) return;
-
       const key = String(id);
-
-      if (!students.has(key)) {
-        students.set(key, {
-          id,
-          fio: "Без ФИО",
-          marks: [],
-          average: null,
-          rawProfile: null
-        });
-      }
-
-      students.get(key).marks.push(mark);
+      if (!students.has(key)) students.set(key, makeStudent(id, mark));
+      const student = students.get(key);
+      if (student.fio === "Без ФИО") student.fio = getStudentName(mark);
+      student.marks.push(mark);
     });
 
     averageMarks.forEach((avg) => {
       const id = getStudentId(avg);
       if (!id) return;
-
       const key = String(id);
-
-      if (!students.has(key)) {
-        students.set(key, {
-          id,
-          fio: "Без ФИО",
-          marks: [],
-          average: null,
-          rawProfile: null
-        });
-      }
-
-      students.get(key).average = avg;
+      if (!students.has(key)) students.set(key, makeStudent(id, avg));
+      const student = students.get(key);
+      if (student.fio === "Без ФИО") student.fio = getStudentName(avg);
+      student.average = avg;
     });
 
-    return [...students.values()].sort((a, b) =>
-      a.fio.localeCompare(b.fio, "ru")
-    );
+    return [...students.values()].sort((a, b) => a.fio.localeCompare(b.fio, "ru"));
   }
 
   function resolveFinalMarksForStudent({ studentId, finalMarks = [], period = null, journal = null } = {}) {
     const sid = String(studentId || "");
-    const items = (Array.isArray(finalMarks) ? finalMarks : [])
-      .filter((item) => String(getStudentId(item) || "") === sid)
-      .filter((item) => sameJournal(item, journal));
-
+    const items = (Array.isArray(finalMarks) ? finalMarks : []).filter((item) => String(getStudentId(item) || "") === sid).filter((item) => sameJournal(item, journal));
     const periodId = period?.id ? String(period.id) : "";
-    const current = items.find((item) => periodId && String(getFinalPeriodId(item) || "") === periodId) ||
-      items.find((item) => getFinalKind(item) === "period");
+    const current = items.find((item) => periodId && String(getFinalPeriodId(item) || "") === periodId) || items.find((item) => getFinalKind(item) === "period");
     const pa = items.find((item) => getFinalKind(item) === "pa");
     const year = items.find((item) => getFinalKind(item) === "year");
-
-    return {
-      current: getFinalValue(current),
-      pa: getFinalValue(pa),
-      year: getFinalValue(year),
-      raw: items
-    };
+    return { current: getFinalValue(current), pa: getFinalValue(pa), year: getFinalValue(year), raw: items };
   }
 
   function buildCurrentPeriodRows({ students = [], period = null, finalMarks = [], journal = null } = {}) {
     return students.map((student) => {
-      const periodMarks = (student.marks || [])
-        .filter((mark) => sameJournal(mark, journal))
-        .filter((mark) => isInPeriod(mark, period));
+      const periodMarks = (student.marks || []).filter((mark) => sameJournal(mark, journal)).filter((mark) => isInPeriod(mark, period));
       const grades = periodMarks.map(getMarkValue).filter(isGrade).map(Number);
       const absences = periodMarks.map(getMarkValue).filter(isAbsence).length;
       const lessonsFact = periodMarks.length;
@@ -272,15 +202,5 @@
     });
   }
 
-  window.__MESH_HELPER_CLASS_DATA__ = {
-    normalizeText,
-    parseDate,
-    resolveCurrentPeriod,
-    getStudentId,
-    getStudentName,
-    getJournalId,
-    buildStudentsMap,
-    buildCurrentPeriodRows,
-    resolveFinalMarksForStudent
-  };
+  window.__MESH_HELPER_CLASS_DATA__ = { normalizeText, parseDate, resolveCurrentPeriod, getStudentId, getStudentName, getJournalId, buildStudentsMap, buildCurrentPeriodRows, resolveFinalMarksForStudent };
 })();
