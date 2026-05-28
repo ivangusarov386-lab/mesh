@@ -8,16 +8,26 @@
 
   function parseDate(value) {
     if (!value) return null;
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+    const text = String(value).trim();
+    const ru = text.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+    if (ru) {
+      const [, dd, mm, yyyy, hh = "0", min = "0"] = ru;
+      const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(min));
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    const iso = new Date(text);
+    return Number.isNaN(iso.getTime()) ? null : iso;
   }
 
   function getPeriodStart(period) {
-    return parseDate(period?.start_date || period?.startDate || period?.date_start || period?.dateStart || period?.from);
+    return parseDate(period?.start_date || period?.startDate || period?.date_start || period?.dateStart || period?.from || period?.begin_date || period?.beginDate);
   }
 
   function getPeriodEnd(period) {
-    return parseDate(period?.end_date || period?.endDate || period?.date_end || period?.dateEnd || period?.to);
+    return parseDate(period?.end_date || period?.endDate || period?.date_end || period?.dateEnd || period?.to || period?.finish_date || period?.finishDate);
   }
 
   function getPeriodTitle(period) {
@@ -31,7 +41,10 @@
 
   function resolveCurrentPeriod(periods = [], now = new Date()) {
     const list = Array.isArray(periods) ? periods : [];
-    const normalized = list.map((period) => ({ raw: period, id: getPeriodId(period), title: getPeriodTitle(period), start: getPeriodStart(period), end: getPeriodEnd(period) })).filter((period) => period.start || period.end || period.id);
+    const normalized = list
+      .map((period) => ({ raw: period, id: getPeriodId(period), title: getPeriodTitle(period), start: getPeriodStart(period), end: getPeriodEnd(period) }))
+      .filter((period) => period.start || period.end || period.id);
+
     const active = normalized.find((period) => (!period.start || now >= period.start) && (!period.end || now <= period.end));
     if (active) return active;
     return normalized.filter((period) => period.start && period.start <= now).sort((a, b) => b.start - a.start)[0] || normalized[0] || null;
@@ -144,6 +157,10 @@
     return item?.period_id || item?.periodId || item?.attestation_period_id || item?.attestationPeriodId || item?.attestation_period?.id || null;
   }
 
+  function getMarkPeriodId(item) {
+    return item?.period_id || item?.periodId || item?.attestation_period_id || item?.attestationPeriodId || item?.attestation_period?.id || item?.lesson?.attestation_period_id || item?.lesson?.attestationPeriodId || null;
+  }
+
   function getFinalKind(item) {
     if (item?.is_year_mark || item?.isYearMark || item?.year_mark || item?.yearMark) return "year";
     const value = normalizeText(item?.type || item?.kind || item?.period_type || item?.periodType || item?.title || item?.name || "").toLowerCase();
@@ -162,7 +179,12 @@
 
   function isInPeriod(item, period) {
     if (!period) return true;
-    const date = parseDate(item?.date || item?.mark_date || item?.lesson_date || item?.created_at || item?.updated_at);
+
+    const periodId = period?.id ? String(period.id) : "";
+    const itemPeriodId = getMarkPeriodId(item);
+    if (periodId && itemPeriodId) return String(itemPeriodId) === periodId;
+
+    const date = parseDate(item?.date || item?.mark_date || item?.lesson_date || item?.created_at || item?.updated_at || item?.lesson?.date);
     if (!date) return true;
     return (!period.start || date >= period.start) && (!period.end || date <= period.end);
   }
@@ -229,11 +251,7 @@
   function resolveFinalMarksForStudent({ studentId, finalMarks = [], profileFinalMarks = [], period = null, journal = null } = {}) {
     const sid = String(studentId || "");
     const allFinals = [...(Array.isArray(finalMarks) ? finalMarks : []), ...(Array.isArray(profileFinalMarks) ? profileFinalMarks : [])];
-    const items = allFinals
-      .filter((item) => String(getStudentId(item) || "") === sid)
-      .filter((item) => sameJournal(item, journal))
-      .filter((item) => sameSubject(item, journal));
-
+    const items = allFinals.filter((item) => String(getStudentId(item) || "") === sid).filter((item) => sameJournal(item, journal)).filter((item) => sameSubject(item, journal));
     const periodId = period?.id ? String(period.id) : "";
     const current = items.find((item) => periodId && String(getFinalPeriodId(item) || "") === periodId) || items.find((item) => getFinalKind(item) === "period");
     const pa = items.find((item) => getFinalKind(item) === "pa");
