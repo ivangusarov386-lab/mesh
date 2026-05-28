@@ -48,26 +48,81 @@
     return normalized.filter((period) => period.start && period.start <= now).sort((a, b) => b.start - a.start)[0] || normalized[0] || null;
   }
 
-  function getStudentId(value) {
-    const id = value?.student_profile_id || value?.studentProfileId || value?.profile_id || value?.student_id || value?.studentId || value?.person_id || value?.personId || value?.id || null;
+  function isMarkLike(value) {
+    const markValue = normalizeText(value?.name || value?.value || value?.mark || value?.mark_value || value?.markValue || "");
+    return Boolean(
+      markValue &&
+      (/^[1-5]$/.test(markValue) || markValue.toLowerCase().includes("н")) &&
+      (value?.date || value?.lesson_date || value?.mark_date || value?.created_at || value?.updated_at || value?.weight || value?.control_form_id)
+    );
+  }
+
+  function hasProfileNameFields(value) {
+    const source = value?.student_profile || value?.studentProfile || value?.student || value?.person || value?.profile || value || {};
+    return Boolean(
+      source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName ||
+      source?.last_name || source?.lastName || source?.first_name || source?.firstName || source?.middle_name || source?.middleName ||
+      value?.fio || value?.full_name || value?.fullName || value?.student_name || value?.studentName || value?.display_name || value?.displayName ||
+      value?.last_name || value?.lastName || value?.first_name || value?.firstName || value?.middle_name || value?.middleName
+    );
+  }
+
+  function normalizeId(id) {
     const numeric = Number(id);
-    return Number.isFinite(numeric) && numeric > 0 ? numeric : id;
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : id || null;
+  }
+
+  function getStudentId(value) {
+    const nested = value?.student_profile || value?.studentProfile || value?.student || value?.person || value?.profile || null;
+    const explicit =
+      value?.student_profile_id || value?.studentProfileId ||
+      value?.profile_id || value?.profileId ||
+      value?.student_id || value?.studentId ||
+      value?.person_id || value?.personId ||
+      nested?.student_profile_id || nested?.studentProfileId ||
+      nested?.profile_id || nested?.profileId ||
+      nested?.student_id || nested?.studentId ||
+      nested?.person_id || nested?.personId ||
+      nested?.id || null;
+
+    if (explicit) return normalizeId(explicit);
+
+    // Важно: у mark.id — это id оценки, а не id ученика. Поэтому голый id берем
+    // только у объектов, которые похожи на профиль ученика, а не на оценку.
+    if (!isMarkLike(value) && hasProfileNameFields(value)) return normalizeId(value?.id);
+
+    return null;
+  }
+
+  function safeNameCandidate(value) {
+    const text = normalizeText(value);
+    if (!text) return "";
+    if (/^[1-5]$/.test(text)) return "";
+    if (/^н$/i.test(text)) return "";
+    if (text.length < 2) return "";
+    return text;
   }
 
   function getStudentName(profile) {
     const source = profile?.student_profile || profile?.studentProfile || profile?.student || profile?.person || profile?.profile || profile || {};
-    return normalizeText(
-      source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName || source?.name ||
-      profile?.fio || profile?.full_name || profile?.fullName || profile?.student_name || profile?.studentName || profile?.display_name || profile?.displayName || profile?.name ||
-      [source?.last_name || source?.lastName || profile?.last_name || profile?.lastName, source?.first_name || source?.firstName || profile?.first_name || profile?.firstName, source?.middle_name || source?.middleName || profile?.middle_name || profile?.middleName].filter(Boolean).join(" ") ||
+    const combined = [
+      source?.last_name || source?.lastName || profile?.last_name || profile?.lastName,
+      source?.first_name || source?.firstName || profile?.first_name || profile?.firstName,
+      source?.middle_name || source?.middleName || profile?.middle_name || profile?.middleName
+    ].filter(Boolean).join(" ");
+
+    return safeNameCandidate(
+      source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName ||
+      profile?.fio || profile?.full_name || profile?.fullName || profile?.student_name || profile?.studentName || profile?.display_name || profile?.displayName ||
+      combined ||
+      source?.name || profile?.name ||
       "Без ФИО"
-    );
+    ) || "Без ФИО";
   }
 
   function getJournalId(value) {
     const id = value?.journal_id || value?.journalId || value?.subject_journal_id || value?.subjectJournalId || value?.group_id || value?.groupId || value?.education_group_id || value?.educationGroupId || null;
-    const numeric = Number(id);
-    return Number.isFinite(numeric) && numeric > 0 ? numeric : id;
+    return normalizeId(id);
   }
 
   function sameJournal(item, journal) {
@@ -141,7 +196,8 @@
       const key = String(id);
       if (!students.has(key)) students.set(key, makeStudent(id, mark));
       const student = students.get(key);
-      if (student.fio === "Без ФИО") student.fio = getStudentName(mark);
+      const markName = getStudentName(mark);
+      if (student.fio === "Без ФИО" && markName !== "Без ФИО") student.fio = markName;
       student.marks.push(mark);
     });
 
@@ -151,7 +207,8 @@
       const key = String(id);
       if (!students.has(key)) students.set(key, makeStudent(id, avg));
       const student = students.get(key);
-      if (student.fio === "Без ФИО") student.fio = getStudentName(avg);
+      const avgName = getStudentName(avg);
+      if (student.fio === "Без ФИО" && avgName !== "Без ФИО") student.fio = avgName;
       student.average = avg;
     });
 
@@ -181,7 +238,7 @@
 
       return {
         studentId: student.id,
-        fio: student.fio,
+        fio: getStudentName(student.rawProfile) !== "Без ФИО" ? getStudentName(student.rawProfile) : student.fio,
         grades,
         gradesText: grades.length ? grades.join(", ") : "",
         average: avg === null ? "" : Math.round(avg * 100) / 100,
@@ -202,5 +259,15 @@
     });
   }
 
-  window.__MESH_HELPER_CLASS_DATA__ = { normalizeText, parseDate, resolveCurrentPeriod, getStudentId, getStudentName, getJournalId, buildStudentsMap, buildCurrentPeriodRows, resolveFinalMarksForStudent };
+  window.__MESH_HELPER_CLASS_DATA__ = {
+    normalizeText,
+    parseDate,
+    resolveCurrentPeriod,
+    getStudentId,
+    getStudentName,
+    getJournalId,
+    buildStudentsMap,
+    buildCurrentPeriodRows,
+    resolveFinalMarksForStudent
+  };
 })();
