@@ -3,9 +3,8 @@
 //  Bridge: получает актуальные ответы API из page context.
 //
 //  ВАЖНО:
-//  - обрабатываем реальные ответы списка marks;
-//  - api-response складываем отдельно для отчета классного руководителя;
-//  - events marks-mutated / refresh-error НЕ затирают старые marks;
+//  - ответы API теперь НАКАПЛИВАЮТСЯ, а не затирают друг друга;
+//  - это критично для выгрузки «Мой класс» по нескольким предметам;
 //  - текущая подсветка продолжает работать от window.__MESH_HELPER_MARKS__.
 // ==========================================================
 
@@ -27,24 +26,54 @@
     }
   }
 
+  function deepFindArray(payload, names = []) {
+    const seen = new Set();
+    const queue = [payload];
+
+    while (queue.length) {
+      const item = queue.shift();
+      if (!item || typeof item !== "object" || seen.has(item)) continue;
+      seen.add(item);
+
+      if (Array.isArray(item)) return item;
+
+      for (const name of names) {
+        if (Array.isArray(item?.[name])) return item[name];
+      }
+
+      Object.values(item).forEach((value) => {
+        if (value && typeof value === "object") queue.push(value);
+      });
+    }
+
+    return [];
+  }
+
   function extractList(payload) {
     if (Array.isArray(payload)) return payload;
     if (Array.isArray(payload?.data)) return payload.data;
     if (Array.isArray(payload?.items)) return payload.items;
     if (Array.isArray(payload?.marks)) return payload.marks;
     if (Array.isArray(payload?.groups)) return payload.groups;
+    if (Array.isArray(payload?.student_profiles)) return payload.student_profiles;
+    if (Array.isArray(payload?.studentProfiles)) return payload.studentProfiles;
     if (Array.isArray(payload?.response)) return payload.response;
     if (Array.isArray(payload?.payload)) return payload.payload;
     if (Array.isArray(payload?.result)) return payload.result;
     if (Array.isArray(payload?.data?.items)) return payload.data.items;
     if (Array.isArray(payload?.data?.groups)) return payload.data.groups;
+    if (Array.isArray(payload?.data?.marks)) return payload.data.marks;
+    if (Array.isArray(payload?.data?.student_profiles)) return payload.data.student_profiles;
     if (Array.isArray(payload?.payload?.items)) return payload.payload.items;
     if (Array.isArray(payload?.payload?.groups)) return payload.payload.groups;
+    if (Array.isArray(payload?.payload?.marks)) return payload.payload.marks;
     if (Array.isArray(payload?.response?.items)) return payload.response.items;
     if (Array.isArray(payload?.response?.groups)) return payload.response.groups;
+    if (Array.isArray(payload?.response?.marks)) return payload.response.marks;
     if (Array.isArray(payload?.result?.items)) return payload.result.items;
     if (Array.isArray(payload?.result?.groups)) return payload.result.groups;
-    return [];
+    if (Array.isArray(payload?.result?.marks)) return payload.result.marks;
+    return deepFindArray(payload, ["items", "data", "result", "payload", "response", "marks", "groups", "student_profiles", "studentProfiles"]);
   }
 
   function extractMarks(payload) {
@@ -62,12 +91,14 @@
         periods: [],
         marks: [],
         raw: {},
-        urls: {}
+        urls: {},
+        debug: {}
       };
     }
-    if (!Array.isArray(window.__MESH_HELPER_API__.finalMarks)) {
-      window.__MESH_HELPER_API__.finalMarks = [];
-    }
+    ["groups", "studentProfiles", "averageMarks", "finalMarks", "periods", "marks"].forEach((key) => {
+      if (!Array.isArray(window.__MESH_HELPER_API__[key])) window.__MESH_HELPER_API__[key] = [];
+    });
+    if (!window.__MESH_HELPER_API__.debug) window.__MESH_HELPER_API__.debug = {};
     return window.__MESH_HELPER_API__;
   }
 
@@ -82,6 +113,42 @@
     return "raw";
   }
 
+  function stableKey(item, index, prefix) {
+    return String(
+      item?.id || item?.mark_id || item?.markId ||
+      item?.student_profile_id || item?.studentProfileId ||
+      item?.profile_id || item?.profileId ||
+      item?.student_id || item?.studentId ||
+      item?.person_id || item?.personId ||
+      item?.journal_id || item?.journalId || item?.group_id || item?.groupId || item?.education_group_id || item?.educationGroupId ||
+      item?.student_profile?.id || item?.studentProfile?.id || item?.student?.id || item?.person?.id || item?.profile?.id ||
+      `${prefix}-${index}`
+    );
+  }
+
+  function isSyntheticProfile(item) {
+    return item?.source === "groups.student_ids" || /^Ученик\s+\d+$/i.test(String(item?.name || ""));
+  }
+
+  function mergeList(oldList, newList, kind) {
+    const map = new Map();
+    (Array.isArray(oldList) ? oldList : []).forEach((item, index) => {
+      map.set(stableKey(item, index, `old-${kind}`), item);
+    });
+    (Array.isArray(newList) ? newList : []).forEach((item, index) => {
+      const key = stableKey(item, index, `new-${kind}-${Date.now()}`);
+      const old = map.get(key);
+      if (old && kind === "studentProfiles" && isSyntheticProfile(old) && !isSyntheticProfile(item)) {
+        map.set(key, item);
+      } else if (old && typeof old === "object" && typeof item === "object") {
+        map.set(key, { ...old, ...item });
+      } else {
+        map.set(key, item);
+      }
+    });
+    return [...map.values()];
+  }
+
   function storeApiResponse(url, payload, meta) {
     const store = ensureApiStore();
     const kind = apiKindFromUrl(url);
@@ -91,15 +158,17 @@
     store.loadedAt = Date.now();
     store.raw[key] = payload;
     store.urls[kind] = String(url || "");
+    store.debug[key] = { kind, count: list.length, at: meta?.at || Date.now() };
 
-    if (kind !== "raw") {
-      store[kind] = list.length ? list : payload;
+    if (kind !== "raw" && Array.isArray(list)) {
+      store[kind] = mergeList(store[kind], list, kind);
     }
 
     window.dispatchEvent(new CustomEvent("mesh-helper-api-updated", {
       detail: {
         kind,
         count: Array.isArray(store[kind]) ? store[kind].length : 0,
+        added: list.length,
         url: String(url || ""),
         at: meta?.at || Date.now()
       }
@@ -110,15 +179,15 @@
     const stats = {};
 
     marks.forEach((mark) => {
-      const studentId = Number(mark?.student_profile_id);
+      const studentId = Number(mark?.student_profile_id || mark?.studentProfileId || mark?.student?.id || mark?.student_profile?.id);
       if (!studentId) return;
 
       if (!stats[studentId]) {
         stats[studentId] = { total: 0, hidden: 0, dates: {} };
       }
 
-      const value = String(mark?.name || "").trim();
-      const date = String(mark?.date || "").trim();
+      const value = String(mark?.name || mark?.value || mark?.mark || "").trim();
+      const date = String(mark?.date || mark?.lesson_date || mark?.mark_date || "").trim();
 
       if (/^[1-5]$/.test(value)) {
         stats[studentId].total += 1;
@@ -133,23 +202,24 @@
   }
 
   function publishMarks(marks, meta) {
-    const stats = buildStats(marks);
+    storeApiResponse(meta?.url, marks, meta);
+    const store = ensureApiStore();
+    const allMarks = Array.isArray(store.marks) && store.marks.length ? store.marks : marks;
+    const stats = buildStats(allMarks);
 
     window.__MESH_HELPER_MARKS__ = {
       loadedAt: Date.now(),
-      count: marks.length,
+      count: allMarks.length,
       stats,
-      marks,
+      marks: allMarks,
       meta: meta || {}
     };
 
-    storeApiResponse(meta?.url, marks, meta);
-
     window.dispatchEvent(new CustomEvent("mesh-helper-marks-updated", {
-      detail: { count: marks.length, students: Object.keys(stats).length }
+      detail: { count: allMarks.length, students: Object.keys(stats).length }
     }));
 
-    console.log("[МЭШ помощник][bridge] marks обновлены:", marks.length, "учеников:", Object.keys(stats).length);
+    console.log("[МЭШ помощник][bridge] marks обновлены:", allMarks.length, "учеников:", Object.keys(stats).length);
   }
 
   window.addEventListener("message", (event) => {
@@ -173,7 +243,6 @@
 
       const marks = extractMarks(data.payload);
       if (!Array.isArray(marks)) return;
-
       publishMarks(marks, { type: data.type, url: data.url, at: data.at });
     } catch (error) {
       console.warn("[МЭШ помощник][bridge] parse error", error);
