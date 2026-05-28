@@ -35,14 +35,9 @@
     return window.__MESH_HELPER_API__;
   }
 
-  function uniq(values) {
-    return [...new Set((values || []).filter((value) => value !== undefined && value !== null && value !== "").map(String))];
-  }
-
   function stableKey(item, index, fallbackPrefix) {
     return String(
-      item?.id ||
-      item?.mark_id || item?.markId ||
+      item?.id || item?.mark_id || item?.markId ||
       item?.student_profile_id || item?.studentProfileId ||
       item?.profile_id || item?.profileId ||
       item?.student_id || item?.studentId ||
@@ -53,10 +48,20 @@
     );
   }
 
+  function isSyntheticProfile(item) {
+    return item?.source === "groups.student_ids" || /^Ученик\s+\d+$/i.test(String(item?.name || ""));
+  }
+
   function mergeById(target, incoming, prefix = "item") {
     const map = new Map();
     (Array.isArray(target) ? target : []).forEach((item, index) => map.set(stableKey(item, index, `old-${prefix}`), item));
-    (Array.isArray(incoming) ? incoming : []).forEach((item, index) => map.set(stableKey(item, index, `new-${prefix}-${Date.now()}`), item));
+    (Array.isArray(incoming) ? incoming : []).forEach((item, index) => {
+      const key = stableKey(item, index, `new-${prefix}-${Date.now()}`);
+      const old = map.get(key);
+      if (old && isSyntheticProfile(old) && !isSyntheticProfile(item)) map.set(key, item);
+      else if (!old) map.set(key, item);
+      else map.set(key, { ...old, ...item });
+    });
     return [...map.values()];
   }
 
@@ -87,10 +92,7 @@
   function query(params) {
     return Object.entries(params)
       .filter(([, value]) => value !== undefined && value !== null && value !== "")
-      .flatMap(([key, value]) => {
-        if (Array.isArray(value)) return value.map((item) => `${encodeURIComponent(key)}=${encodeURIComponent(item)}`);
-        return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
-      })
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(Array.isArray(value) ? value.join(",") : value)}`)
       .join("&");
   }
 
@@ -101,13 +103,14 @@
     const base = { academic_year_id: academicYearId, page: 1, per_page: 1000 };
 
     return [
-      { ...base, education_group_id: journalId },
+      { ...base, group_ids: journalId },
       { ...base, group_id: journalId },
+      { ...base, education_group_id: journalId },
       { ...base, journal_id: journalId },
       { ...base, subject_journal_id: journalId },
-      { ...base, class_unit_id: classUnitId, education_group_id: journalId },
+      { ...base, class_unit_id: classUnitId, group_ids: journalId },
       { ...base, class_unit_id: classUnitId, subject_journal_id: journalId }
-    ].filter((params) => params.education_group_id || params.group_id || params.journal_id || params.subject_journal_id);
+    ].filter((params) => params.group_ids || params.group_id || params.education_group_id || params.journal_id || params.subject_journal_id);
   }
 
   function studentCandidateParams(journal) {
@@ -118,24 +121,20 @@
     const base = { academic_year_id: academicYearId, page: 1, per_page: 1000 };
 
     const candidates = [
+      { ...base, ids: studentIds },
+      { ...base, student_profile_ids: studentIds },
       { ...base, class_unit_id: classUnitId },
       { ...base, class_unit_ids: classUnitId },
+      { ...base, group_ids: journalId },
       { ...base, education_group_id: journalId },
-      { ...base, group_id: journalId },
       { ...base, subject_journal_id: journalId }
     ];
 
-    if (studentIds.length && studentIds.length <= 80) {
-      candidates.push({ ...base, ids: studentIds });
-      candidates.push({ ...base, student_profile_ids: studentIds });
-    }
-
-    return candidates.filter((params) => params.class_unit_id || params.class_unit_ids || params.education_group_id || params.group_id || params.subject_journal_id || params.ids || params.student_profile_ids);
+    return candidates.filter((params) => params.ids?.length || params.student_profile_ids?.length || params.class_unit_id || params.class_unit_ids || params.group_ids || params.education_group_id || params.subject_journal_id);
   }
 
   function syntheticStudentProfiles(journal) {
-    const studentIds = getStudentIds(journal);
-    return studentIds.map((id) => ({
+    return getStudentIds(journal).map((id) => ({
       id,
       student_profile_id: id,
       source: "groups.student_ids",
@@ -146,17 +145,12 @@
 
   function candidateUrls(journal) {
     const urls = [];
-
-    studentCandidateParams(journal).forEach((params) => {
-      urls.push({ kind: "studentProfiles", url: `${API_BASE}/student_profiles?${query(params)}` });
-    });
-
+    studentCandidateParams(journal).forEach((params) => urls.push({ kind: "studentProfiles", url: `${API_BASE}/student_profiles?${query(params)}` }));
     markCandidateParams(journal).forEach((params) => {
       urls.push({ kind: "marks", url: `${API_BASE}/marks?${query(params)}` });
       urls.push({ kind: "averageMarks", url: `${API_BASE}/average_marks_overall?${query(params)}` });
       urls.push({ kind: "finalMarks", url: `${API_BASE}/final_marks?${query(params)}` });
     });
-
     const seen = new Set();
     return urls.filter((item) => {
       const key = `${item.kind}:${item.url}`;
@@ -191,8 +185,11 @@
     return list.length;
   }
 
-  async function loadFirstSuccessful(kind, urls, onProgress, journal) {
-    let best = { ok: false, count: 0, error: null };
+  async function loadAllUseful(kind, urls, onProgress, journal) {
+    let ok = 0;
+    let failed = 0;
+    let totalCount = 0;
+    let firstError = null;
 
     for (const item of urls.filter((candidate) => candidate.kind === kind)) {
       try {
@@ -200,15 +197,17 @@
         const { payload, list } = await fetchList(item.url);
         storeList(item.kind, item.url, payload, list);
         onProgress?.({ journal, kind: item.kind, status: "ok", count: list.length, url: item.url });
-        if (list.length) return { ok: true, count: list.length, url: item.url };
-        best = { ok: true, count: 0, url: item.url };
+        ok += 1;
+        totalCount += list.length;
+        if (list.length) break;
       } catch (error) {
-        best = { ok: false, count: 0, error: String(error?.message || error), url: item.url };
-        onProgress?.({ journal, kind: item.kind, status: "error", error: best.error, url: item.url });
+        failed += 1;
+        firstError = firstError || String(error?.message || error);
+        onProgress?.({ journal, kind: item.kind, status: "error", error: String(error?.message || error), url: item.url });
       }
     }
 
-    return best;
+    return { ok: ok > 0, count: totalCount, failed, error: firstError };
   }
 
   async function loadJournal(journal, onProgress) {
@@ -219,7 +218,7 @@
     if (syntheticCount) result.loaded.syntheticStudents = syntheticCount;
 
     for (const kind of ["studentProfiles", "marks", "averageMarks", "finalMarks"]) {
-      const loaded = await loadFirstSuccessful(kind, urls, onProgress, journal);
+      const loaded = await loadAllUseful(kind, urls, onProgress, journal);
       result.loaded[kind] = loaded.count || 0;
       if (loaded.ok) result.ok += 1;
       else result.failed += 1;
@@ -237,9 +236,7 @@
       state.done += 1;
       state.ok += result.ok;
       state.failed += result.failed;
-      Object.keys(state.loaded).forEach((key) => {
-        state.loaded[key] += Number(result.loaded?.[key] || 0);
-      });
+      Object.keys(state.loaded).forEach((key) => { state.loaded[key] += Number(result.loaded?.[key] || 0); });
       onProgress?.({ journal, status: "journal-done", state: { ...state, loaded: { ...state.loaded } } });
       await new Promise((resolve) => setTimeout(resolve, 120));
     }
