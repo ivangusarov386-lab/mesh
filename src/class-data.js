@@ -3,10 +3,7 @@
   window.__meshHelperClassDataInstalled = true;
 
   function normalizeText(value) {
-    return String(value || "")
-      .replace(/\s+/g, " ")
-      .replace(/[–—]/g, "-")
-      .trim();
+    return String(value || "").replace(/\s+/g, " ").replace(/[–—]/g, "-").trim();
   }
 
   function parseDate(value) {
@@ -34,37 +31,20 @@
 
   function resolveCurrentPeriod(periods = [], now = new Date()) {
     const list = Array.isArray(periods) ? periods : [];
-    const normalized = list
-      .map((period) => ({ raw: period, id: getPeriodId(period), title: getPeriodTitle(period), start: getPeriodStart(period), end: getPeriodEnd(period) }))
-      .filter((period) => period.start || period.end || period.id);
-
-    const active = normalized.find((period) => {
-      const afterStart = !period.start || now >= period.start;
-      const beforeEnd = !period.end || now <= period.end;
-      return afterStart && beforeEnd;
-    });
-
+    const normalized = list.map((period) => ({ raw: period, id: getPeriodId(period), title: getPeriodTitle(period), start: getPeriodStart(period), end: getPeriodEnd(period) })).filter((period) => period.start || period.end || period.id);
+    const active = normalized.find((period) => (!period.start || now >= period.start) && (!period.end || now <= period.end));
     if (active) return active;
     return normalized.filter((period) => period.start && period.start <= now).sort((a, b) => b.start - a.start)[0] || normalized[0] || null;
   }
 
   function isMarkLike(value) {
     const markValue = normalizeText(value?.name || value?.value || value?.mark || value?.mark_value || value?.markValue || "");
-    return Boolean(
-      markValue &&
-      (/^[1-5]$/.test(markValue) || markValue.toLowerCase().includes("н")) &&
-      (value?.date || value?.lesson_date || value?.mark_date || value?.created_at || value?.updated_at || value?.weight || value?.control_form_id)
-    );
+    return Boolean(markValue && (/^[1-5]$/.test(markValue) || markValue.toLowerCase().includes("н")) && (value?.date || value?.lesson_date || value?.mark_date || value?.created_at || value?.updated_at || value?.weight || value?.control_form_id));
   }
 
   function hasProfileNameFields(value) {
     const source = value?.student_profile || value?.studentProfile || value?.student || value?.person || value?.profile || value || {};
-    return Boolean(
-      source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName ||
-      source?.last_name || source?.lastName || source?.first_name || source?.firstName || source?.middle_name || source?.middleName ||
-      value?.fio || value?.full_name || value?.fullName || value?.student_name || value?.studentName || value?.display_name || value?.displayName ||
-      value?.last_name || value?.lastName || value?.first_name || value?.firstName || value?.middle_name || value?.middleName
-    );
+    return Boolean(source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName || source?.last_name || source?.lastName || source?.first_name || source?.firstName || source?.middle_name || source?.middleName || value?.fio || value?.full_name || value?.fullName || value?.student_name || value?.studentName || value?.display_name || value?.displayName || value?.last_name || value?.lastName || value?.first_name || value?.firstName || value?.middle_name || value?.middleName);
   }
 
   function normalizeId(id) {
@@ -74,55 +54,39 @@
 
   function getStudentId(value) {
     const nested = value?.student_profile || value?.studentProfile || value?.student || value?.person || value?.profile || null;
-    const explicit =
-      value?.student_profile_id || value?.studentProfileId ||
-      value?.profile_id || value?.profileId ||
-      value?.student_id || value?.studentId ||
-      value?.person_id || value?.personId ||
-      nested?.student_profile_id || nested?.studentProfileId ||
-      nested?.profile_id || nested?.profileId ||
-      nested?.student_id || nested?.studentId ||
-      nested?.person_id || nested?.personId ||
-      nested?.id || null;
-
+    const explicit = value?.student_profile_id || value?.studentProfileId || value?.profile_id || value?.profileId || value?.student_id || value?.studentId || value?.person_id || value?.personId || nested?.student_profile_id || nested?.studentProfileId || nested?.profile_id || nested?.profileId || nested?.student_id || nested?.studentId || nested?.person_id || nested?.personId || nested?.id || null;
     if (explicit) return normalizeId(explicit);
-
-    // Важно: у mark.id — это id оценки, а не id ученика. Поэтому голый id берем
-    // только у объектов, которые похожи на профиль ученика, а не на оценку.
     if (!isMarkLike(value) && hasProfileNameFields(value)) return normalizeId(value?.id);
-
     return null;
   }
 
   function safeNameCandidate(value) {
     const text = normalizeText(value);
-    if (!text) return "";
-    if (/^[1-5]$/.test(text)) return "";
-    if (/^н$/i.test(text)) return "";
-    if (text.length < 2) return "";
+    if (!text || /^[1-5]$/.test(text) || /^н$/i.test(text) || text.length < 2) return "";
     return text;
   }
 
   function getStudentName(profile) {
     const source = profile?.student_profile || profile?.studentProfile || profile?.student || profile?.person || profile?.profile || profile || {};
-    const combined = [
-      source?.last_name || source?.lastName || profile?.last_name || profile?.lastName,
-      source?.first_name || source?.firstName || profile?.first_name || profile?.firstName,
-      source?.middle_name || source?.middleName || profile?.middle_name || profile?.middleName
-    ].filter(Boolean).join(" ");
-
-    return safeNameCandidate(
-      source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName ||
-      profile?.fio || profile?.full_name || profile?.fullName || profile?.student_name || profile?.studentName || profile?.display_name || profile?.displayName ||
-      combined ||
-      source?.name || profile?.name ||
-      "Без ФИО"
-    ) || "Без ФИО";
+    const combined = [source?.last_name || source?.lastName || profile?.last_name || profile?.lastName, source?.first_name || source?.firstName || profile?.first_name || profile?.firstName, source?.middle_name || source?.middleName || profile?.middle_name || profile?.middleName].filter(Boolean).join(" ");
+    return safeNameCandidate(source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName || profile?.fio || profile?.full_name || profile?.fullName || profile?.student_name || profile?.studentName || profile?.display_name || profile?.displayName || combined || source?.name || profile?.name || "Без ФИО") || "Без ФИО";
   }
 
   function getJournalId(value) {
     const id = value?.journal_id || value?.journalId || value?.subject_journal_id || value?.subjectJournalId || value?.group_id || value?.groupId || value?.education_group_id || value?.educationGroupId || null;
     return normalizeId(id);
+  }
+
+  function getJournalStudentIds(journal) {
+    const raw = journal?.raw || journal || {};
+    const ids = Array.isArray(raw.student_ids) ? raw.student_ids : Array.isArray(raw.studentIds) ? raw.studentIds : [];
+    return new Set(ids.map((id) => String(id)));
+  }
+
+  function studentBelongsToJournal(student, journal) {
+    const ids = getJournalStudentIds(journal);
+    if (!ids.size) return true;
+    return ids.has(String(student?.id));
   }
 
   function sameJournal(item, journal) {
@@ -163,9 +127,7 @@
     if (!period) return true;
     const date = parseDate(item?.date || item?.mark_date || item?.lesson_date || item?.created_at || item?.updated_at);
     if (!date) return true;
-    const afterStart = !period.start || date >= period.start;
-    const beforeEnd = !period.end || date <= period.end;
-    return afterStart && beforeEnd;
+    return (!period.start || date >= period.start) && (!period.end || date <= period.end);
   }
 
   function possibleFinal(avg) {
@@ -183,13 +145,11 @@
 
   function buildStudentsMap({ studentProfiles = [], marks = [], averageMarks = [] } = {}) {
     const students = new Map();
-
     studentProfiles.forEach((profile) => {
       const id = getStudentId(profile);
       if (!id) return;
       students.set(String(id), makeStudent(id, profile));
     });
-
     marks.forEach((mark) => {
       const id = getStudentId(mark);
       if (!id) return;
@@ -200,7 +160,6 @@
       if (student.fio === "Без ФИО" && markName !== "Без ФИО") student.fio = markName;
       student.marks.push(mark);
     });
-
     averageMarks.forEach((avg) => {
       const id = getStudentId(avg);
       if (!id) return;
@@ -211,7 +170,6 @@
       if (student.fio === "Без ФИО" && avgName !== "Без ФИО") student.fio = avgName;
       student.average = avg;
     });
-
     return [...students.values()].sort((a, b) => a.fio.localeCompare(b.fio, "ru"));
   }
 
@@ -226,7 +184,7 @@
   }
 
   function buildCurrentPeriodRows({ students = [], period = null, finalMarks = [], journal = null } = {}) {
-    return students.map((student) => {
+    return students.filter((student) => studentBelongsToJournal(student, journal)).map((student) => {
       const periodMarks = (student.marks || []).filter((mark) => sameJournal(mark, journal)).filter((mark) => isInPeriod(mark, period));
       const grades = periodMarks.map(getMarkValue).filter(isGrade).map(Number);
       const absences = periodMarks.map(getMarkValue).filter(isAbsence).length;
@@ -235,10 +193,10 @@
       const absencePercent = lessonsFact ? Math.round((absences / lessonsFact) * 1000) / 10 : 0;
       const calculatedFinal = possibleFinal(avg);
       const finals = resolveFinalMarksForStudent({ studentId: student.id, finalMarks, period, journal });
-
+      const profileName = getStudentName(student.rawProfile);
       return {
         studentId: student.id,
-        fio: getStudentName(student.rawProfile) !== "Без ФИО" ? getStudentName(student.rawProfile) : student.fio,
+        fio: profileName !== "Без ФИО" ? profileName : student.fio,
         grades,
         gradesText: grades.length ? grades.join(", ") : "",
         average: avg === null ? "" : Math.round(avg * 100) / 100,
@@ -259,15 +217,5 @@
     });
   }
 
-  window.__MESH_HELPER_CLASS_DATA__ = {
-    normalizeText,
-    parseDate,
-    resolveCurrentPeriod,
-    getStudentId,
-    getStudentName,
-    getJournalId,
-    buildStudentsMap,
-    buildCurrentPeriodRows,
-    resolveFinalMarksForStudent
-  };
+  window.__MESH_HELPER_CLASS_DATA__ = { normalizeText, parseDate, resolveCurrentPeriod, getStudentId, getStudentName, getJournalId, buildStudentsMap, buildCurrentPeriodRows, resolveFinalMarksForStudent };
 })();
