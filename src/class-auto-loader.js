@@ -24,19 +24,7 @@
 
   function apiStore() {
     if (!window.__MESH_HELPER_API__) {
-      window.__MESH_HELPER_API__ = {
-        loadedAt: null,
-        groups: [],
-        studentProfiles: [],
-        averageMarks: [],
-        finalMarks: [],
-        periods: [],
-        marks: [],
-        attendances: [],
-        raw: {},
-        urls: {},
-        debug: {}
-      };
+      window.__MESH_HELPER_API__ = { loadedAt: null, groups: [], studentProfiles: [], averageMarks: [], finalMarks: [], periods: [], marks: [], attendances: [], raw: {}, urls: {}, debug: {} };
     }
     ["groups", "studentProfiles", "averageMarks", "finalMarks", "periods", "marks", "attendances"].forEach((key) => {
       if (!Array.isArray(window.__MESH_HELPER_API__[key])) window.__MESH_HELPER_API__[key] = [];
@@ -55,12 +43,7 @@
         item?.student_profile_id || item?.studentProfileId || item?.student?.id || item?.student_profile?.id || "s"
       ].join(":"));
     }
-    return String(
-      item?.id || item?.student_profile_id || item?.studentProfileId || item?.profile_id || item?.profileId ||
-      item?.student_id || item?.studentId || item?.person_id || item?.personId ||
-      item?.student_profile?.id || item?.studentProfile?.id || item?.student?.id || item?.person?.id || item?.profile?.id ||
-      `${kind}-${index}`
-    );
+    return String(item?.id || item?.student_profile_id || item?.studentProfileId || item?.profile_id || item?.profileId || item?.student_id || item?.studentId || item?.person_id || item?.personId || item?.student_profile?.id || item?.studentProfile?.id || item?.student?.id || item?.person?.id || item?.profile?.id || `${kind}-${index}`);
   }
 
   function isSyntheticProfile(item) {
@@ -112,21 +95,79 @@
     store.urls[kind] = url;
     store.debug[`auto:${kind}:${url}`] = { count: list.length, at: Date.now() };
     store[kind] = mergeById(store[kind], list, kind);
-    window.dispatchEvent(new CustomEvent("mesh-helper-api-updated", {
-      detail: { kind, source: "class-auto-loader", added: list.length, count: store[kind].length, url, at: Date.now() }
-    }));
+    window.dispatchEvent(new CustomEvent("mesh-helper-api-updated", { detail: { kind, source: "class-auto-loader", added: list.length, count: store[kind].length, url, at: Date.now() } }));
   }
 
   function storeSyntheticStudents(journals) {
     const byId = new Map();
-    journals.forEach((journal) => {
-      getStudentIds(journal).forEach((id) => {
-        byId.set(String(id), { id, student_profile_id: id, source: "groups.student_ids", class_unit_id: getClassUnitId(journal), name: `Ученик ${id}` });
-      });
-    });
+    journals.forEach((journal) => getStudentIds(journal).forEach((id) => byId.set(String(id), { id, student_profile_id: id, source: "groups.student_ids", class_unit_id: getClassUnitId(journal), name: `Ученик ${id}` })));
     const list = [...byId.values()];
     if (list.length) storeList("studentProfiles", "groups.student_ids", { source: "groups.student_ids", items: list }, list);
     return list.length;
+  }
+
+  function isMarksUrl(urlText) {
+    return /\/api\/ej\/core\/teacher\/v1\/marks\?/i.test(urlText) || /\/marks\?/i.test(urlText);
+  }
+
+  function performanceMarksUrls() {
+    try {
+      return performance.getEntriesByType("resource")
+        .map((entry) => entry.name)
+        .filter((url) => isMarksUrl(url) && !/average_marks/i.test(url) && !/by_marks/i.test(url))
+        .filter((url) => /group_ids?=|group_id=/i.test(url))
+        .sort((a, b) => {
+          const ea = performance.getEntriesByName(a).at?.(-1)?.startTime || 0;
+          const eb = performance.getEntriesByName(b).at?.(-1)?.startTime || 0;
+          return ea - eb;
+        });
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function absolutePath(urlText) {
+    try {
+      const url = new URL(urlText, location.origin);
+      return `${url.pathname}${url.search}`;
+    } catch (_) {
+      return urlText;
+    }
+  }
+
+  function setRepeated(searchParams, key, value) {
+    if ([...searchParams.keys()].some((item) => item === key)) {
+      searchParams.delete(key);
+      searchParams.append(key, value);
+    }
+  }
+
+  function makeUrlFromTemplate(templateUrl, journal) {
+    const journalId = String(getJournalId(journal));
+    const subjectId = String(getSubjectId(journal) || "");
+    const academicYearId = String(getAcademicYearId(journal));
+    try {
+      const url = new URL(templateUrl, location.origin);
+      setRepeated(url.searchParams, "group_id", journalId);
+      setRepeated(url.searchParams, "group_ids", journalId);
+      setRepeated(url.searchParams, "group_ids[]", journalId);
+      if (subjectId) {
+        setRepeated(url.searchParams, "subject_id", subjectId);
+        setRepeated(url.searchParams, "subject_ids", subjectId);
+        setRepeated(url.searchParams, "subject_ids[]", subjectId);
+      }
+      if (url.searchParams.has("academic_year_id")) url.searchParams.set("academic_year_id", academicYearId);
+      return `${url.pathname}${url.search}`;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function currentPeriodMarksTemplates() {
+    const urls = unique(performanceMarksUrls()).map(absolutePath);
+    if (!urls.length) return [];
+    // МЭШ грузит периоды по очереди: осень → зима → весна. Последний marks-запрос — текущий период.
+    return [urls[urls.length - 1], ...urls.slice().reverse().filter((url) => url !== urls[urls.length - 1])];
   }
 
   async function loadProfiles(journals, onProgress) {
@@ -134,10 +175,11 @@
     const academicYearId = getAcademicYearId(first);
     const classUnitIds = unique(journals.map(getClassUnitId));
     const studentIds = unique(journals.flatMap(getStudentIds));
-    const base = { academic_year_id: academicYearId, page: 1, per_page: 1000 };
+    const firstJournalId = getJournalId(first);
+    const base = { academic_year_id: academicYearId, page: 1, per_page: 1000, with_final_marks: true, with_groups: true, with_archived_groups: false, with_transferred: false, with_deleted: false };
     const urls = [];
 
-    classUnitIds.forEach((classUnitId) => urls.push(`${API_BASE}/student_profiles?${query({ ...base, class_unit_id: classUnitId })}`));
+    classUnitIds.forEach((classUnitId) => urls.push(`${API_BASE}/student_profiles?${query({ ...base, class_unit_id: classUnitId, group_ids: firstJournalId })}`));
     if (studentIds.length) urls.push(`${API_BASE}/student_profiles?${query({ ...base, ids: studentIds }, "repeat")}`);
     if (studentIds.length) urls.push(`${API_BASE}/student_profiles?${query({ ...base, ids: studentIds }, "comma")}`);
 
@@ -158,14 +200,27 @@
     return total;
   }
 
-  async function loadMarksForJournal(journal, onProgress) {
+  function fallbackMarksUrls(journal) {
     const academicYearId = getAcademicYearId(journal);
     const journalId = getJournalId(journal);
     const subjectId = getSubjectId(journal);
-    const urls = unique([
-      `${API_BASE}/marks?${query({ academic_year_id: academicYearId, page: 1, per_page: 1000, group_ids: [journalId] }, "repeat")}`,
-      `${API_BASE}/marks?${query({ academic_year_id: academicYearId, page: 1, per_page: 1000, group_ids: [journalId] }, "comma")}`
+    return unique([
+      `${API_BASE}/marks?${query({ academic_year_id: academicYearId, page: 1, per_page: 1000, group_ids: [journalId], subject_id: subjectId }, "repeat")}`,
+      `${API_BASE}/marks?${query({ academic_year_id: academicYearId, page: 1, per_page: 1000, group_ids: [journalId] }, "repeat")}`
     ]);
+  }
+
+  function marksUrlsForJournal(journal) {
+    const templated = currentPeriodMarksTemplates()
+      .map((template) => makeUrlFromTemplate(template, journal))
+      .filter(Boolean);
+    return unique([...templated, ...fallbackMarksUrls(journal)]);
+  }
+
+  async function loadMarksForJournal(journal, onProgress) {
+    const journalId = getJournalId(journal);
+    const subjectId = getSubjectId(journal);
+    const urls = marksUrlsForJournal(journal);
 
     for (const url of urls) {
       try {
@@ -179,7 +234,7 @@
         }));
         storeList("marks", url, payload, list);
         onProgress?.({ kind: "marks", status: "ok", journal, url, count: list.length });
-        return list.length;
+        if (list.length) return list.length;
       } catch (error) {
         onProgress?.({ kind: "marks", status: "skip", journal, url, error: String(error?.message || error) });
       }
@@ -189,7 +244,7 @@
 
   async function loadJournals(journals = [], onProgress) {
     const list = (Array.isArray(journals) ? journals : []).filter((journal) => getJournalId(journal));
-    const state = { total: list.length, done: 0, ok: 0, failed: 0, loaded: { studentProfiles: 0, marks: 0, syntheticStudents: 0 } };
+    const state = { total: list.length, done: 0, ok: 0, failed: 0, loaded: { studentProfiles: 0, marks: 0, syntheticStudents: 0 }, templates: currentPeriodMarksTemplates().length };
 
     state.loaded.syntheticStudents = storeSyntheticStudents(list);
     state.loaded.studentProfiles = await loadProfiles(list, (event) => onProgress?.({ ...event, state: { ...state, loaded: { ...state.loaded } } }));
@@ -203,7 +258,6 @@
       onProgress?.({ journal, status: "journal-done", state: { ...state, loaded: { ...state.loaded } } });
       await new Promise((resolve) => setTimeout(resolve, 120));
     }
-
     return state;
   }
 
@@ -213,12 +267,8 @@
   }
 
   function candidateUrls(journal) {
-    const academicYearId = getAcademicYearId(journal);
-    const journalId = getJournalId(journal);
-    return [
-      { kind: "marks", url: `${API_BASE}/marks?${query({ academic_year_id: academicYearId, page: 1, per_page: 1000, group_ids: [journalId] }, "repeat")}` }
-    ];
+    return marksUrlsForJournal(journal).map((url) => ({ kind: "marks", url }));
   }
 
-  window.__MESH_HELPER_CLASS_AUTO_LOADER__ = { loadJournals, loadJournal, candidateUrls };
+  window.__MESH_HELPER_CLASS_AUTO_LOADER__ = { loadJournals, loadJournal, candidateUrls, currentPeriodMarksTemplates, marksUrlsForJournal };
 })();
