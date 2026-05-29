@@ -60,9 +60,14 @@
     return previous || autoCurrentPeriod(now);
   }
 
+  function normalizeId(id) {
+    const numeric = Number(id);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : id || null;
+  }
+
   function isMarkLike(value) {
     const markValue = normalizeText(value?.name || value?.value || value?.mark || value?.mark_value || value?.markValue || "");
-    return Boolean(markValue && (/^[1-5]$/.test(markValue) || markValue.toLowerCase().includes("н")) && (value?.date || value?.lesson_date || value?.mark_date || value?.created_at || value?.updated_at || value?.weight || value?.control_form_id));
+    return Boolean(markValue && (/^[1-5]$/.test(markValue) || markValue.toLowerCase().includes("н")) && (value?.date || value?.lesson_date || value?.mark_date || value?.created_at || value?.updated_at || value?.weight || value?.coefficient || value?.control_form_id));
   }
 
   function hasProfileNameFields(value) {
@@ -70,13 +75,9 @@
     return Boolean(source?.short_name || source?.shortName || source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName || source?.last_name || source?.lastName || source?.first_name || source?.firstName || source?.middle_name || source?.middleName || source?.lastname || source?.firstname || source?.middlename || source?.surname || source?.name || value?.short_name || value?.shortName || value?.fio || value?.full_name || value?.fullName || value?.student_name || value?.studentName || value?.display_name || value?.displayName || value?.last_name || value?.lastName || value?.first_name || value?.firstName || value?.middle_name || value?.middleName || value?.lastname || value?.firstname || value?.middlename || value?.surname || value?.name);
   }
 
-  function normalizeId(id) {
-    const numeric = Number(id);
-    return Number.isFinite(numeric) && numeric > 0 ? numeric : id || null;
-  }
-
   function getStudentId(value) {
     const nested = value?.student_profile || value?.studentProfile || value?.student || value?.person || value?.profile || value?.user || null;
+    if (typeof nested === "number" || typeof nested === "string") return normalizeId(nested);
     const explicit = value?.student_profile_id || value?.studentProfileId || value?.profile_id || value?.profileId || value?.student_id || value?.studentId || value?.person_id || value?.personId || nested?.student_profile_id || nested?.studentProfileId || nested?.profile_id || nested?.profileId || nested?.student_id || nested?.studentId || nested?.person_id || nested?.personId || nested?.id || null;
     if (explicit) return normalizeId(explicit);
     if (!isMarkLike(value) && hasProfileNameFields(value)) return normalizeId(value?.id);
@@ -201,6 +202,18 @@
     return Array.isArray(profile?.final_marks) ? profile.final_marks : Array.isArray(profile?.finalMarks) ? profile.finalMarks : [];
   }
 
+  function numeric(value) {
+    if (typeof value === "number") return value;
+    const text = String(value ?? "").replace(",", ".").trim();
+    if (!text) return null;
+    const number = Number(text);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function getAverageValue(avg) {
+    return numeric(avg?.average_mark_five || avg?.averageMarkFive || avg?.average || avg?.mark || avg?.value || avg?.five);
+  }
+
   function makeStudent(id, source = null) {
     return { id, fio: getStudentName(source), marks: [], average: null, rawProfile: source, finalMarks: profileFinalMarks(source) };
   }
@@ -254,16 +267,58 @@
     return { current: getFinalValue(current), pa: getFinalValue(pa), year: getFinalValue(year), raw: items };
   }
 
+  function controlForms() {
+    const api = window.__MESH_HELPER_API__ || {};
+    const direct = Array.isArray(api.controlForms) ? api.controlForms : [];
+    const raw = Object.entries(api.raw || {})
+      .filter(([key]) => String(key).includes("control_forms"))
+      .flatMap(([, payload]) => Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.items) ? payload.items : []);
+    return [...direct, ...raw];
+  }
+
+  function findControlForm(mark) {
+    const id = mark?.control_form_id || mark?.controlFormId || mark?.control_form?.id || mark?.controlForm?.id;
+    if (!id) return null;
+    return controlForms().find((form) => String(form?.id) === String(id)) || null;
+  }
+
+  function getMarkWeight(mark) {
+    const form = findControlForm(mark) || {};
+    const explicit = numeric(mark?.weight ?? mark?.coefficient ?? mark?.mark_weight ?? mark?.markWeight ?? mark?.weight_value ?? mark?.weightValue ?? mark?.control_form_weight ?? mark?.controlFormWeight ?? mark?.control_form?.weight ?? mark?.control_form?.coefficient ?? mark?.controlForm?.weight ?? mark?.controlForm?.coefficient ?? form?.weight ?? form?.coefficient ?? form?.mark_weight ?? form?.markWeight ?? form?.weight_value ?? form?.weightValue);
+    if (explicit && explicit > 1) return Math.max(1, Math.min(5, Math.round(explicit)));
+
+    const label = normalizeText(`${mark?.control_form_name || mark?.controlFormName || mark?.control_form?.name || mark?.control_form?.short_name || mark?.controlForm?.name || form?.name || form?.short_name || form?.shortName || ""}`).toLowerCase();
+    if (/\bкр\b|контрольн|диагност/.test(label)) return 3;
+    if (/самостоятельн|тест|практическ|лабораторн|диктант|изложен|сочинен|проект/.test(label)) return 2;
+    return 1;
+  }
+
+  function expandWeightedGrades(marks) {
+    const expanded = [];
+    const display = [];
+    marks.forEach((mark) => {
+      const value = getMarkValue(mark);
+      if (!isGrade(value)) return;
+      const grade = Number(value);
+      const weight = getMarkWeight(mark);
+      for (let i = 0; i < weight; i += 1) expanded.push(grade);
+      display.push(weight > 1 ? `${grade}×${weight}` : String(grade));
+    });
+    return { expanded, display };
+  }
+
   function buildCurrentPeriodRows({ students = [], period = null, finalMarks = [], journal = null } = {}) {
     return students.filter((student) => studentBelongsToJournal(student, journal)).map((student) => {
       let periodMarks = (student.marks || []).filter((mark) => sameJournal(mark, journal)).filter((mark) => sameSubject(mark, journal)).filter((mark) => isInPeriod(mark, period));
-      if (!periodMarks.length && period) {
-        periodMarks = (student.marks || []).filter((mark) => sameJournal(mark, journal)).filter((mark) => sameSubject(mark, journal));
-      }
-      const grades = periodMarks.map(getMarkValue).filter(isGrade).map(Number);
+      if (!periodMarks.length && period) periodMarks = (student.marks || []).filter((mark) => sameJournal(mark, journal)).filter((mark) => sameSubject(mark, journal));
+
+      const weighted = expandWeightedGrades(periodMarks);
+      const grades = weighted.expanded;
       const absences = periodMarks.map(getMarkValue).filter(isAbsence).length;
       const lessonsFact = periodMarks.length;
-      const avg = grades.length ? grades.reduce((sum, grade) => sum + grade, 0) / grades.length : null;
+      const avgFromMarks = grades.length ? grades.reduce((sum, grade) => sum + grade, 0) / grades.length : null;
+      const officialAvg = student.average && sameSubject(student.average, journal) ? getAverageValue(student.average) : null;
+      const avg = officialAvg ?? avgFromMarks;
       const absencePercent = lessonsFact ? Math.round((absences / lessonsFact) * 1000) / 10 : 0;
       const calculatedFinal = possibleFinal(avg);
       const finals = resolveFinalMarksForStudent({ studentId: student.id, finalMarks, profileFinalMarks: student.finalMarks, period, journal });
@@ -272,7 +327,9 @@
         studentId: student.id,
         fio: profileName !== "Без ФИО" ? profileName : student.fio,
         grades,
-        gradesText: grades.length ? grades.join(", ") : "",
+        rawGradesCount: periodMarks.map(getMarkValue).filter(isGrade).length,
+        weightedGradesCount: grades.length,
+        gradesText: weighted.display.length ? weighted.display.join(", ") : "",
         average: avg === null ? "" : Math.round(avg * 100) / 100,
         possibleFinal: calculatedFinal,
         currentFinal: finals.current,
@@ -291,5 +348,5 @@
     });
   }
 
-  window.__MESH_HELPER_CLASS_DATA__ = { normalizeText, parseDate, resolveCurrentPeriod, getStudentId, getStudentName, getJournalId, buildStudentsMap, buildCurrentPeriodRows, resolveFinalMarksForStudent };
+  window.__MESH_HELPER_CLASS_DATA__ = { normalizeText, parseDate, resolveCurrentPeriod, getStudentId, getStudentName, getJournalId, buildStudentsMap, buildCurrentPeriodRows, resolveFinalMarksForStudent, getMarkWeight };
 })();
