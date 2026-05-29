@@ -4,24 +4,6 @@
 
   const API_BASE = "/api/ej/core/teacher/v1";
 
-  function deepFindArray(payload, names = []) {
-    const seen = new Set();
-    const queue = [payload];
-    while (queue.length) {
-      const item = queue.shift();
-      if (!item || typeof item !== "object" || seen.has(item)) continue;
-      seen.add(item);
-      if (Array.isArray(item)) return item;
-      for (const name of names) if (Array.isArray(item?.[name])) return item[name];
-      Object.values(item).forEach((value) => { if (value && typeof value === "object") queue.push(value); });
-    }
-    return [];
-  }
-
-  function looksLikeProfile(value) {
-    return Boolean(value && typeof value === "object" && (value.id || value.student_profile_id) && (value.short_name || value.user_name || value.last_name || value.first_name || value.person || value.class_unit || value.final_marks));
-  }
-
   function asArray(payload) {
     if (Array.isArray(payload)) return payload;
     if (Array.isArray(payload?.data)) return payload.data;
@@ -35,21 +17,26 @@
     if (Array.isArray(payload?.data?.items)) return payload.data.items;
     if (Array.isArray(payload?.data?.marks)) return payload.data.marks;
     if (Array.isArray(payload?.data?.student_profiles)) return payload.data.student_profiles;
-    if (Array.isArray(payload?.response?.items)) return payload.response.items;
-    if (Array.isArray(payload?.result?.items)) return payload.result.items;
-    if (Array.isArray(payload?.payload?.items)) return payload.payload.items;
-    const found = deepFindArray(payload, ["items", "data", "result", "payload", "response", "marks", "student_profiles", "studentProfiles"]);
-    if (found.length) return found;
-    if (looksLikeProfile(payload)) return [payload];
-    if (looksLikeProfile(payload?.data)) return [payload.data];
-    if (looksLikeProfile(payload?.response)) return [payload.response];
-    if (looksLikeProfile(payload?.result)) return [payload.result];
+    if (payload && typeof payload === "object" && (payload.id || payload.short_name || payload.user_name)) return [payload];
+    if (payload?.data && typeof payload.data === "object" && (payload.data.id || payload.data.short_name || payload.data.user_name)) return [payload.data];
     return [];
   }
 
   function apiStore() {
     if (!window.__MESH_HELPER_API__) {
-      window.__MESH_HELPER_API__ = { loadedAt: null, groups: [], studentProfiles: [], averageMarks: [], finalMarks: [], periods: [], marks: [], attendances: [], raw: {}, urls: {}, debug: {} };
+      window.__MESH_HELPER_API__ = {
+        loadedAt: null,
+        groups: [],
+        studentProfiles: [],
+        averageMarks: [],
+        finalMarks: [],
+        periods: [],
+        marks: [],
+        attendances: [],
+        raw: {},
+        urls: {},
+        debug: {}
+      };
     }
     ["groups", "studentProfiles", "averageMarks", "finalMarks", "periods", "marks", "attendances"].forEach((key) => {
       if (!Array.isArray(window.__MESH_HELPER_API__[key])) window.__MESH_HELPER_API__[key] = [];
@@ -60,14 +47,19 @@
     return window.__MESH_HELPER_API__;
   }
 
-  function stableKey(item, index, prefix) {
+  function stableKey(item, index, kind) {
+    if (kind === "marks") {
+      return String([
+        item?.id || item?.mark_id || item?.markId || `mark-${index}`,
+        item?.group_id || item?.groupId || item?.journal_id || item?.journalId || "g",
+        item?.student_profile_id || item?.studentProfileId || item?.student?.id || item?.student_profile?.id || "s"
+      ].join(":"));
+    }
     return String(
-      item?.id || item?.mark_id || item?.markId ||
-      item?.student_profile_id || item?.studentProfileId ||
-      item?.profile_id || item?.profileId ||
+      item?.id || item?.student_profile_id || item?.studentProfileId || item?.profile_id || item?.profileId ||
       item?.student_id || item?.studentId || item?.person_id || item?.personId ||
       item?.student_profile?.id || item?.studentProfile?.id || item?.student?.id || item?.person?.id || item?.profile?.id ||
-      `${prefix}-${index}`
+      `${kind}-${index}`
     );
   }
 
@@ -77,9 +69,9 @@
 
   function mergeById(oldList, newList, kind) {
     const map = new Map();
-    (Array.isArray(oldList) ? oldList : []).forEach((item, index) => map.set(stableKey(item, index, `old-${kind}`), item));
+    (Array.isArray(oldList) ? oldList : []).forEach((item, index) => map.set(stableKey(item, index, kind), item));
     (Array.isArray(newList) ? newList : []).forEach((item, index) => {
-      const key = stableKey(item, index, `new-${kind}-${Date.now()}`);
+      const key = stableKey(item, index, kind);
       const old = map.get(key);
       if (old && kind === "studentProfiles" && isSyntheticProfile(old) && !isSyntheticProfile(item)) map.set(key, item);
       else if (old && typeof old === "object" && typeof item === "object") map.set(key, { ...old, ...item });
@@ -94,10 +86,7 @@
   function getClassUnitId(journal) { const raw = getRawJournal(journal); return raw.class_unit_id || raw.classUnitId || (Array.isArray(raw.class_unit_ids) ? raw.class_unit_ids[0] : null) || null; }
   function getSubjectId(journal) { const raw = getRawJournal(journal); return raw.subject_id || raw.subjectId || journal?.subjectId || null; }
   function getStudentIds(journal) { const raw = getRawJournal(journal); return Array.isArray(raw.student_ids) ? raw.student_ids : Array.isArray(raw.studentIds) ? raw.studentIds : []; }
-
-  function unique(values) {
-    return [...new Set((values || []).filter(Boolean).map(String))];
-  }
+  function unique(values) { return [...new Set((values || []).filter(Boolean).map(String))]; }
 
   function query(params, arrayMode = "repeat") {
     return Object.entries(params)
@@ -110,11 +99,10 @@
       .join("&");
   }
 
-  async function fetchList(url) {
+  async function fetchJson(url) {
     const response = await fetch(url, { credentials: "include" });
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-    const payload = await response.json();
-    return { payload, list: asArray(payload) };
+    return response.json();
   }
 
   function storeList(kind, url, payload, list) {
@@ -124,48 +112,24 @@
     store.urls[kind] = url;
     store.debug[`auto:${kind}:${url}`] = { count: list.length, at: Date.now() };
     store[kind] = mergeById(store[kind], list, kind);
-    window.dispatchEvent(new CustomEvent("mesh-helper-api-updated", { detail: { kind, source: "class-auto-loader", added: list.length, count: store[kind].length, url, at: Date.now() } }));
+    window.dispatchEvent(new CustomEvent("mesh-helper-api-updated", {
+      detail: { kind, source: "class-auto-loader", added: list.length, count: store[kind].length, url, at: Date.now() }
+    }));
   }
 
-  function syntheticStudentProfiles(journals) {
+  function storeSyntheticStudents(journals) {
     const byId = new Map();
-    (journals || []).forEach((journal) => {
+    journals.forEach((journal) => {
       getStudentIds(journal).forEach((id) => {
         byId.set(String(id), { id, student_profile_id: id, source: "groups.student_ids", class_unit_id: getClassUnitId(journal), name: `Ученик ${id}` });
       });
     });
-    return [...byId.values()];
-  }
-
-  function storeSyntheticStudents(journals) {
-    const list = syntheticStudentProfiles(journals);
-    if (!list.length) return 0;
-    storeList("studentProfiles", "groups.student_ids", { source: "groups.student_ids", items: list }, list);
+    const list = [...byId.values()];
+    if (list.length) storeList("studentProfiles", "groups.student_ids", { source: "groups.student_ids", items: list }, list);
     return list.length;
   }
 
-  async function tryUrls(kind, urls, onProgress) {
-    let total = 0;
-    let used = 0;
-    let lastError = "";
-    for (const url of urls) {
-      try {
-        onProgress?.({ kind, status: "loading", url });
-        const { payload, list } = await fetchList(url);
-        storeList(kind, url, payload, list);
-        used += 1;
-        total += list.length;
-        onProgress?.({ kind, status: "ok", url, count: list.length });
-        if (list.length) break;
-      } catch (error) {
-        lastError = String(error?.message || error);
-        onProgress?.({ kind, status: "skip", url, error: lastError });
-      }
-    }
-    return { ok: total > 0 || used > 0, count: total, error: lastError };
-  }
-
-  function profileUrls(journals) {
+  async function loadProfiles(journals, onProgress) {
     const first = journals[0] || {};
     const academicYearId = getAcademicYearId(first);
     const classUnitIds = unique(journals.map(getClassUnitId));
@@ -176,59 +140,65 @@
     classUnitIds.forEach((classUnitId) => urls.push(`${API_BASE}/student_profiles?${query({ ...base, class_unit_id: classUnitId })}`));
     if (studentIds.length) urls.push(`${API_BASE}/student_profiles?${query({ ...base, ids: studentIds }, "repeat")}`);
     if (studentIds.length) urls.push(`${API_BASE}/student_profiles?${query({ ...base, ids: studentIds }, "comma")}`);
-    return unique(urls);
+
+    let total = 0;
+    for (const url of unique(urls)) {
+      try {
+        onProgress?.({ kind: "studentProfiles", status: "loading", url });
+        const payload = await fetchJson(url);
+        const list = asArray(payload);
+        storeList("studentProfiles", url, payload, list);
+        total += list.length;
+        onProgress?.({ kind: "studentProfiles", status: "ok", url, count: list.length });
+        if (list.length) break;
+      } catch (error) {
+        onProgress?.({ kind: "studentProfiles", status: "skip", url, error: String(error?.message || error) });
+      }
+    }
+    return total;
   }
 
-  function journalDataUrls(journal, kind) {
+  async function loadMarksForJournal(journal, onProgress) {
     const academicYearId = getAcademicYearId(journal);
     const journalId = getJournalId(journal);
     const subjectId = getSubjectId(journal);
-    const base = { academic_year_id: academicYearId, page: 1, per_page: 1000 };
-
-    if (kind === "marks") return unique([
-      `${API_BASE}/marks?${query({ ...base, group_ids: [journalId] }, "repeat")}`,
-      `${API_BASE}/marks?${query({ ...base, group_ids: [journalId] }, "comma")}`
+    const urls = unique([
+      `${API_BASE}/marks?${query({ academic_year_id: academicYearId, page: 1, per_page: 1000, group_ids: [journalId] }, "repeat")}`,
+      `${API_BASE}/marks?${query({ academic_year_id: academicYearId, page: 1, per_page: 1000, group_ids: [journalId] }, "comma")}`
     ]);
 
-    if (kind === "attendances") return unique([
-      `${API_BASE}/attendances?${query({ ...base, group_ids: [journalId] }, "repeat")}`,
-      `${API_BASE}/attendances?${query({ ...base, group_ids: [journalId] }, "comma")}`
-    ]);
-
-    if (kind === "averageMarks") return unique([
-      subjectId ? `${API_BASE}/average_marks_overall?${query({ ...base, subject_ids: [subjectId] }, "repeat")}` : "",
-      subjectId ? `${API_BASE}/average_marks_overall?${query({ ...base, subject_ids: [subjectId] }, "comma")}` : "",
-      `${API_BASE}/average_marks_overall?${query({ ...base, group_ids: [journalId] }, "repeat")}`
-    ]);
-
-    return [];
+    for (const url of urls) {
+      try {
+        onProgress?.({ kind: "marks", status: "loading", journal, url });
+        const payload = await fetchJson(url);
+        const list = asArray(payload).map((mark) => ({
+          ...mark,
+          group_id: mark?.group_id || mark?.groupId || journalId,
+          journal_id: mark?.journal_id || mark?.journalId || journalId,
+          subject_id: mark?.subject_id || mark?.subjectId || subjectId
+        }));
+        storeList("marks", url, payload, list);
+        onProgress?.({ kind: "marks", status: "ok", journal, url, count: list.length });
+        return list.length;
+      } catch (error) {
+        onProgress?.({ kind: "marks", status: "skip", journal, url, error: String(error?.message || error) });
+      }
+    }
+    return 0;
   }
 
   async function loadJournals(journals = [], onProgress) {
     const list = (Array.isArray(journals) ? journals : []).filter((journal) => getJournalId(journal));
-    const state = { total: list.length, done: 0, ok: 0, failed: 0, loaded: { studentProfiles: 0, marks: 0, averageMarks: 0, attendances: 0, syntheticStudents: 0 } };
+    const state = { total: list.length, done: 0, ok: 0, failed: 0, loaded: { studentProfiles: 0, marks: 0, syntheticStudents: 0 } };
 
     state.loaded.syntheticStudents = storeSyntheticStudents(list);
-
-    const profiles = await tryUrls("studentProfiles", profileUrls(list), (event) => onProgress?.({ ...event, state: { ...state, loaded: { ...state.loaded } } }));
-    state.loaded.studentProfiles += profiles.count;
-    if (profiles.count) state.ok += 1;
+    state.loaded.studentProfiles = await loadProfiles(list, (event) => onProgress?.({ ...event, state: { ...state, loaded: { ...state.loaded } } }));
 
     for (const journal of list) {
-      let journalOk = 0;
-      const marks = await tryUrls("marks", journalDataUrls(journal, "marks"), (event) => onProgress?.({ ...event, journal, state: { ...state, loaded: { ...state.loaded } } }));
-      state.loaded.marks += marks.count;
-      if (marks.count) journalOk += 1;
-
-      const avg = await tryUrls("averageMarks", journalDataUrls(journal, "averageMarks"), (event) => onProgress?.({ ...event, journal, state: { ...state, loaded: { ...state.loaded } } }));
-      state.loaded.averageMarks += avg.count;
-      if (avg.count) journalOk += 1;
-
-      const attendances = await tryUrls("attendances", journalDataUrls(journal, "attendances"), (event) => onProgress?.({ ...event, journal, state: { ...state, loaded: { ...state.loaded } } }));
-      state.loaded.attendances += attendances.count;
-
+      const count = await loadMarksForJournal(journal, (event) => onProgress?.({ ...event, state: { ...state, loaded: { ...state.loaded } } }));
+      state.loaded.marks += count;
       state.done += 1;
-      if (journalOk) state.ok += 1;
+      if (count) state.ok += 1;
       else state.failed += 1;
       onProgress?.({ journal, status: "journal-done", state: { ...state, loaded: { ...state.loaded } } });
       await new Promise((resolve) => setTimeout(resolve, 120));
@@ -243,13 +213,12 @@
   }
 
   function candidateUrls(journal) {
+    const academicYearId = getAcademicYearId(journal);
+    const journalId = getJournalId(journal);
     return [
-      ...profileUrls([journal]).map((url) => ({ kind: "studentProfiles", url })),
-      ...journalDataUrls(journal, "marks").map((url) => ({ kind: "marks", url })),
-      ...journalDataUrls(journal, "averageMarks").map((url) => ({ kind: "averageMarks", url })),
-      ...journalDataUrls(journal, "attendances").map((url) => ({ kind: "attendances", url }))
+      { kind: "marks", url: `${API_BASE}/marks?${query({ academic_year_id: academicYearId, page: 1, per_page: 1000, group_ids: [journalId] }, "repeat")}` }
     ];
   }
 
-  window.__MESH_HELPER_CLASS_AUTO_LOADER__ = { loadJournals, loadJournal, candidateUrls, syntheticStudentProfiles };
+  window.__MESH_HELPER_CLASS_AUTO_LOADER__ = { loadJournals, loadJournal, candidateUrls };
 })();
