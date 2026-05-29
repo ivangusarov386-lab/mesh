@@ -9,7 +9,6 @@
   function parseDate(value) {
     if (!value) return null;
     if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
-
     const text = String(value).trim();
     const ru = text.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
     if (ru) {
@@ -17,7 +16,6 @@
       const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(min));
       return Number.isNaN(date.getTime()) ? null : date;
     }
-
     const iso = new Date(text);
     return Number.isNaN(iso.getTime()) ? null : iso;
   }
@@ -39,15 +37,27 @@
     return source?.id || source?.period_id || source?.periodId || source?.attestation_period_id || source?.attestationPeriodId || null;
   }
 
+  function autoCurrentPeriod(now = new Date()) {
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    if (m >= 8 && m <= 10) return { id: null, title: "Текущий период (сентябрь-ноябрь)", start: new Date(y, 8, 1), end: new Date(y, 10, 30, 23, 59, 59), auto: true };
+    if (m === 11 || m <= 1) {
+      const startYear = m === 11 ? y : y - 1;
+      return { id: null, title: "Текущий период (декабрь-февраль)", start: new Date(startYear, 11, 1), end: new Date(startYear + 1, 1, 28, 23, 59, 59), auto: true };
+    }
+    if (m >= 2 && m <= 5) return { id: null, title: "Текущий период (март-июнь)", start: new Date(y, 2, 1), end: new Date(y, 5, 30, 23, 59, 59), auto: true };
+    return { id: null, title: "Текущий период (авто)", start: new Date(y, 8, 1), end: new Date(y, 11, 31, 23, 59, 59), auto: true };
+  }
+
   function resolveCurrentPeriod(periods = [], now = new Date()) {
     const list = Array.isArray(periods) ? periods : [];
     const normalized = list
       .map((period) => ({ raw: period, id: getPeriodId(period), title: getPeriodTitle(period), start: getPeriodStart(period), end: getPeriodEnd(period) }))
-      .filter((period) => period.start || period.end || period.id);
-
+      .filter((period) => period.start || period.end);
     const active = normalized.find((period) => (!period.start || now >= period.start) && (!period.end || now <= period.end));
     if (active) return active;
-    return normalized.filter((period) => period.start && period.start <= now).sort((a, b) => b.start - a.start)[0] || normalized[0] || null;
+    const previous = normalized.filter((period) => period.start && period.start <= now).sort((a, b) => b.start - a.start)[0];
+    return previous || autoCurrentPeriod(now);
   }
 
   function isMarkLike(value) {
@@ -57,14 +67,7 @@
 
   function hasProfileNameFields(value) {
     const source = value?.student_profile || value?.studentProfile || value?.student || value?.person || value?.profile || value?.user || value || {};
-    return Boolean(
-      source?.short_name || source?.shortName || source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName ||
-      source?.last_name || source?.lastName || source?.first_name || source?.firstName || source?.middle_name || source?.middleName ||
-      source?.lastname || source?.firstname || source?.middlename || source?.surname || source?.name ||
-      value?.short_name || value?.shortName || value?.fio || value?.full_name || value?.fullName || value?.student_name || value?.studentName || value?.display_name || value?.displayName ||
-      value?.last_name || value?.lastName || value?.first_name || value?.firstName || value?.middle_name || value?.middleName ||
-      value?.lastname || value?.firstname || value?.middlename || value?.surname || value?.name
-    );
+    return Boolean(source?.short_name || source?.shortName || source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName || source?.last_name || source?.lastName || source?.first_name || source?.firstName || source?.middle_name || source?.middleName || source?.lastname || source?.firstname || source?.middlename || source?.surname || source?.name || value?.short_name || value?.shortName || value?.fio || value?.full_name || value?.fullName || value?.student_name || value?.studentName || value?.display_name || value?.displayName || value?.last_name || value?.lastName || value?.first_name || value?.firstName || value?.middle_name || value?.middleName || value?.lastname || value?.firstname || value?.middlename || value?.surname || value?.name);
   }
 
   function normalizeId(id) {
@@ -94,20 +97,8 @@
   function getStudentName(profile) {
     const source = profile?.student_profile || profile?.studentProfile || profile?.student || profile?.person || profile?.profile || profile?.user || profile || {};
     const person = profile?.person || source?.person || profile?.user || source?.user || {};
-
-    const fullFromParts = nameFromParts(
-      source?.last_name || source?.lastName || source?.lastname || source?.surname || profile?.last_name || profile?.lastName || profile?.lastname || profile?.surname || person?.last_name || person?.lastName || person?.lastname || person?.surname,
-      source?.first_name || source?.firstName || source?.firstname || profile?.first_name || profile?.firstName || profile?.firstname || person?.first_name || person?.firstName || person?.firstname,
-      source?.middle_name || source?.middleName || source?.middlename || profile?.middle_name || profile?.middleName || profile?.middlename || person?.middle_name || person?.middleName || person?.middlename
-    );
-
-    return safeNameCandidate(
-      source?.short_name || source?.shortName || profile?.short_name || profile?.shortName || person?.short_name || person?.shortName ||
-      source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName ||
-      profile?.fio || profile?.full_name || profile?.fullName || profile?.student_name || profile?.studentName || profile?.display_name || profile?.displayName ||
-      person?.fio || person?.full_name || person?.fullName || person?.display_name || person?.displayName ||
-      fullFromParts || source?.name || profile?.name || person?.name || "Без ФИО"
-    ) || "Без ФИО";
+    const fullFromParts = nameFromParts(source?.last_name || source?.lastName || source?.lastname || source?.surname || profile?.last_name || profile?.lastName || profile?.lastname || profile?.surname || person?.last_name || person?.lastName || person?.lastname || person?.surname, source?.first_name || source?.firstName || source?.firstname || profile?.first_name || profile?.firstName || profile?.firstname || person?.first_name || person?.firstName || person?.firstname, source?.middle_name || source?.middleName || source?.middlename || profile?.middle_name || profile?.middleName || profile?.middlename || person?.middle_name || person?.middleName || person?.middlename);
+    return safeNameCandidate(source?.short_name || source?.shortName || profile?.short_name || profile?.shortName || person?.short_name || person?.shortName || source?.fio || source?.full_name || source?.fullName || source?.student_name || source?.studentName || source?.display_name || source?.displayName || profile?.fio || profile?.full_name || profile?.fullName || profile?.student_name || profile?.studentName || profile?.display_name || profile?.displayName || person?.fio || person?.full_name || person?.fullName || person?.display_name || person?.displayName || fullFromParts || source?.name || profile?.name || person?.name || "Без ФИО") || "Без ФИО";
   }
 
   function getJournalId(value) {
@@ -177,16 +168,24 @@
     return String(value || "").toLowerCase().includes("н");
   }
 
+  function getMarkDate(item) {
+    return parseDate(item?.date || item?.mark_date || item?.lesson_date || item?.created_at || item?.updated_at || item?.lesson?.date);
+  }
+
+  function periodHasRealBounds(period) {
+    return Boolean(period?.start || period?.end);
+  }
+
   function isInPeriod(item, period) {
     if (!period) return true;
-
+    const hasBounds = periodHasRealBounds(period);
     const periodId = period?.id ? String(period.id) : "";
     const itemPeriodId = getMarkPeriodId(item);
-    if (periodId && itemPeriodId) return String(itemPeriodId) === periodId;
-
-    const date = parseDate(item?.date || item?.mark_date || item?.lesson_date || item?.created_at || item?.updated_at || item?.lesson?.date);
+    if (hasBounds && periodId && itemPeriodId) return String(itemPeriodId) === periodId;
+    const date = getMarkDate(item);
     if (!date) return true;
-    return (!period.start || date >= period.start) && (!period.end || date <= period.end);
+    if (hasBounds) return (!period.start || date >= period.start) && (!period.end || date <= period.end);
+    return true;
   }
 
   function possibleFinal(avg) {
@@ -208,7 +207,6 @@
 
   function buildStudentsMap({ studentProfiles = [], marks = [], averageMarks = [] } = {}) {
     const students = new Map();
-
     studentProfiles.forEach((profile) => {
       const id = getStudentId(profile);
       if (!id) return;
@@ -222,7 +220,6 @@
       }
       students.set(key, next);
     });
-
     marks.forEach((mark) => {
       const id = getStudentId(mark);
       if (!id) return;
@@ -233,7 +230,6 @@
       if (student.fio === "Без ФИО" && markName !== "Без ФИО") student.fio = markName;
       student.marks.push(mark);
     });
-
     averageMarks.forEach((avg) => {
       const id = getStudentId(avg);
       if (!id) return;
@@ -244,7 +240,6 @@
       if (student.fio === "Без ФИО" && avgName !== "Без ФИО") student.fio = avgName;
       student.average = avg;
     });
-
     return [...students.values()].sort((a, b) => a.fio.localeCompare(b.fio, "ru"));
   }
 
@@ -253,7 +248,7 @@
     const allFinals = [...(Array.isArray(finalMarks) ? finalMarks : []), ...(Array.isArray(profileFinalMarks) ? profileFinalMarks : [])];
     const items = allFinals.filter((item) => String(getStudentId(item) || "") === sid).filter((item) => sameJournal(item, journal)).filter((item) => sameSubject(item, journal));
     const periodId = period?.id ? String(period.id) : "";
-    const current = items.find((item) => periodId && String(getFinalPeriodId(item) || "") === periodId) || items.find((item) => getFinalKind(item) === "period");
+    const current = items.find((item) => periodHasRealBounds(period) && periodId && String(getFinalPeriodId(item) || "") === periodId) || items.find((item) => getFinalKind(item) === "period");
     const pa = items.find((item) => getFinalKind(item) === "pa");
     const year = items.find((item) => getFinalKind(item) === "year");
     return { current: getFinalValue(current), pa: getFinalValue(pa), year: getFinalValue(year), raw: items };
@@ -261,7 +256,10 @@
 
   function buildCurrentPeriodRows({ students = [], period = null, finalMarks = [], journal = null } = {}) {
     return students.filter((student) => studentBelongsToJournal(student, journal)).map((student) => {
-      const periodMarks = (student.marks || []).filter((mark) => sameJournal(mark, journal)).filter((mark) => sameSubject(mark, journal)).filter((mark) => isInPeriod(mark, period));
+      let periodMarks = (student.marks || []).filter((mark) => sameJournal(mark, journal)).filter((mark) => sameSubject(mark, journal)).filter((mark) => isInPeriod(mark, period));
+      if (!periodMarks.length && period) {
+        periodMarks = (student.marks || []).filter((mark) => sameJournal(mark, journal)).filter((mark) => sameSubject(mark, journal));
+      }
       const grades = periodMarks.map(getMarkValue).filter(isGrade).map(Number);
       const absences = periodMarks.map(getMarkValue).filter(isAbsence).length;
       const lessonsFact = periodMarks.length;
