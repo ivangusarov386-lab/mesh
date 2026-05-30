@@ -113,7 +113,26 @@
     return "raw";
   }
 
+  function firstId(...values) {
+    for (const value of values) {
+      if (value !== undefined && value !== null && value !== "") return value;
+    }
+    return "";
+  }
+
   function stableKey(item, index, prefix) {
+    const isAverage = String(prefix || "").includes("averageMarks");
+    if (isAverage) {
+      return String([
+        "avg",
+        firstId(item?.student_profile, item?.student_profile_id, item?.studentProfileId, item?.profile_id, item?.student?.id, item?.student_profile?.id, item?.id),
+        firstId(item?.subject_id, item?.subjectId, item?.subject?.id),
+        firstId(item?.group_id, item?.groupId, item?.journal_id, item?.journalId, item?.education_group_id, item?.educationGroupId),
+        item?.period_id || item?.periodId || item?.attestation_period_id || item?.attestationPeriodId || "period",
+        index
+      ].join(":"));
+    }
+
     return String(
       item?.id || item?.mark_id || item?.markId ||
       item?.student_profile_id || item?.studentProfileId ||
@@ -136,7 +155,7 @@
       map.set(stableKey(item, index, `old-${kind}`), item);
     });
     (Array.isArray(newList) ? newList : []).forEach((item, index) => {
-      const key = stableKey(item, index, `new-${kind}-${Date.now()}`);
+      const key = stableKey(item, index, `new-${kind}`);
       const old = map.get(key);
       if (old && kind === "studentProfiles" && isSyntheticProfile(old) && !isSyntheticProfile(item)) {
         map.set(key, item);
@@ -224,31 +243,16 @@
 
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
-
     const data = event.data;
     if (!data || data.source !== SOURCE) return;
 
-    try {
-      if (data.type === "api-response") {
-        storeApiResponse(data.url, data.payload, { type: data.type, url: data.url, at: data.at });
-        return;
-      }
-
-      if (data.type !== "marks-response") {
-        if (data.type === "marks-mutated") {
-          console.log("[МЭШ помощник][bridge] изменение marks, жду refresh");
-        }
-        return;
-      }
-
-      const marks = extractMarks(data.payload);
-      if (!Array.isArray(marks)) return;
-      publishMarks(marks, { type: data.type, url: data.url, at: data.at });
-    } catch (error) {
-      console.warn("[МЭШ помощник][bridge] parse error", error);
+    if (data.type === "marks-response") publishMarks(extractMarks(data.payload), { url: data.url, at: data.at });
+    if (data.type === "api-response") storeApiResponse(data.url, data.payload, { url: data.url, at: data.at });
+    if (data.type === "marks-mutated") {
+      console.log("[МЭШ помощник][bridge] изменение marks, жду refresh", data.url);
+      setTimeout(() => window.dispatchEvent(new CustomEvent("mesh-helper-marks-mutation", { detail: data })), 250);
     }
   });
 
-  ensureApiStore();
   injectHook();
 })();
