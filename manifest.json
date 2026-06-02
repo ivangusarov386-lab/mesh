@@ -42,6 +42,7 @@
         "src/final-summary-guard.js",
         "src/selection-export.js",
         "src/class-data.js",
+        "src/class-average-override.js",
         "src/class-auto-loader.js",
         "src/class-workbook.js",
         "src/class-summary-sheet.js",
