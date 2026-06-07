@@ -44,6 +44,7 @@
         "src/class-data.js",
         "src/class-auto-loader.js",
         "src/class-api-loader-v2.js",
+        "src/class-api-export-bridge.js",
         "src/class-workbook.js",
         "src/class-summary-sheet.js",
         "src/class-subject-sheet.js",
