@@ -153,33 +153,56 @@
     return s;
   }
 
+  function makeStudentProfilesUrl({ academicYearId, journal, page = 1, perPage = 150 }) {
+    return `${API_BASE}/student_profiles?${query({
+      academic_year_id: academicYearId,
+      class_unit_ids: [journal.classUnitId],
+      group_ids: [journal.journalId],
+      with_groups: true,
+      with_home_based_periods: true,
+      with_deleted: false,
+      with_final_marks: true,
+      with_archived_groups: false,
+      with_transferred: false,
+      per_page: perPage,
+      page
+    }, "repeat")}`;
+  }
+
   async function loadStudentProfiles(journals, options = {}) {
     const allGroups = journals.map((j) => j.raw).filter(Boolean);
     const academicYearId = options.academicYearId || getAcademicYearId(allGroups);
-    const studentIds = unique(journals.flatMap((j) => j.studentIds || []));
-    const classUnitIds = unique(journals.map((j) => j.classUnitId));
-    const urls = [];
+    const result = [];
+    const seen = new Set();
+    const profilePages = options.profilePages || 5;
+    const profilePerPage = options.profilePerPage || 150;
 
-    if (studentIds.length) {
-      urls.push(`${API_BASE}/student_profiles?${query({ academic_year_id: academicYearId, ids: studentIds, with_final_marks: true, with_groups: true, with_archived_groups: false, with_transferred: false, per_page: 1000, page: 1 }, "repeat")}`);
-      urls.push(`${API_BASE}/student_profiles?${query({ academic_year_id: academicYearId, ids: studentIds, with_final_marks: true, with_groups: true, with_archived_groups: false, with_transferred: false, per_page: 1000, page: 1 }, "comma")}`);
-    }
+    for (const journal of journals) {
+      if (!journal.journalId || !journal.classUnitId) continue;
 
-    classUnitIds.forEach((classUnitId) => {
-      urls.push(`${API_BASE}/student_profiles?${query({ academic_year_id: academicYearId, class_unit_id: classUnitId, with_final_marks: true, with_groups: true, with_archived_groups: false, with_transferred: false, per_page: 150, page: 1 })}`);
-    });
+      for (let page = 1; page <= profilePages; page += 1) {
+        const url = makeStudentProfilesUrl({ academicYearId, journal, page, perPage: profilePerPage });
+        try {
+          const payload = await fetchJson(url);
+          const list = toArray(payload);
+          remember("studentProfiles", url, list);
 
-    for (const url of unique(urls)) {
-      try {
-        const payload = await fetchJson(url);
-        const list = toArray(payload);
-        remember("studentProfiles", url, list);
-        if (list.length) return list;
-      } catch (error) {
-        rememberError("studentProfiles", url, error);
+          list.forEach((profile, index) => {
+            const key = profileKey(profile, index);
+            if (seen.has(key)) return;
+            seen.add(key);
+            result.push(profile);
+          });
+
+          if (!list.length || list.length < profilePerPage) break;
+        } catch (error) {
+          rememberError("studentProfiles", url, error);
+          break;
+        }
       }
     }
-    return [];
+
+    return result;
   }
 
   function makeMarksUrl(journal, page, options = {}) {
@@ -254,6 +277,7 @@
     loadStudentProfiles,
     loadMarksForJournal,
     makeMarksUrl,
+    makeStudentProfilesUrl,
     store
   };
 })();
