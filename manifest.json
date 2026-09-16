@@ -39,7 +39,8 @@
         "src/final-control.js",
         "src/highlight-toggle.js",
         "src/clean-panel.js",
-        "src/final-summary-guard.js"
+        "src/final-summary-guard.js",
+        "src/class-auto-loader.js"
       ],
       "css": [
         "src/panel.css"
