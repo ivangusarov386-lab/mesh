@@ -27,7 +27,7 @@
 
   const STORAGE_KEY = "meshHelperClassBatch";
   const NAV_DELAY_MS = 900;
-  const MARKS_WAIT_TIMEOUT_MS = 7000;
+  const MARKS_WAIT_TIMEOUT_MS = 15000;
   const JOURNAL_LINK_SELECTOR = 'a[href*="/journal/grade/"]';
 
   function log(...args) {
