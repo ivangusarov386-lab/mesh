@@ -15,9 +15,12 @@
 //  и складывает пойманное в chrome.storage.local — она одна
 //  переживает полную перезагрузку страницы между журналами.
 //
-//  Управление вручную из консоли (на странице «Журналы класса»):
+//  Управление вручную из консоли (на странице «Журналы класса»,
+//  в контексте content script расширения, не "top" — см. вкладку
+//  «Консоль» → дропдаун контекста):
 //    window.__MESH_HELPER_CLASS_AUTO_LOADER__.startBatch()
 //    window.__MESH_HELPER_CLASS_AUTO_LOADER__.getResults().then(console.log)
+//    window.__MESH_HELPER_CLASS_AUTO_LOADER__.exportCsv()
 //    window.__MESH_HELPER_CLASS_AUTO_LOADER__.stopBatch()
 // ==========================================================
 
@@ -130,6 +133,104 @@
     return own.length ? own : marks;
   }
 
+  function getProfileId(profile) {
+    const id = profile?.id ?? profile?.student_profile_id ?? profile?.studentProfileId;
+    return id !== undefined && id !== null ? String(id) : null;
+  }
+
+  function getProfileName(profile) {
+    const short = profile?.short_name || profile?.shortName;
+    if (short) return String(short).trim();
+    const parts = [profile?.last_name || profile?.lastName, profile?.first_name || profile?.firstName, profile?.middle_name || profile?.middleName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    return parts || `Ученик ${profile?.id ?? ""}`.trim();
+  }
+
+  function captureStudentProfiles() {
+    const api = window.__MESH_HELPER_API__ || {};
+    return Array.isArray(api.studentProfiles) ? api.studentProfiles : [];
+  }
+
+  function mergeStudentProfiles(batch, profiles) {
+    if (!batch.studentProfiles) batch.studentProfiles = {};
+    profiles.forEach((profile) => {
+      const id = getProfileId(profile);
+      if (!id || batch.studentProfiles[id]) return;
+      batch.studentProfiles[id] = { id, name: getProfileName(profile) };
+    });
+  }
+
+  function getStudentIdFromMark(mark) {
+    const id = mark?.student_profile_id ?? mark?.studentProfileId ?? mark?.student_profile?.id ?? mark?.student?.id;
+    return id !== undefined && id !== null ? String(id) : null;
+  }
+
+  function getMarkValue(mark) {
+    return String(mark?.name || mark?.value || mark?.mark || mark?.mark_value || "").trim();
+  }
+
+  function isGrade(value) {
+    return /^[1-5]$/.test(value);
+  }
+
+  function averageForStudent(marks, studentId) {
+    const grades = marks
+      .filter((mark) => getStudentIdFromMark(mark) === studentId)
+      .map(getMarkValue)
+      .filter(isGrade)
+      .map(Number);
+    if (!grades.length) return { count: 0, avg: null };
+    const avg = Math.round((grades.reduce((sum, grade) => sum + grade, 0) / grades.length) * 100) / 100;
+    return { count: grades.length, avg };
+  }
+
+  function csvValue(value) {
+    return `"${String(value ?? "").replace(/"/g, '""')}"`;
+  }
+
+  async function exportCsv() {
+    const batch = await getStorage(STORAGE_KEY);
+    if (!batch || batch.status !== "done") {
+      log("Выгрузка ещё не завершена (или не запускалась) — сначала startBatch().");
+      return { ok: false, reason: "not-done" };
+    }
+
+    const students = Object.values(batch.studentProfiles || {}).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    if (!students.length) {
+      log("Нет данных об учениках — student_profiles не были пойманы ни на одном журнале.");
+      return { ok: false, reason: "no-students" };
+    }
+
+    const subjects = batch.queue.map((item) => ({ id: item.id, text: item.text }));
+    const headers = ["ФИО", ...subjects.map((subject) => subject.text)];
+    const rows = students.map((student) => {
+      const cells = subjects.map((subject) => {
+        const marks = batch.results[subject.id]?.marks || [];
+        const { count, avg } = averageForStudent(marks, student.id);
+        return count ? `${avg} (${count})` : "";
+      });
+      return [student.name, ...cells];
+    });
+
+    const csv = "﻿" + [headers, ...rows].map((row) => row.map(csvValue).join(";")).join("\n");
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `mesh_moy_klass_${date}.csv`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+    log(`Экспортировано: ${students.length} учеников × ${subjects.length} предметов → ${filename}`);
+    return { ok: true, students: students.length, subjects: subjects.length };
+  }
+
   async function resumeIfRunning() {
     const batch = await getStorage(STORAGE_KEY);
     if (!batch || batch.status !== "running") return;
@@ -143,6 +244,7 @@
 
     const found = await waitForMarks();
     const marks = found ? captureMarksForJournal(journalId) : [];
+    mergeStudentProfiles(batch, captureStudentProfiles());
 
     item.status = found ? "done" : "empty";
     batch.results[journalId] = { text: item.text, count: marks.length, marks, capturedAt: Date.now() };
@@ -166,7 +268,7 @@
     }, NAV_DELAY_MS);
   }
 
-  window.__MESH_HELPER_CLASS_AUTO_LOADER__ = { startBatch, stopBatch, getResults, collectJournalsFromList };
+  window.__MESH_HELPER_CLASS_AUTO_LOADER__ = { startBatch, stopBatch, getResults, exportCsv, collectJournalsFromList };
 
   resumeIfRunning();
 })();
