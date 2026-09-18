@@ -46,7 +46,14 @@
   }
 
   function setStorage(key, value) {
-    return new Promise((resolve) => chrome.storage.local.set({ [key]: value }, resolve));
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ [key]: value }, () => {
+        if (chrome.runtime.lastError) {
+          console.error("[МЭШ помощник][class-auto-loader] ОШИБКА ЗАПИСИ в storage:", chrome.runtime.lastError.message);
+        }
+        resolve();
+      });
+    });
   }
 
   function currentJournalIdFromPath() {
