@@ -1,6 +1,5 @@
 (() => {
   const SOURCE = "mesh-helper-marks-hook";
-  const API_PREFIX = "/api/ej/core/teacher/v1/";
   const MARKS_LIST_PART = "/api/ej/core/teacher/v1/marks?";
   const MARKS_ANY_PART = "/api/ej/core/teacher/v1/marks";
   const EXTRA_PARTS = [
@@ -36,15 +35,7 @@
 
   function isExtraApiUrl(url) {
     const value = String(url || "");
-    const lower = value.toLowerCase();
-
-    if (value.includes(API_PREFIX)) {
-      return EXTRA_PARTS.some((part) => value.includes(API_PREFIX + part.replace(/^\//, "")) || value.includes(part));
-    }
-
-    return [
-      /(^|\/)groups\?/, /(^|\/)student_profiles\?/, /(^|\/)average_marks_overall\?/, /(^|\/)average_marks_theme_overall\?/, /(^|\/)attestation_periods_schedules\?/, /(^|\/)attestation_periods_schedule\?/, /(^|\/)final_marks\?/
-    ].some((pattern) => pattern.test(lower));
+    return EXTRA_PARTS.some((part) => value.includes(part));
   }
 
   function isTargetUrl(url) {
