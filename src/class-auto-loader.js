@@ -123,6 +123,29 @@
     });
   }
 
+  function waitForStudentProfiles() {
+    const GRACE_MS = 1200;
+    const FALLBACK_MS = 4000;
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        window.removeEventListener("mesh-helper-api-updated", onUpdate);
+        resolve();
+      };
+      const onUpdate = (event) => {
+        if (event?.detail?.kind === "studentProfiles") setTimeout(finish, GRACE_MS);
+      };
+      window.addEventListener("mesh-helper-api-updated", onUpdate);
+      if (Array.isArray(window.__MESH_HELPER_API__?.studentProfiles) && window.__MESH_HELPER_API__.studentProfiles.length) {
+        setTimeout(finish, GRACE_MS);
+        return;
+      }
+      setTimeout(finish, FALLBACK_MS);
+    });
+  }
+
   function captureMarksForJournal(journalId) {
     const api = window.__MESH_HELPER_API__ || {};
     const marks = Array.isArray(api.marks) ? api.marks : [];
@@ -242,7 +265,7 @@
     item.status = "loading";
     await setStorage(STORAGE_KEY, batch);
 
-    const found = await waitForMarks();
+    const [found] = await Promise.all([waitForMarks(), waitForStudentProfiles()]);
     const marks = found ? captureMarksForJournal(journalId) : [];
     mergeStudentProfiles(batch, captureStudentProfiles());
 
