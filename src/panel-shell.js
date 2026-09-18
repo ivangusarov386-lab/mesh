@@ -138,6 +138,45 @@
     });
   }
 
+  function refreshClassExportLabel(panel) {
+    const btn = panel.querySelector("#mh-export-class");
+    const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
+    if (!btn || !loader) return;
+    loader.getResults().then((batch) => {
+      if (batch?.status === "done") btn.textContent = "Скачать весь класс (готово)";
+      else if (batch?.status === "running") btn.textContent = `Сбор класса... (${batch.currentIndex}/${batch.queue.length})`;
+      else btn.textContent = "Выгрузить весь класс (все предметы)";
+    });
+  }
+
+  function setupClassExport(panel) {
+    const btn = panel.querySelector("#mh-export-class");
+    if (btn && btn.dataset.ready !== "1") {
+      btn.dataset.ready = "1";
+      btn.addEventListener("click", async () => {
+        const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
+        if (!loader) {
+          alert("Модуль выгрузки класса не загружен. Обновите страницу и попробуйте снова.");
+          return;
+        }
+        const batch = await loader.getResults();
+        if (batch?.status === "done") {
+          loader.exportCsv();
+          return;
+        }
+        if (batch?.status === "running") {
+          alert("Сбор данных по классу уже идёт — дождитесь завершения, не переключайте вкладку.");
+          return;
+        }
+        const result = await loader.startBatch();
+        if (!result.ok) {
+          alert("Список журналов не найден на этой странице. Откройте «Журналы класса» и нажмите ещё раз.");
+        }
+      });
+    }
+    refreshClassExportLabel(panel);
+  }
+
   function setupDrag(panel) {
     if (panel.dataset.mhDragReady === "1") return;
     panel.dataset.mhDragReady = "1";
@@ -192,7 +231,7 @@
             <label class="mh-toggle-row" for="mh-check-correct-finals"><input id="mh-check-correct-finals" type="checkbox"><span>Проверка итогов</span></label>
           </div>
         </div>
-        <div class="mh-section mh-results"><div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div><div class="mh-export-wrap"><button id="mh-export-toggle" class="mh-export-toggle" type="button" aria-expanded="false">Экспорт ▼</button><div class="mh-export-menu"><button id="mh-export-problems" class="mh-export" type="button">Выгрузить проблемных</button><button id="mh-export-all" class="mh-export" type="button">Выгрузить весь класс</button></div></div><div id="mh-list" class="mh-list"></div></div>`;
+        <div class="mh-section mh-results"><div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div><div class="mh-export-wrap"><button id="mh-export-toggle" class="mh-export-toggle" type="button" aria-expanded="false">Экспорт ▼</button><div class="mh-export-menu"><button id="mh-export-problems" class="mh-export" type="button">Выгрузить проблемных</button><button id="mh-export-all" class="mh-export" type="button">Выгрузить весь класс</button><button id="mh-export-class" class="mh-export" type="button">Выгрузить весь класс (все предметы)</button></div></div><div id="mh-list" class="mh-list"></div></div>`;
       document.body.appendChild(panel);
     }
     ensureTitle(panel);
@@ -200,6 +239,7 @@
     setupCollapse(panel);
     setupChecksMenu(panel);
     setupExportMenu(panel);
+    setupClassExport(panel);
     setupDrag(panel);
     const minInput = panel.querySelector("#mh-min");
     const save = panel.querySelector("#mh-save");
