@@ -104,3 +104,32 @@
   color: #64748b;
   font-size: 11px;
 }
+
+.mh-class-export-btn:disabled {
+  opacity: .65;
+  cursor: default;
+}
+
+.mh-class-progress-track {
+  margin-top: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.mh-class-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #2563eb, #1d4ed8);
+  border-radius: 999px;
+  transition: width .3s ease;
+}
+
+.mh-class-progress-text {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-align: right;
+}

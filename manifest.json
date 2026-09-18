@@ -47,7 +47,8 @@
         "src/class-auto-loader.js"
       ],
       "css": [
-        "src/panel.css"
+        "src/panel.css",
+        "src/class-panel.css"
       ],
       "run_at": "document_idle"
     }

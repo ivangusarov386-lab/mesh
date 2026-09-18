@@ -138,25 +138,77 @@
     });
   }
 
+  function setClassProgress(panel, percent) {
+    const fill = panel.querySelector("#mh-class-progress-fill");
+    const text = panel.querySelector("#mh-class-progress-text");
+    if (fill) fill.style.width = `${percent}%`;
+    if (text) text.textContent = `${percent}%`;
+  }
+
+  function setClassStatus(panel, message, tone) {
+    const status = panel.querySelector("#mh-class-export-status");
+    if (!status) return;
+    status.textContent = message;
+    status.dataset.tone = tone;
+  }
+
   function refreshClassExportLabel(panel) {
     const btn = panel.querySelector("#mh-export-class");
     const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
     if (!btn || !loader) return;
     loader.getResults().then((batch) => {
-      if (batch?.status === "done") btn.textContent = "Скачать весь класс (готово)";
-      else if (batch?.status === "running") btn.textContent = `Сбор класса... (${batch.currentIndex}/${batch.queue.length})`;
-      else btn.textContent = "Выгрузить весь класс (все предметы)";
+      if (batch?.status === "done") {
+        btn.textContent = "Скачать Excel";
+        btn.disabled = false;
+        setClassProgress(panel, 100);
+        setClassStatus(panel, `Готово: собраны данные по ${batch.queue.length} предметам. Можно скачать файл.`, "ok");
+      } else if (batch?.status === "running") {
+        const percent = batch.queue.length ? Math.round((batch.currentIndex / batch.queue.length) * 100) : 0;
+        btn.textContent = "Идёт сбор...";
+        btn.disabled = true;
+        setClassProgress(panel, percent);
+        setClassStatus(panel, `Собрано ${batch.currentIndex} из ${batch.queue.length} предметов — идёт в фоновой вкладке, можно продолжать работать здесь.`, "muted");
+      } else {
+        btn.textContent = "Собрать все предметы";
+        btn.disabled = false;
+        setClassProgress(panel, 0);
+        setClassStatus(panel, "Соберите оценки, пропуски и итоги по всем предметам класса в один Excel-файл.", "muted");
+      }
+    });
+  }
+
+  function setupClassToggle(panel) {
+    const toggle = panel.querySelector("#mh-class-toggle");
+    const arrow = panel.querySelector(".mh-class-arrow");
+    if (!toggle || toggle.dataset.ready === "1") return;
+    toggle.dataset.ready = "1";
+    let open = localStorage.getItem("meshHelperClassOpen") === "1";
+    const apply = () => {
+      panel.classList.toggle("mh-class-open", open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      if (arrow) arrow.textContent = open ? "▲" : "▼";
+    };
+    apply();
+    toggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      open = !open;
+      localStorage.setItem("meshHelperClassOpen", open ? "1" : "0");
+      apply();
     });
   }
 
   function setupClassExport(panel) {
+    setupClassToggle(panel);
     const btn = panel.querySelector("#mh-export-class");
     if (btn && btn.dataset.ready !== "1") {
       btn.dataset.ready = "1";
-      btn.addEventListener("click", async () => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
         if (!loader) {
-          alert("Модуль выгрузки класса не загружен. Обновите страницу и попробуйте снова.");
+          setClassStatus(panel, "Модуль выгрузки класса не загружен. Обновите страницу и попробуйте снова.", "warn");
           return;
         }
         const batch = await loader.getResults();
@@ -164,15 +216,13 @@
           loader.exportWorkbook();
           return;
         }
-        if (batch?.status === "running") {
-          alert("Сбор данных по классу уже идёт в фоновой вкладке — можно продолжать работать здесь, дождитесь завершения.");
-          return;
-        }
+        if (batch?.status === "running") return;
         const result = await loader.startBatchInBackground();
         if (!result.ok) {
-          alert("Список журналов не найден на этой странице. Откройте «Журналы класса» и нажмите ещё раз.");
+          setClassStatus(panel, "Список журналов не найден на этой странице. Откройте «Журналы класса» и нажмите ещё раз.", "warn");
         } else {
-          alert("Сбор запущен в фоновой вкладке — можно продолжать работать здесь, она сама закроется по завершении.");
+          setClassStatus(panel, "Сбор запущен в фоновой вкладке — можно продолжать работать здесь, она сама закроется по завершении.", "muted");
+          refreshClassExportLabel(panel);
         }
       });
     }
@@ -233,7 +283,16 @@
             <label class="mh-toggle-row" for="mh-check-correct-finals"><input id="mh-check-correct-finals" type="checkbox"><span>Проверка итогов</span></label>
           </div>
         </div>
-        <div class="mh-section mh-results"><div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div><div class="mh-export-wrap"><button id="mh-export-toggle" class="mh-export-toggle" type="button" aria-expanded="false">Экспорт ▼</button><div class="mh-export-menu"><button id="mh-export-problems" class="mh-export" type="button">Выгрузить проблемных</button><button id="mh-export-all" class="mh-export" type="button">Выгрузить весь класс</button><button id="mh-export-class" class="mh-export" type="button">Выгрузить весь класс (все предметы)</button></div></div><div id="mh-list" class="mh-list"></div></div>`;
+        <div class="mh-section mh-results"><div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div><div class="mh-export-wrap"><button id="mh-export-toggle" class="mh-export-toggle" type="button" aria-expanded="false">Экспорт ▼</button><div class="mh-export-menu"><button id="mh-export-problems" class="mh-export" type="button">Выгрузить проблемных</button><button id="mh-export-all" class="mh-export" type="button">Выгрузить весь класс</button></div></div><div id="mh-list" class="mh-list"></div></div>
+        <div class="mh-section mh-class-export">
+          <div id="mh-class-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>Мой класс</span><span class="mh-class-arrow">▼</span></div>
+          <div class="mh-class-menu">
+            <button id="mh-export-class" class="mh-class-export-btn" type="button">Собрать все предметы</button>
+            <div class="mh-class-progress-track"><div id="mh-class-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>
+            <div id="mh-class-progress-text" class="mh-class-progress-text">0%</div>
+            <div id="mh-class-export-status" class="mh-class-status" data-tone="muted">Соберите оценки, пропуски и итоги по всем предметам класса в один Excel-файл.</div>
+          </div>
+        </div>`;
       document.body.appendChild(panel);
     }
     ensureTitle(panel);
