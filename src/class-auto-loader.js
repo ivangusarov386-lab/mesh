@@ -130,9 +130,9 @@
     });
   }
 
-  function waitForApiKind(kind) {
+  function waitForApiKind(kind, fallbackMs = 4000) {
     const GRACE_MS = 1200;
-    const FALLBACK_MS = 4000;
+    const FALLBACK_MS = fallbackMs;
     return new Promise((resolve) => {
       let done = false;
       const finish = () => {
@@ -407,7 +407,7 @@
     item.status = "loading";
     await setStorage(STORAGE_KEY, batch);
 
-    const [found] = await Promise.all([waitForMarks(), waitForApiKind("studentProfiles"), waitForApiKind("attendances"), waitForApiKind("schedule")]);
+    const [found] = await Promise.all([waitForMarks(), waitForApiKind("studentProfiles"), waitForApiKind("attendances"), waitForApiKind("schedule", 12000)]);
     const marks = found ? captureMarksForJournal(journalId) : [];
     const attendances = captureAttendances();
     const heldLessons = countHeldLessons();
