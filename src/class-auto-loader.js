@@ -130,7 +130,7 @@
     });
   }
 
-  function waitForStudentProfiles() {
+  function waitForApiKind(kind) {
     const GRACE_MS = 1200;
     const FALLBACK_MS = 4000;
     return new Promise((resolve) => {
@@ -142,10 +142,11 @@
         resolve();
       };
       const onUpdate = (event) => {
-        if (event?.detail?.kind === "studentProfiles") setTimeout(finish, GRACE_MS);
+        if (event?.detail?.kind === kind) setTimeout(finish, GRACE_MS);
       };
       window.addEventListener("mesh-helper-api-updated", onUpdate);
-      if (Array.isArray(window.__MESH_HELPER_API__?.studentProfiles) && window.__MESH_HELPER_API__.studentProfiles.length) {
+      const current = window.__MESH_HELPER_API__?.[kind];
+      if (Array.isArray(current) && current.length) {
         setTimeout(finish, GRACE_MS);
         return;
       }
@@ -161,6 +162,11 @@
       return groupId !== undefined && String(groupId) === String(journalId);
     });
     return own.length ? own : marks;
+  }
+
+  function captureAttendances() {
+    const api = window.__MESH_HELPER_API__ || {};
+    return Array.isArray(api.attendances) ? api.attendances : [];
   }
 
   function getProfileId(profile) {
@@ -205,8 +211,9 @@
     return /^[1-5]$/.test(value);
   }
 
-  function isAbsence(value) {
-    return String(value || "").trim().toLowerCase() === "н";
+  function getStudentIdFromAttendance(record) {
+    const id = record?.student_profile_id ?? record?.studentProfileId;
+    return id !== undefined && id !== null ? String(id) : null;
   }
 
   function averageForStudent(marks, studentId) {
@@ -220,12 +227,13 @@
     return { count: grades.length, avg };
   }
 
-  function attendanceForStudent(marks, studentId) {
-    const values = marks
+  function attendanceForStudent(marks, attendances, studentId) {
+    const gradeCount = marks
       .filter((mark) => getStudentIdFromMark(mark) === studentId)
-      .map(getMarkValue);
-    const absences = values.filter(isAbsence).length;
-    const total = values.filter((value) => isGrade(value) || isAbsence(value)).length;
+      .map(getMarkValue)
+      .filter(isGrade).length;
+    const absences = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId).length;
+    const total = gradeCount + absences;
     const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
     return { absences, total, percent };
   }
@@ -252,8 +260,9 @@
     const rows = students.map((student) => {
       const cells = subjects.map((subject) => {
         const marks = batch.results[subject.id]?.marks || [];
+        const attendances = batch.results[subject.id]?.attendances || [];
         const { count, avg } = averageForStudent(marks, student.id);
-        const { absences, percent } = attendanceForStudent(marks, student.id);
+        const { absences, percent } = attendanceForStudent(marks, attendances, student.id);
         const parts = [];
         if (count) parts.push(`${avg} (${count})`);
         if (absences) parts.push(`Н ${percent}%`);
@@ -292,7 +301,7 @@
     return marks
       .filter((mark) => getStudentIdFromMark(mark) === studentId)
       .map(getMarkValue)
-      .filter((value) => isGrade(value) || isAbsence(value))
+      .filter(isGrade)
       .join(", ");
   }
 
@@ -303,10 +312,11 @@
     let risk = false;
     subjects.forEach((subject) => {
       const marks = batch.results[subject.id]?.marks || [];
-      const values = marks.filter((mark) => getStudentIdFromMark(mark) === studentId).map(getMarkValue);
-      values.filter(isGrade).forEach((value) => allGrades.push(Number(value)));
-      const subAbsences = values.filter(isAbsence).length;
-      const subTotal = values.filter((value) => isGrade(value) || isAbsence(value)).length;
+      const attendances = batch.results[subject.id]?.attendances || [];
+      const gradeValues = marks.filter((mark) => getStudentIdFromMark(mark) === studentId).map(getMarkValue).filter(isGrade);
+      gradeValues.forEach((value) => allGrades.push(Number(value)));
+      const subAbsences = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId).length;
+      const subTotal = gradeValues.length + subAbsences;
       absences += subAbsences;
       total += subTotal;
       if (subTotal && Math.round((subAbsences / subTotal) * 1000) / 10 >= 50) risk = true;
@@ -340,10 +350,11 @@
 
     const subjectSheets = subjects.map((subject) => {
       const marks = batch.results[subject.id]?.marks || [];
+      const attendances = batch.results[subject.id]?.attendances || [];
       const rows = [workbook.row(SUBJECT_HEADER, () => "Header")];
       students.forEach((student, index) => {
         const { count, avg } = averageForStudent(marks, student.id);
-        const { absences, percent } = attendanceForStudent(marks, student.id);
+        const { absences, percent } = attendanceForStudent(marks, attendances, student.id);
         rows.push(workbook.row(
           [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", absences, `${percent}%`, count ? possibleFinal(avg) : ""],
           (value, colIndex) => (colIndex === 5 && percent >= 50 ? "BadAbsence" : "Default")
@@ -380,12 +391,13 @@
     item.status = "loading";
     await setStorage(STORAGE_KEY, batch);
 
-    const [found] = await Promise.all([waitForMarks(), waitForStudentProfiles()]);
+    const [found] = await Promise.all([waitForMarks(), waitForApiKind("studentProfiles"), waitForApiKind("attendances")]);
     const marks = found ? captureMarksForJournal(journalId) : [];
+    const attendances = captureAttendances();
     mergeStudentProfiles(batch, captureStudentProfiles());
 
     item.status = found ? "done" : "empty";
-    batch.results[journalId] = { text: item.text, count: marks.length, marks, capturedAt: Date.now() };
+    batch.results[journalId] = { text: item.text, count: marks.length, marks, attendances, capturedAt: Date.now() };
     log(`${item.text}: ${found ? `поймано записей: ${marks.length}` : "таймаут, оценок не поймано"}`);
 
     const nextIndex = batch.currentIndex + 1;
