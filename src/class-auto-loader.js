@@ -199,7 +199,7 @@
   }
 
   function isAbsence(value) {
-    return String(value || "").toLowerCase().includes("н");
+    return String(value || "").trim().toLowerCase() === "н";
   }
 
   function averageForStudent(marks, studentId) {
@@ -272,6 +272,96 @@
     return { ok: true, students: students.length, subjects: subjects.length };
   }
 
+  function possibleFinal(avg) {
+    const n = Number(avg);
+    if (!Number.isFinite(n)) return "";
+    if (n >= 4.6) return 5;
+    if (n >= 3.6) return 4;
+    if (n >= 2.6) return 3;
+    return 2;
+  }
+
+  function gradesTextForStudent(marks, studentId) {
+    return marks
+      .filter((mark) => getStudentIdFromMark(mark) === studentId)
+      .map(getMarkValue)
+      .filter((value) => isGrade(value) || isAbsence(value))
+      .join(", ");
+  }
+
+  function overallStatsForStudent(subjects, batch, studentId) {
+    const allGrades = [];
+    let absences = 0;
+    let total = 0;
+    let risk = false;
+    subjects.forEach((subject) => {
+      const marks = batch.results[subject.id]?.marks || [];
+      const values = marks.filter((mark) => getStudentIdFromMark(mark) === studentId).map(getMarkValue);
+      values.filter(isGrade).forEach((value) => allGrades.push(Number(value)));
+      const subAbsences = values.filter(isAbsence).length;
+      const subTotal = values.filter((value) => isGrade(value) || isAbsence(value)).length;
+      absences += subAbsences;
+      total += subTotal;
+      if (subTotal && Math.round((subAbsences / subTotal) * 1000) / 10 >= 50) risk = true;
+    });
+    const avg = allGrades.length ? Math.round((allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length) * 100) / 100 : null;
+    const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
+    return { avg, count: allGrades.length, absences, total, percent, risk };
+  }
+
+  async function exportWorkbook() {
+    const batch = await getStorage(STORAGE_KEY);
+    if (!batch || batch.status !== "done") {
+      log("Выгрузка ещё не завершена (или не запускалась) — сначала startBatch().");
+      return { ok: false, reason: "not-done" };
+    }
+
+    const workbook = window.__MESH_HELPER_CLASS_WORKBOOK__;
+    if (!workbook) {
+      log("Модуль class-workbook.js не загружен — обновите страницу.");
+      return { ok: false, reason: "no-workbook-module" };
+    }
+
+    const students = Object.values(batch.studentProfiles || {}).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    if (!students.length) {
+      log("Нет данных об учениках — student_profiles не были пойманы ни на одном журнале.");
+      return { ok: false, reason: "no-students" };
+    }
+
+    const subjects = batch.queue.map((item) => ({ id: item.id, text: item.text }));
+    const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Н по факту", "Н % по факту", "Расчётный итог"];
+
+    const subjectSheets = subjects.map((subject) => {
+      const marks = batch.results[subject.id]?.marks || [];
+      const rows = [workbook.row(SUBJECT_HEADER, () => "Header")];
+      students.forEach((student, index) => {
+        const { count, avg } = averageForStudent(marks, student.id);
+        const { absences, percent } = attendanceForStudent(marks, student.id);
+        rows.push(workbook.row(
+          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", absences, `${percent}%`, count ? possibleFinal(avg) : ""],
+          (value, colIndex) => (colIndex === 5 && percent >= 50 ? "BadAbsence" : "Default")
+        ));
+      });
+      return workbook.worksheet(subject.text, rows);
+    });
+
+    const svodRows = [workbook.row(["№", "ФИО", "Средний балл (все предметы)", "Оценок всего", "Н по факту", "Н % по факту", "Риск (Н ≥ 50%)"], () => "Header")];
+    students.forEach((student, index) => {
+      const stats = overallStatsForStudent(subjects, batch, student.id);
+      svodRows.push(workbook.row(
+        [index + 1, student.name, stats.avg ?? "", stats.count, stats.absences, `${stats.percent}%`, stats.risk ? "да" : ""],
+        (value, colIndex) => (colIndex === 6 && stats.risk ? "BadAbsence" : "Default")
+      ));
+    });
+    const svodSheet = workbook.worksheet("СВОД", svodRows);
+
+    const date = new Date().toISOString().slice(0, 10);
+    workbook.downloadWorkbook(`mesh_class_workbook_${date}.xlsx`, [svodSheet, ...subjectSheets]);
+
+    log(`Excel сформирован: ${students.length} учеников × ${subjects.length} предметов + СВОД.`);
+    return { ok: true, students: students.length, subjects: subjects.length };
+  }
+
   async function resumeIfRunning() {
     const batch = await getStorage(STORAGE_KEY);
     if (!batch || batch.status !== "running") return;
@@ -309,7 +399,7 @@
     }, NAV_DELAY_MS);
   }
 
-  window.__MESH_HELPER_CLASS_AUTO_LOADER__ = { startBatch, stopBatch, getResults, exportCsv, collectJournalsFromList };
+  window.__MESH_HELPER_CLASS_AUTO_LOADER__ = { startBatch, stopBatch, getResults, exportCsv, exportWorkbook, collectJournalsFromList };
 
   resumeIfRunning();
 })();

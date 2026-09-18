@@ -161,7 +161,7 @@
         }
         const batch = await loader.getResults();
         if (batch?.status === "done") {
-          loader.exportCsv();
+          loader.exportWorkbook();
           return;
         }
         if (batch?.status === "running") {

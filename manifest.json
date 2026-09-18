@@ -40,6 +40,7 @@
         "src/highlight-toggle.js",
         "src/clean-panel.js",
         "src/final-summary-guard.js",
+        "src/class-workbook.js",
         "src/class-auto-loader.js"
       ],
       "css": [
