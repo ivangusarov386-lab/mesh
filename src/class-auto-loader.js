@@ -169,6 +169,24 @@
     return Array.isArray(api.attendances) ? api.attendances : [];
   }
 
+  function isLessonHeld(record) {
+    if (record?.cancelled) return false;
+    const parts = Array.isArray(record?.date) ? record.date : null;
+    if (!parts || parts.length < 3) return false;
+    const [y, m, d] = parts;
+    const lessonDate = new Date(y, m - 1, d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    lessonDate.setHours(0, 0, 0, 0);
+    return lessonDate.getTime() <= today.getTime();
+  }
+
+  function countHeldLessons() {
+    const api = window.__MESH_HELPER_API__ || {};
+    const schedule = Array.isArray(api.schedule) ? api.schedule : [];
+    return schedule.filter(isLessonHeld).length;
+  }
+
   function getProfileId(profile) {
     const id = profile?.id ?? profile?.student_profile_id ?? profile?.studentProfileId;
     return id !== undefined && id !== null ? String(id) : null;
@@ -227,13 +245,9 @@
     return { count: grades.length, avg };
   }
 
-  function attendanceForStudent(marks, attendances, studentId) {
-    const gradeCount = marks
-      .filter((mark) => getStudentIdFromMark(mark) === studentId)
-      .map(getMarkValue)
-      .filter(isGrade).length;
+  function attendanceForStudent(attendances, studentId, heldLessons) {
     const absences = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId).length;
-    const total = gradeCount + absences;
+    const total = heldLessons || 0;
     const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
     return { absences, total, percent };
   }
@@ -261,8 +275,9 @@
       const cells = subjects.map((subject) => {
         const marks = batch.results[subject.id]?.marks || [];
         const attendances = batch.results[subject.id]?.attendances || [];
+        const heldLessons = batch.results[subject.id]?.heldLessons;
         const { count, avg } = averageForStudent(marks, student.id);
-        const { absences, percent } = attendanceForStudent(marks, attendances, student.id);
+        const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
         const parts = [];
         if (count) parts.push(`${avg} (${count})`);
         if (absences) parts.push(`Н ${percent}%`);
@@ -313,13 +328,13 @@
     subjects.forEach((subject) => {
       const marks = batch.results[subject.id]?.marks || [];
       const attendances = batch.results[subject.id]?.attendances || [];
+      const heldLessons = batch.results[subject.id]?.heldLessons || 0;
       const gradeValues = marks.filter((mark) => getStudentIdFromMark(mark) === studentId).map(getMarkValue).filter(isGrade);
       gradeValues.forEach((value) => allGrades.push(Number(value)));
       const subAbsences = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId).length;
-      const subTotal = gradeValues.length + subAbsences;
       absences += subAbsences;
-      total += subTotal;
-      if (subTotal && Math.round((subAbsences / subTotal) * 1000) / 10 >= 50) risk = true;
+      total += heldLessons;
+      if (heldLessons && Math.round((subAbsences / heldLessons) * 1000) / 10 >= 50) risk = true;
     });
     const avg = allGrades.length ? Math.round((allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length) * 100) / 100 : null;
     const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
@@ -346,18 +361,19 @@
     }
 
     const subjects = batch.queue.map((item) => ({ id: item.id, text: item.text }));
-    const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Н по факту", "Н % по факту", "Расчётный итог"];
+    const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог"];
 
     const subjectSheets = subjects.map((subject) => {
       const marks = batch.results[subject.id]?.marks || [];
       const attendances = batch.results[subject.id]?.attendances || [];
+      const heldLessons = batch.results[subject.id]?.heldLessons;
       const rows = [workbook.row(SUBJECT_HEADER, () => "Header")];
       students.forEach((student, index) => {
         const { count, avg } = averageForStudent(marks, student.id);
-        const { absences, percent } = attendanceForStudent(marks, attendances, student.id);
+        const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
         rows.push(workbook.row(
-          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", absences, `${percent}%`, count ? possibleFinal(avg) : ""],
-          (value, colIndex) => (colIndex === 5 && percent >= 50 ? "BadAbsence" : "Default")
+          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg) : ""],
+          (value, colIndex) => (colIndex === 6 && percent >= 50 ? "BadAbsence" : "Default")
         ));
       });
       return workbook.worksheet(subject.text, rows);
@@ -391,13 +407,14 @@
     item.status = "loading";
     await setStorage(STORAGE_KEY, batch);
 
-    const [found] = await Promise.all([waitForMarks(), waitForApiKind("studentProfiles"), waitForApiKind("attendances")]);
+    const [found] = await Promise.all([waitForMarks(), waitForApiKind("studentProfiles"), waitForApiKind("attendances"), waitForApiKind("schedule")]);
     const marks = found ? captureMarksForJournal(journalId) : [];
     const attendances = captureAttendances();
+    const heldLessons = countHeldLessons();
     mergeStudentProfiles(batch, captureStudentProfiles());
 
     item.status = found ? "done" : "empty";
-    batch.results[journalId] = { text: item.text, count: marks.length, marks, attendances, capturedAt: Date.now() };
+    batch.results[journalId] = { text: item.text, count: marks.length, marks, attendances, heldLessons, capturedAt: Date.now() };
     log(`${item.text}: ${found ? `поймано записей: ${marks.length}` : "таймаут, оценок не поймано"}`);
 
     const nextIndex = batch.currentIndex + 1;
