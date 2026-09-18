@@ -198,6 +198,10 @@
     return /^[1-5]$/.test(value);
   }
 
+  function isAbsence(value) {
+    return String(value || "").toLowerCase().includes("н");
+  }
+
   function averageForStudent(marks, studentId) {
     const grades = marks
       .filter((mark) => getStudentIdFromMark(mark) === studentId)
@@ -207,6 +211,16 @@
     if (!grades.length) return { count: 0, avg: null };
     const avg = Math.round((grades.reduce((sum, grade) => sum + grade, 0) / grades.length) * 100) / 100;
     return { count: grades.length, avg };
+  }
+
+  function attendanceForStudent(marks, studentId) {
+    const values = marks
+      .filter((mark) => getStudentIdFromMark(mark) === studentId)
+      .map(getMarkValue);
+    const absences = values.filter(isAbsence).length;
+    const total = values.filter((value) => isGrade(value) || isAbsence(value)).length;
+    const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
+    return { absences, total, percent };
   }
 
   function csvValue(value) {
@@ -232,7 +246,11 @@
       const cells = subjects.map((subject) => {
         const marks = batch.results[subject.id]?.marks || [];
         const { count, avg } = averageForStudent(marks, student.id);
-        return count ? `${avg} (${count})` : "";
+        const { absences, percent } = attendanceForStudent(marks, student.id);
+        const parts = [];
+        if (count) parts.push(`${avg} (${count})`);
+        if (absences) parts.push(`Н ${percent}%`);
+        return parts.join(" · ");
       });
       return [student.name, ...cells];
     });
