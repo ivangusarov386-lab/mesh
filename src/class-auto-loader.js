@@ -98,6 +98,20 @@
     return { ok: true, total: journals.length };
   }
 
+  function startBatchInBackground() {
+    const journals = collectJournalsFromList();
+    if (!journals.length) {
+      log("Список журналов не найден. Откройте страницу «Журналы класса» и повторите.");
+      return Promise.resolve({ ok: false, reason: "no-journals-found" });
+    }
+    log(`Старт в фоне: ${journals.length} журналов. Можно продолжать работать в этой вкладке.`);
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "start", journals }, () => {
+        resolve({ ok: true, total: journals.length });
+      });
+    });
+  }
+
   async function stopBatch() {
     const batch = await getStorage(STORAGE_KEY);
     if (batch) {
@@ -425,6 +439,12 @@
       batch.status = "done";
       await setStorage(STORAGE_KEY, batch);
       log(`Готово. Журналов обработано: ${batch.queue.length}.`);
+      if (batch.mode === "background") chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance" });
+      return;
+    }
+
+    if (batch.mode === "background") {
+      chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance" });
       return;
     }
 
@@ -435,7 +455,7 @@
     }, NAV_DELAY_MS);
   }
 
-  window.__MESH_HELPER_CLASS_AUTO_LOADER__ = { startBatch, stopBatch, getResults, exportCsv, exportWorkbook, collectJournalsFromList };
+  window.__MESH_HELPER_CLASS_AUTO_LOADER__ = { startBatch, startBatchInBackground, stopBatch, getResults, exportCsv, exportWorkbook, collectJournalsFromList };
 
   resumeIfRunning();
 })();
