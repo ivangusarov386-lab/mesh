@@ -121,6 +121,16 @@
     log("Остановлено пользователем.");
   }
 
+  function clearBatch() {
+    return new Promise((resolve) => chrome.storage.local.remove(STORAGE_KEY, resolve));
+  }
+
+  function notifyBackgroundAdvance() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance" }, () => resolve());
+    });
+  }
+
   async function getResults() {
     return (await getStorage(STORAGE_KEY)) || null;
   }
@@ -439,7 +449,12 @@
       batch.status = "done";
       await setStorage(STORAGE_KEY, batch);
       log(`Готово. Журналов обработано: ${batch.queue.length}.`);
-      if (batch.mode === "background") chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance" });
+      if (batch.mode === "background") {
+        await exportWorkbook();
+        await notifyBackgroundAdvance();
+        await clearBatch();
+        log("Файл скачан автоматически, состояние сброшено — можно запускать заново.");
+      }
       return;
     }
 
