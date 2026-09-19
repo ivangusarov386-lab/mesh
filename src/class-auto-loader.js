@@ -327,6 +327,15 @@
     return { ok: true, students: students.length, subjects: subjects.length };
   }
 
+  function getProblemAvgThreshold() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(["classProblemAvg"], (data) => {
+        const value = Number(data.classProblemAvg);
+        resolve(Number.isFinite(value) && value > 0 ? value : 3);
+      });
+    });
+  }
+
   function possibleFinal(avg) {
     const n = Number(avg);
     if (!Number.isFinite(n)) return "";
@@ -403,7 +412,35 @@
       return workbook.worksheet(subject.text, rows);
     });
 
-    const svodRows = [workbook.row(["№", "ФИО", "Средний балл (все предметы)", "Оценок всего", "Н по факту", "Н % по факту", "Риск (Н ≥ 50%)"], () => "Header")];
+    const problemAvgThreshold = await getProblemAvgThreshold();
+    const problems = [];
+    students.forEach((student) => {
+      subjects.forEach((subject) => {
+        const marks = batch.results[subject.id]?.marks || [];
+        const attendances = batch.results[subject.id]?.attendances || [];
+        const heldLessons = batch.results[subject.id]?.heldLessons;
+        const { count, avg } = averageForStudent(marks, student.id);
+        const { percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        if (count && avg <= problemAvgThreshold) problems.push({ student: student.name, subject: subject.text, label: "Низкий средний балл", value: avg });
+        if (heldLessons && percent >= 50) problems.push({ student: student.name, subject: subject.text, label: "Много пропусков", value: `${percent}%` });
+      });
+    });
+
+    const svodRows = [
+      workbook.row([`Проблемы по предметам (средний балл ≤ ${problemAvgThreshold} или пропуски ≥ 50%)`], () => "Header"),
+      workbook.row(["№", "ФИО", "Предмет", "Проблема", "Значение"], () => "Header")
+    ];
+    if (problems.length) {
+      problems.forEach((problem, index) => {
+        svodRows.push(workbook.row([index + 1, problem.student, problem.subject, problem.label, problem.value], () => "Default"));
+      });
+    } else {
+      svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", ""], () => "Default"));
+    }
+
+    svodRows.push(workbook.row([""], () => "Default"));
+    svodRows.push(workbook.row(["Итого по каждому ученику — агрегат по ВСЕМ предметам класса сразу"], () => "Header"));
+    svodRows.push(workbook.row(["№", "ФИО", "Средний балл (все предметы)", "Оценок всего", "Н по факту", "Н % по факту", "Риск (Н ≥ 50%)"], () => "Header"));
     students.forEach((student, index) => {
       const stats = overallStatsForStudent(subjects, batch, student.id);
       svodRows.push(workbook.row(

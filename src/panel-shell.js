@@ -1,10 +1,12 @@
 (() => {
   const DEFAULT_MIN = 5;
+  const DEFAULT_CLASS_PROBLEM_AVG = 3;
   const PANEL_ID = "mesh-helper-panel";
   const MINI_MIN_ID = "mh-mini-min";
   const CHECKS_OPEN_KEY = "meshHelperChecksOpen";
   let panelAttempts = 0;
   let minSaveTimer = null;
+  let classAvgSaveTimer = null;
 
   function ensureTitle(panel) {
     const title = panel.querySelector(".mh-title");
@@ -287,6 +289,7 @@
         <div class="mh-section mh-class-export">
           <div id="mh-class-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>Мой класс</span><span class="mh-class-arrow">▼</span></div>
           <div class="mh-class-menu">
+            <div class="mh-class-threshold-row"><label for="mh-class-min-avg">Проблема при среднем ≤</label><input id="mh-class-min-avg" type="number" min="1" max="5" step="0.1"></div>
             <button id="mh-export-class" class="mh-class-export-btn" type="button">Собрать все предметы</button>
             <div class="mh-class-progress-track"><div id="mh-class-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>
             <div id="mh-class-progress-text" class="mh-class-progress-text">0%</div>
@@ -306,13 +309,29 @@
     const save = panel.querySelector("#mh-save");
     const finals = panel.querySelector("#mh-check-finals");
     const correctFinals = panel.querySelector("#mh-check-correct-finals");
-    chrome.storage.sync.get(["minGrades", "checkFinals", "checkCorrectFinals"], (data) => {
+    const classMinAvg = panel.querySelector("#mh-class-min-avg");
+    chrome.storage.sync.get(["minGrades", "checkFinals", "checkCorrectFinals", "classProblemAvg"], (data) => {
       const value = typeof data.minGrades === "number" ? data.minGrades : DEFAULT_MIN;
       syncMiniMin(panel, value);
       if (finals) finals.checked = data.checkFinals === true;
       if (correctFinals) correctFinals.checked = data.checkCorrectFinals === true;
+      if (classMinAvg) classMinAvg.value = typeof data.classProblemAvg === "number" ? data.classProblemAvg : DEFAULT_CLASS_PROBLEM_AVG;
       notifyFinalsState(finals, correctFinals);
     });
+    if (classMinAvg && classMinAvg.dataset.ready !== "1") {
+      classMinAvg.dataset.ready = "1";
+      const saveClassAvg = () => {
+        const value = Number(classMinAvg.value);
+        const normalized = Number.isFinite(value) && value > 0 ? value : DEFAULT_CLASS_PROBLEM_AVG;
+        clearTimeout(classAvgSaveTimer);
+        classAvgSaveTimer = setTimeout(() => chrome.storage.sync.set({ classProblemAvg: normalized }), 150);
+      };
+      classMinAvg.addEventListener("input", saveClassAvg);
+      classMinAvg.addEventListener("change", saveClassAvg);
+      ["click", "mousedown", "mouseup", "pointerdown", "pointerup"].forEach((eventName) => {
+        classMinAvg.addEventListener(eventName, (e) => e.stopPropagation());
+      });
+    }
     if (save && save.dataset.ready !== "1") {
       save.dataset.ready = "1";
       save.addEventListener("click", () => saveMin(panel, minInput.value));

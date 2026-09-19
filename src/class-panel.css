@@ -133,3 +133,24 @@
   color: #64748b;
   text-align: right;
 }
+
+.mh-class-threshold-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.mh-class-threshold-row input {
+  width: 52px;
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12px;
+  text-align: center;
+  box-sizing: border-box;
+}
