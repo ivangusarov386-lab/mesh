@@ -139,29 +139,49 @@
     return location.pathname === MY_CLASSES_PATH;
   }
 
+  const PARALLEL_SECTION_SELECTOR = 'section[data-test-component^="journalListSection-"]';
+
   function expandAllParallels() {
-    document.querySelectorAll('section[data-test-component^="journalListSection-"]').forEach((section) => {
+    document.querySelectorAll(PARALLEL_SECTION_SELECTOR).forEach((section) => {
       if (section.querySelector(CLASS_CARD_SELECTOR)) return;
       const heading = section.querySelector("h6");
       if (heading) heading.click();
     });
   }
 
-  function startAllClassesInBackground() {
-    expandAllParallels();
+  function waitForParallelSections(maxAttempts = 20, intervalMs = 400) {
     return new Promise((resolve) => {
-      setTimeout(() => {
-        const journals = collectMyClassesPage();
-        if (!journals.length) {
-          log("Карточки классов не найдены. Откройте страницу «Мои классы», разверните нужные параллели и повторите.");
-          resolve({ ok: false, reason: "no-journals-found" });
+      let attempts = 0;
+      const check = () => {
+        attempts += 1;
+        const found = document.querySelectorAll(PARALLEL_SECTION_SELECTOR).length > 0;
+        if (found || attempts >= maxAttempts) {
+          resolve(found);
           return;
         }
-        log(`Старт в фоне (все классы по предмету): ${journals.length} журналов.`);
-        chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "start", journals, exportKind: "subject" }, () => {
-          resolve({ ok: true, total: journals.length });
-        });
-      }, 400);
+        setTimeout(check, intervalMs);
+      };
+      check();
+    });
+  }
+
+  function startAllClassesInBackground() {
+    return waitForParallelSections().then(() => {
+      expandAllParallels();
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          const journals = collectMyClassesPage();
+          if (!journals.length) {
+            log("Карточки классов не найдены. Откройте страницу «Мои классы», разверните нужные параллели и повторите.");
+            resolve({ ok: false, reason: "no-journals-found" });
+            return;
+          }
+          log(`Старт в фоне (все классы по предмету): ${journals.length} журналов.`);
+          chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "start", journals, exportKind: "subject" }, () => {
+            resolve({ ok: true, total: journals.length });
+          });
+        }, 400);
+      });
     });
   }
 
