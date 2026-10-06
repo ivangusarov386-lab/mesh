@@ -529,7 +529,8 @@
     }
 
     const subjects = batch.queue.map((item) => ({ id: item.id, text: item.text }));
-    const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Н% (служ.)"];
+    const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Н% (служ.)", "Риск академической задолженности"];
+    const ACADEMIC_DEBT_AVG_MAX = 2.5;
 
     const subjectSheets = subjects.map((subject) => {
       const marks = batch.results[subject.id]?.marks || [];
@@ -539,9 +540,14 @@
       students.forEach((student, index) => {
         const { count, avg } = averageForStudent(marks, student.id);
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        const academicRisk = count && avg <= ACADEMIC_DEBT_AVG_MAX ? "Да" : "Нет";
         rows.push(workbook.row(
-          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg) : "", percent],
-          (value, colIndex) => (colIndex === 6 && percent >= 50 ? "BadAbsence" : "Default")
+          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg) : "", percent, academicRisk],
+          (value, colIndex) => {
+            if (colIndex === 6 && percent >= 50) return "BadAbsence";
+            if (colIndex === 9 && academicRisk === "Да") return "BadAbsence";
+            return "Default";
+          }
         ));
       });
       return workbook.worksheet(subject.text, rows, { hiddenCols: [9] });
