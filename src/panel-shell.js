@@ -169,10 +169,12 @@
 
   function refreshClassExportLabel(panel) {
     const btn = panel.querySelector("#mh-export-class");
+    const stopBtn = panel.querySelector("#mh-class-stop");
     const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
     if (!btn || !loader) return;
     loader.getResults().then((batch) => {
       const mine = batch && batch.exportKind !== "subject";
+      if (stopBtn) stopBtn.style.display = mine && batch.status === "running" ? "block" : "none";
       if (mine && batch.status === "done") {
         btn.textContent = "Скачать Excel";
         btn.disabled = false;
@@ -214,8 +216,24 @@
     });
   }
 
+  function setupClassStop(panel) {
+    const stopBtn = panel.querySelector("#mh-class-stop");
+    if (!stopBtn || stopBtn.dataset.ready === "1") return;
+    stopBtn.dataset.ready = "1";
+    stopBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
+      if (!loader) return;
+      await loader.stopBatch();
+      refreshClassExportLabel(panel);
+      refreshAllClassesExportLabel(panel);
+    });
+  }
+
   function setupClassExport(panel) {
     setupClassToggle(panel);
+    setupClassStop(panel);
     const btn = panel.querySelector("#mh-export-class");
     if (btn && btn.dataset.ready !== "1") {
       btn.dataset.ready = "1";
@@ -358,10 +376,12 @@
 
   function refreshAllClassesExportLabel(panel) {
     const btn = panel.querySelector("#mh-export-allclasses");
+    const stopBtn = panel.querySelector("#mh-allclasses-stop");
     const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
     if (!btn || !loader) return;
     loader.getResults().then((batch) => {
       const mine = batch && batch.exportKind === "subject";
+      if (stopBtn) stopBtn.style.display = mine && batch.status === "running" ? "block" : "none";
       if (mine && batch.status === "done") {
         btn.textContent = "Скачать Excel";
         btn.disabled = false;
@@ -481,11 +501,28 @@
     });
   }
 
+  function setupAllClassesStop(panel) {
+    const stopBtn = panel.querySelector("#mh-allclasses-stop");
+    if (!stopBtn || stopBtn.dataset.ready === "1") return;
+    stopBtn.dataset.ready = "1";
+    stopBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
+      if (!loader) return;
+      await loader.stopBatch();
+      hideAllClassesPicker(panel);
+      refreshClassExportLabel(panel);
+      refreshAllClassesExportLabel(panel);
+    });
+  }
+
   function setupAllClassesExport(panel) {
     setupAllClassesToggle(panel);
     setupAllClassesSelectAll(panel);
     setupAllClassesPickerConfirm(panel);
     setupAllClassesAutoReadyListener();
+    setupAllClassesStop(panel);
     const btn = panel.querySelector("#mh-export-allclasses");
     if (btn && btn.dataset.ready !== "1") {
       btn.dataset.ready = "1";
@@ -592,6 +629,7 @@
           <div class="mh-class-menu">
             <div class="mh-class-threshold-row"><label for="mh-class-min-avg">Проблема при среднем ≤</label><input id="mh-class-min-avg" type="number" min="1" max="5" step="0.1"></div>
             <button id="mh-export-class" class="mh-class-export-btn" type="button">Собрать все предметы</button>
+            <button id="mh-class-stop" class="mh-class-stop-btn" type="button" style="display:none;">Остановить сбор</button>
             <div class="mh-class-progress-track"><div id="mh-class-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>
             <div id="mh-class-progress-text" class="mh-class-progress-text">0%</div>
             <div id="mh-class-export-status" class="mh-class-status" data-tone="muted">Соберите оценки, пропуски и итоги по всем предметам класса в один Excel-файл.</div>
@@ -602,6 +640,7 @@
           <div class="mh-allclasses-menu">
             <label class="mh-toggle-row" for="mh-allclasses-select-all"><input id="mh-allclasses-select-all" type="checkbox" checked><span>Все видимые классы</span></label>
             <button id="mh-export-allclasses" class="mh-class-export-btn" type="button">Собрать по всем классам</button>
+            <button id="mh-allclasses-stop" class="mh-class-stop-btn" type="button" style="display:none;">Остановить сбор</button>
             <div class="mh-class-progress-track"><div id="mh-allclasses-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>
             <div id="mh-allclasses-progress-text" class="mh-class-progress-text">0%</div>
             <div id="mh-allclasses-export-status" class="mh-class-status" data-tone="muted">На странице «Мои классы» разверните нужные параллели и нажмите — соберёт проблемных учеников и общий список по всем классам сразу.</div>

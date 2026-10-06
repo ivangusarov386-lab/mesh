@@ -36,7 +36,12 @@ async function startBackgroundBatch(journals, exportKind) {
     results: {}
   };
   await chrome.storage.local.set({ [STORAGE_KEY]: batch });
-  await chrome.tabs.create({ url: journalUrl(journals[0].id), active: false });
+  const tab = await chrome.tabs.create({ url: journalUrl(journals[0].id), active: false });
+  const fresh = await getBatch();
+  if (fresh && fresh.status === "running") {
+    fresh.tabId = tab.id;
+    await chrome.storage.local.set({ [STORAGE_KEY]: fresh });
+  }
 }
 
 async function advanceBackgroundBatch(tabId) {
@@ -52,6 +57,11 @@ async function advanceBackgroundBatch(tabId) {
   if (tabId && nextItem) chrome.tabs.update(tabId, { url: journalUrl(nextItem.id) }).catch(() => {});
 }
 
+async function stopBackgroundBatch() {
+  const batch = await getBatch();
+  if (batch?.tabId) chrome.tabs.remove(batch.tabId).catch(() => {});
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.source !== SOURCE) return undefined;
 
@@ -62,6 +72,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "advance") {
     advanceBackgroundBatch(sender.tab?.id).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+
+  if (message.type === "stop") {
+    stopBackgroundBatch().then(() => sendResponse({ ok: true }));
     return true;
   }
 

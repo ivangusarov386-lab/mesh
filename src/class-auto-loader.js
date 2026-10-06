@@ -215,8 +215,12 @@
     if (batch) {
       batch.status = "stopped";
       await setStorage(STORAGE_KEY, batch);
+      if (batch.mode === "background") {
+        chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "stop" });
+      }
     }
     log("Остановлено пользователем.");
+    await clearBatch();
   }
 
   function clearBatch() {
@@ -671,6 +675,13 @@
     await setStorage(STORAGE_KEY, batch);
 
     const [found] = await Promise.all([waitForMarks(), waitForApiKind("studentProfiles"), waitForApiKind("attendances"), waitForApiKind("schedule", 12000)]);
+
+    const freshCheck = await getStorage(STORAGE_KEY);
+    if (!freshCheck || freshCheck.status !== "running") {
+      log("Сбор остановлен пользователем — не продолжаю.");
+      return;
+    }
+
     const marks = found ? captureMarksForJournal(journalId) : [];
     const attendances = captureAttendances();
     const heldLessons = countHeldLessons();
