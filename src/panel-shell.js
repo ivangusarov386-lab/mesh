@@ -7,6 +7,19 @@
   let panelAttempts = 0;
   let minSaveTimer = null;
   let classAvgSaveTimer = null;
+  let batchStorageListenerReady = false;
+
+  function setupBatchStorageListener() {
+    if (batchStorageListenerReady) return;
+    batchStorageListenerReady = true;
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local" || !changes.meshHelperClassBatch) return;
+      const panel = document.getElementById(PANEL_ID);
+      if (!panel) return;
+      refreshClassExportLabel(panel);
+      refreshAllClassesExportLabel(panel);
+    });
+  }
 
   function ensureTitle(panel) {
     const title = panel.querySelector(".mh-title");
@@ -417,6 +430,7 @@
     setupExportMenu(panel);
     setupClassExport(panel);
     setupAllClassesExport(panel);
+    setupBatchStorageListener();
     setupDrag(panel);
     const minInput = panel.querySelector("#mh-min");
     const save = panel.querySelector("#mh-save");
