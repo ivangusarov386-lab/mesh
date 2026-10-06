@@ -608,7 +608,8 @@
 
     const classes = batch.queue.map((item) => ({ id: item.id, classLabel: item.classLabel || item.text, text: item.text }));
     const problemAvgThreshold = await getProblemAvgThreshold();
-    const CLASS_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог"];
+    const ACADEMIC_DEBT_AVG_MAX = 2.5;
+    const CLASS_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Риск академической задолженности"];
 
     const problems = [];
     let studentsTotal = 0;
@@ -625,9 +626,14 @@
         studentsTotal += 1;
         const { count, avg } = averageForStudent(marks, student.id);
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        const academicRisk = count && avg <= ACADEMIC_DEBT_AVG_MAX ? "Да" : "Нет";
         rows.push(workbook.row(
-          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg) : ""],
-          (value, colIndex) => (colIndex === 6 && percent >= 50 ? "BadAbsence" : "Default")
+          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg) : "", academicRisk],
+          (value, colIndex) => {
+            if (colIndex === 6 && percent >= 50) return "BadAbsence";
+            if (colIndex === 8 && academicRisk === "Да") return "BadAbsence";
+            return "Default";
+          }
         ));
         if (count && avg <= problemAvgThreshold) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Низкий средний балл", value: avg });
         if (heldLessons && percent >= 50) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Много пропусков", value: `${percent}%` });

@@ -197,7 +197,7 @@
     const titleText = text(document.querySelector("h1")) || document.title || "";
     const subjectSelect = text(document.querySelector("button[aria-haspopup='listbox']")) || "";
     const pageText = text(document.body).slice(0, 2500);
-    const classMatch = (titleText + " " + subjectSelect + " " + pageText).match(/\b\d{1,2}\s*[-–—]\s*[А-ЯA-ZЁ][\wА-Яа-яЁё,\s]*\b/);
+    const classMatch = (titleText + " " + subjectSelect + " " + pageText).match(/\d{1,2}-[A-ZА-ЯЁ][A-ZА-ЯЁ0-9-]*/);
     const subjectMatch = titleText.match(/Журнал\s+(.+?)\s+\d{1,2}\s*[-–—]/i);
     return {
       className: classMatch ? classMatch[0].replace(/\s+/g, " ").trim() : "",
