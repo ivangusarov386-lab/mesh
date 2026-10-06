@@ -280,9 +280,11 @@
           }
           return;
         }
-        const result = await loader.startBatchInBackground();
-        if (!result.ok) {
-          setClassStatus(panel, "Список журналов не найден на этой странице. Откройте «Журналы класса» и нажмите ещё раз.", "warn");
+        const result = await loader.requestClassFromAnyPage();
+        if (result.navigating) {
+          setClassStatus(panel, "Открываем страницу «Журналы класса»...", "muted");
+        } else if (!result.ok) {
+          setClassStatus(panel, "Список журналов не найден. Разверните нужную параллель и нажмите ещё раз.", "warn");
         } else {
           setClassStatus(panel, "Сбор запущен в фоновой вкладке — можно продолжать работать здесь, она сама закроется по завершении.", "muted");
           refreshClassExportLabel(panel);

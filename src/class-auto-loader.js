@@ -119,15 +119,48 @@
   }
 
   function startBatchInBackground() {
-    const journals = collectJournalsFromList();
-    if (!journals.length) {
-      log("Список журналов не найден. Откройте страницу «Журналы класса» и повторите.");
-      return Promise.resolve({ ok: false, reason: "no-journals-found" });
-    }
-    log(`Старт в фоне: ${journals.length} журналов. Можно продолжать работать в этой вкладке.`);
+    return waitForParallelSections().then(() => {
+      expandAllParallels();
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          const journals = collectJournalsFromList();
+          if (!journals.length) {
+            log("Список журналов не найден. Откройте страницу «Журналы класса» и повторите.");
+            resolve({ ok: false, reason: "no-journals-found" });
+            return;
+          }
+          log(`Старт в фоне: ${journals.length} журналов. Можно продолжать работать в этой вкладке.`);
+          chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "start", journals }, () => {
+            resolve({ ok: true, total: journals.length });
+          });
+        }, 400);
+      });
+    });
+  }
+
+  const MY_JOURNALS_LIST_PATH = "/teacher/mentor/journals";
+  const AUTO_START_CLASS_FLAG = "meshHelperAutoStartClass";
+
+  function isJournalsListPage() {
+    return location.pathname === MY_JOURNALS_LIST_PATH;
+  }
+
+  function requestClassFromAnyPage() {
+    if (isJournalsListPage()) return startBatchInBackground();
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "start", journals }, () => {
-        resolve({ ok: true, total: journals.length });
+      chrome.storage.local.set({ [AUTO_START_CLASS_FLAG]: true }, () => {
+        location.href = MY_JOURNALS_LIST_PATH;
+        resolve({ ok: true, navigating: true });
+      });
+    });
+  }
+
+  function autoStartClassIfRequested() {
+    if (!isJournalsListPage()) return;
+    chrome.storage.local.get(AUTO_START_CLASS_FLAG, (data) => {
+      if (!data?.[AUTO_START_CLASS_FLAG]) return;
+      chrome.storage.local.remove(AUTO_START_CLASS_FLAG, () => {
+        startBatchInBackground();
       });
     });
   }
@@ -739,9 +772,12 @@
     collectMyClassesPage,
     requestAllClassesFromAnyPage,
     prepareAllClassesList,
-    isMyClassesListPage
+    isMyClassesListPage,
+    requestClassFromAnyPage,
+    isJournalsListPage
   };
 
   resumeIfRunning();
   autoStartAllClassesIfRequested();
+  autoStartClassIfRequested();
 })();
