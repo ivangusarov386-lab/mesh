@@ -68,9 +68,25 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-left: 22px;
   font-size: 12px;
   font-weight: 650;
   color: #334155;
+  cursor: pointer;
+}
+
+.mh-allclasses-picker-group {
+  margin-bottom: 6px;
+}
+
+.mh-allclasses-picker-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a;
+  padding: 3px 0;
   cursor: pointer;
 }
 

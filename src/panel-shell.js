@@ -277,6 +277,11 @@
     if (list) list.innerHTML = "";
   }
 
+  function parallelGroupKey(journal) {
+    const match = String(journal.classLabel || "").match(/^(\d+)/);
+    return match ? match[1] : "?";
+  }
+
   function renderAllClassesPicker(panel, journals) {
     const picker = panel.querySelector("#mh-allclasses-picker");
     const list = panel.querySelector("#mh-allclasses-picker-list");
@@ -287,19 +292,65 @@
       return;
     }
     list.innerHTML = "";
+
+    const groups = new Map();
     journals.forEach((journal, index) => {
-      const row = document.createElement("label");
-      row.className = "mh-allclasses-picker-row";
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.checked = true;
-      checkbox.dataset.mhIndex = String(index);
-      const span = document.createElement("span");
-      span.textContent = journal.classLabel || journal.text || "?";
-      row.appendChild(checkbox);
-      row.appendChild(span);
-      list.appendChild(row);
+      const key = parallelGroupKey(journal);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ journal, index });
     });
+
+    const sortedKeys = [...groups.keys()].sort((a, b) => {
+      const na = Number(a);
+      const nb = Number(b);
+      if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+      return String(a).localeCompare(String(b), "ru");
+    });
+
+    sortedKeys.forEach((key) => {
+      const items = groups.get(key);
+      const groupEl = document.createElement("div");
+      groupEl.className = "mh-allclasses-picker-group";
+
+      const headerEl = document.createElement("label");
+      headerEl.className = "mh-allclasses-picker-group-header";
+      const headerCheckbox = document.createElement("input");
+      headerCheckbox.type = "checkbox";
+      headerCheckbox.checked = true;
+      const headerSpan = document.createElement("span");
+      headerSpan.textContent = key === "?" ? "Без параллели" : `${key} параллель`;
+      headerEl.appendChild(headerCheckbox);
+      headerEl.appendChild(headerSpan);
+      groupEl.appendChild(headerEl);
+
+      const rowCheckboxes = [];
+      items.forEach(({ journal, index }) => {
+        const row = document.createElement("label");
+        row.className = "mh-allclasses-picker-row";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = true;
+        checkbox.dataset.mhIndex = String(index);
+        const span = document.createElement("span");
+        span.textContent = journal.classLabel || journal.text || "?";
+        row.appendChild(checkbox);
+        row.appendChild(span);
+        groupEl.appendChild(row);
+        rowCheckboxes.push(checkbox);
+      });
+
+      headerCheckbox.addEventListener("change", () => {
+        rowCheckboxes.forEach((cb) => { cb.checked = headerCheckbox.checked; });
+      });
+      rowCheckboxes.forEach((cb) => {
+        cb.addEventListener("change", () => {
+          headerCheckbox.checked = rowCheckboxes.every((c) => c.checked);
+        });
+      });
+
+      list.appendChild(groupEl);
+    });
+
     picker.dataset.journals = JSON.stringify(journals);
     picker.style.display = "block";
     setAllClassesStatus(panel, `Найдено классов: ${journals.length}. Отметь нужные и нажми «Собрать выбранные».`, "muted");
