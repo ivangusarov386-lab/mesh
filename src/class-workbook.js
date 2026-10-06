@@ -57,10 +57,21 @@
     };
   }
 
-  function worksheet(name, rows = []) {
+  function formula(expr) {
+    return { __formula: String(expr) };
+  }
+
+  function isFormulaValue(value) {
+    return Boolean(value) && typeof value === "object" && typeof value.__formula === "string";
+  }
+
+  function worksheet(name, rows = [], options = {}) {
     return {
       name: cleanSheetName(name),
-      rows: Array.isArray(rows) ? rows : []
+      rows: Array.isArray(rows) ? rows : [],
+      hiddenCols: Array.isArray(options.hiddenCols) ? options.hiddenCols : [],
+      dataValidations: Array.isArray(options.dataValidations) ? options.dataValidations : [],
+      conditionalFormats: Array.isArray(options.conditionalFormats) ? options.conditionalFormats : []
     };
   }
 
@@ -68,11 +79,53 @@
     const ref = `${colName(colIndex)}${rowIndex + 1}`;
     const style = STYLE[styleId] ?? STYLE.Default;
 
+    if (isFormulaValue(value)) {
+      return `<c r="${ref}" s="${style}"><f>${escapeXml(value.__formula)}</f></c>`;
+    }
+
     if (typeof value === "number" && Number.isFinite(value)) {
       return `<c r="${ref}" s="${style}"><v>${String(value).replace(",", ".")}</v></c>`;
     }
 
     return `<c r="${ref}" s="${style}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
+  }
+
+  function colsXml(maxCols, hiddenCols) {
+    const hiddenSet = new Set(hiddenCols || []);
+    const total = Math.max(maxCols, 12);
+
+    if (!hiddenSet.size) {
+      return `<cols>
+<col min="1" max="1" width="6" customWidth="1"/>
+<col min="2" max="2" width="28" customWidth="1"/>
+<col min="3" max="3" width="40" customWidth="1"/>
+<col min="4" max="${total}" width="16" customWidth="1"/>
+</cols>`;
+    }
+
+    const baseWidths = { 1: 6, 2: 28, 3: 40 };
+    const parts = [];
+    for (let col = 1; col <= total; col += 1) {
+      const width = baseWidths[col] ?? 16;
+      const hidden = hiddenSet.has(col) ? ' hidden="1"' : "";
+      parts.push(`<col min="${col}" max="${col}" width="${width}" customWidth="1"${hidden}/>`);
+    }
+    return `<cols>\n${parts.join("\n")}\n</cols>`;
+  }
+
+  function dataValidationsXml(list) {
+    if (!list || !list.length) return "";
+    const items = list.map((dv) => {
+      return `<dataValidation type="${dv.type || "list"}" allowBlank="1" sqref="${dv.sqref}"><formula1>${escapeXml(dv.formula1)}</formula1></dataValidation>`;
+    }).join("");
+    return `<dataValidations count="${list.length}">${items}</dataValidations>`;
+  }
+
+  function conditionalFormattingXml(list) {
+    if (!list || !list.length) return "";
+    return list.map((cf, index) => {
+      return `<conditionalFormatting sqref="${cf.sqref}"><cfRule type="expression" dxfId="${cf.dxfId}" priority="${index + 1}"><formula>${escapeXml(cf.formula)}</formula></cfRule></conditionalFormatting>`;
+    }).join("");
   }
 
   function sheetXml(sheet) {
@@ -97,25 +150,28 @@
 </sheetView>
 </sheetViews>
 <sheetFormatPr defaultRowHeight="15"/>
-<cols>
-<col min="1" max="1" width="6" customWidth="1"/>
-<col min="2" max="2" width="28" customWidth="1"/>
-<col min="3" max="3" width="40" customWidth="1"/>
-<col min="4" max="12" width="16" customWidth="1"/>
-</cols>
+${colsXml(maxCols, sheet.hiddenCols)}
 <sheetData>${rowsXml}</sheetData>
 <autoFilter ref="${range}"/>
+${conditionalFormattingXml(sheet.conditionalFormats)}
+${dataValidationsXml(sheet.dataValidations)}
 </worksheet>`;
   }
 
-  function workbookXml(sheets) {
+  function workbookXml(sheets, definedNames = []) {
     const list = sheets.map((sheet, index) => {
       return `<sheet name="${escapeXml(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`;
     }).join("");
 
+    const namesXml = (definedNames && definedNames.length)
+      ? `<definedNames>${definedNames.map((dn) => `<definedName name="${escapeXml(dn.name)}">${escapeXml(dn.formula)}</definedName>`).join("")}</definedNames>`
+      : "";
+
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <sheets>${list}</sheets>
+${namesXml}
+<calcPr fullCalcOnLoad="1"/>
 </workbook>`;
   }
 
@@ -162,6 +218,10 @@ ${list}
 <xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
 <xf numFmtId="0" fontId="1" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
 </cellXfs>
+<dxfs count="2">
+<dxf><fill><patternFill><bgColor rgb="FFFFE08A"/></patternFill></fill></dxf>
+<dxf><fill><patternFill><bgColor rgb="FFFFD6D6"/></patternFill></fill></dxf>
+</dxfs>
 </styleSheet>`;
   }
 
@@ -273,8 +333,9 @@ ${overrides}
     });
   }
 
-  function downloadWorkbook(filename, sheets) {
+  function downloadWorkbook(filename, sheets, options = {}) {
     const safeSheets = (sheets || []).filter(Boolean);
+    const definedNames = options.definedNames || [];
 
     const files = [
       {
@@ -287,7 +348,7 @@ ${overrides}
       },
       {
         name: "xl/workbook.xml",
-        content: workbookXml(safeSheets)
+        content: workbookXml(safeSheets, definedNames)
       },
       {
         name: "xl/_rels/workbook.xml.rels",
@@ -320,6 +381,7 @@ ${overrides}
   window.__MESH_HELPER_CLASS_WORKBOOK__ = {
     row,
     worksheet,
+    formula,
     downloadWorkbook
   };
 })();

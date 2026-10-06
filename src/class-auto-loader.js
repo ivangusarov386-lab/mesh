@@ -394,7 +394,7 @@
     }
 
     const subjects = batch.queue.map((item) => ({ id: item.id, text: item.text }));
-    const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог"];
+    const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Н% (служ.)"];
 
     const subjectSheets = subjects.map((subject) => {
       const marks = batch.results[subject.id]?.marks || [];
@@ -405,11 +405,11 @@
         const { count, avg } = averageForStudent(marks, student.id);
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
         rows.push(workbook.row(
-          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg) : ""],
+          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg) : "", percent],
           (value, colIndex) => (colIndex === 6 && percent >= 50 ? "BadAbsence" : "Default")
         ));
       });
-      return workbook.worksheet(subject.text, rows);
+      return workbook.worksheet(subject.text, rows, { hiddenCols: [9] });
     });
 
     const problemAvgThreshold = await getProblemAvgThreshold();
@@ -450,10 +450,48 @@
     });
     const svodSheet = workbook.worksheet("СВОД", svodRows);
 
-    const date = new Date().toISOString().slice(0, 10);
-    workbook.downloadWorkbook(`mesh_class_workbook_${date}.xlsx`, [svodSheet, ...subjectSheets]);
+    const sheetRef = (sheetName) => `'${sheetName.replace(/'/g, "''")}'`;
+    const masterSheet = subjectSheets[0];
 
-    log(`Excel сформирован: ${students.length} учеников × ${subjects.length} предметов + СВОД.`);
+    const studentRows = [
+      workbook.row(["Ученик:", students[0]?.name || ""], (value, colIndex) => (colIndex === 0 ? "Header" : "Default")),
+      workbook.row([]),
+      workbook.row(["Предмет", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", ""], () => "Header")
+    ];
+
+    subjectSheets.forEach((sheet, index) => {
+      const range = `${sheetRef(sheet.name)}!$B:$I`;
+      const lookup = (col, fallback) => workbook.formula(`IFERROR(VLOOKUP($B$1,${range},${col},FALSE),${fallback})`);
+      studentRows.push(workbook.row([
+        subjects[index].text,
+        lookup(2, '""'),
+        lookup(3, '""'),
+        lookup(4, '""'),
+        lookup(5, '""'),
+        lookup(6, '""'),
+        lookup(7, '""'),
+        lookup(8, "0")
+      ], () => "Default"));
+    });
+
+    const firstDataRow = 4;
+    const lastDataRow = 3 + subjectSheets.length;
+    const studentSheet = workbook.worksheet("Ученик", studentRows, {
+      hiddenCols: [8],
+      dataValidations: [{ sqref: "B1", formula1: "MESH_STUDENTS" }],
+      conditionalFormats: [
+        { sqref: `C${firstDataRow}:C${lastDataRow}`, formula: `AND(C${firstDataRow}<>"",C${firstDataRow}<=${problemAvgThreshold})`, dxfId: 0 },
+        { sqref: `F${firstDataRow}:F${lastDataRow}`, formula: `$H${firstDataRow}>=50`, dxfId: 1 }
+      ]
+    });
+
+    const rosterLastRow = students.length + 1;
+    const definedNames = [{ name: "MESH_STUDENTS", formula: `${sheetRef(masterSheet.name)}!$B$2:$B$${rosterLastRow}` }];
+
+    const date = new Date().toISOString().slice(0, 10);
+    workbook.downloadWorkbook(`mesh_class_workbook_${date}.xlsx`, [svodSheet, studentSheet, ...subjectSheets], { definedNames });
+
+    log(`Excel сформирован: ${students.length} учеников × ${subjects.length} предметов + СВОД + лист «Ученик».`);
     return { ok: true, students: students.length, subjects: subjects.length };
   }
 
