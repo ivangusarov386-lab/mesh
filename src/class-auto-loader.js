@@ -165,28 +165,31 @@
     });
   }
 
-  function startAllClassesInBackground() {
+  function prepareAllClassesList() {
     return waitForParallelSections().then(() => {
       expandAllParallels();
       return new Promise((resolve) => {
-        setTimeout(() => {
-          const journals = collectMyClassesPage();
-          if (!journals.length) {
-            log("Карточки классов не найдены. Откройте страницу «Мои классы», разверните нужные параллели и повторите.");
-            resolve({ ok: false, reason: "no-journals-found" });
-            return;
-          }
-          log(`Старт в фоне (все классы по предмету): ${journals.length} журналов.`);
-          chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "start", journals, exportKind: "subject" }, () => {
-            resolve({ ok: true, total: journals.length });
-          });
-        }, 400);
+        setTimeout(() => resolve(collectMyClassesPage()), 400);
+      });
+    });
+  }
+
+  function startAllClassesInBackground(journals) {
+    const list = Array.isArray(journals) ? journals : [];
+    if (!list.length) {
+      log("Карточки классов не найдены. Откройте страницу «Мои классы», разверните нужные параллели и повторите.");
+      return Promise.resolve({ ok: false, reason: "no-journals-found" });
+    }
+    log(`Старт в фоне (все классы по предмету): ${list.length} журналов.`);
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "start", journals: list, exportKind: "subject" }, () => {
+        resolve({ ok: true, total: list.length });
       });
     });
   }
 
   function requestAllClassesFromAnyPage() {
-    if (isMyClassesListPage()) return startAllClassesInBackground();
+    if (isMyClassesListPage()) return Promise.resolve({ ok: true, navigating: false });
     return new Promise((resolve) => {
       chrome.storage.local.set({ [AUTO_START_ALL_CLASSES_FLAG]: true }, () => {
         location.href = MY_CLASSES_PATH;
@@ -200,7 +203,9 @@
     chrome.storage.local.get(AUTO_START_ALL_CLASSES_FLAG, (data) => {
       if (!data?.[AUTO_START_ALL_CLASSES_FLAG]) return;
       chrome.storage.local.remove(AUTO_START_ALL_CLASSES_FLAG, () => {
-        startAllClassesInBackground();
+        prepareAllClassesList().then((journals) => {
+          window.dispatchEvent(new CustomEvent("mesh-helper-all-classes-ready", { detail: { journals } }));
+        });
       });
     });
   }
@@ -715,7 +720,9 @@
     startAllClassesInBackground,
     exportAllClassesWorkbook,
     collectMyClassesPage,
-    requestAllClassesFromAnyPage
+    requestAllClassesFromAnyPage,
+    prepareAllClassesList,
+    isMyClassesListPage
   };
 
   resumeIfRunning();

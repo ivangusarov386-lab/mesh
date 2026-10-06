@@ -48,6 +48,32 @@
   display: block;
 }
 
+.mh-allclasses-picker {
+  margin-top: 8px;
+}
+
+.mh-allclasses-picker-list {
+  max-height: 180px;
+  overflow-y: auto;
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: rgba(255,255,255,.78);
+}
+
+.mh-allclasses-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 650;
+  color: #334155;
+  cursor: pointer;
+}
+
 .mh-class-export-btn {
   width: 100%;
   min-height: 34px;

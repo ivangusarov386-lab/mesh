@@ -264,6 +264,47 @@
     status.dataset.tone = tone;
   }
 
+  function getAllClassesSelectAllSetting() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(["allClassesSelectAll"], (data) => resolve(data.allClassesSelectAll !== false));
+    });
+  }
+
+  function hideAllClassesPicker(panel) {
+    const picker = panel.querySelector("#mh-allclasses-picker");
+    if (picker) picker.style.display = "none";
+    const list = panel.querySelector("#mh-allclasses-picker-list");
+    if (list) list.innerHTML = "";
+  }
+
+  function renderAllClassesPicker(panel, journals) {
+    const picker = panel.querySelector("#mh-allclasses-picker");
+    const list = panel.querySelector("#mh-allclasses-picker-list");
+    if (!picker || !list) return;
+    if (!journals.length) {
+      setAllClassesStatus(panel, "Карточки классов не найдены. Разверните нужные параллели и нажмите ещё раз.", "warn");
+      hideAllClassesPicker(panel);
+      return;
+    }
+    list.innerHTML = "";
+    journals.forEach((journal, index) => {
+      const row = document.createElement("label");
+      row.className = "mh-allclasses-picker-row";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = true;
+      checkbox.dataset.mhIndex = String(index);
+      const span = document.createElement("span");
+      span.textContent = journal.classLabel || journal.text || "?";
+      row.appendChild(checkbox);
+      row.appendChild(span);
+      list.appendChild(row);
+    });
+    picker.dataset.journals = JSON.stringify(journals);
+    picker.style.display = "block";
+    setAllClassesStatus(panel, `Найдено классов: ${journals.length}. Отметь нужные и нажми «Собрать выбранные».`, "muted");
+  }
+
   function refreshAllClassesExportLabel(panel) {
     const btn = panel.querySelector("#mh-export-allclasses");
     const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
@@ -311,8 +352,89 @@
     });
   }
 
+  function setupAllClassesSelectAll(panel) {
+    const checkbox = panel.querySelector("#mh-allclasses-select-all");
+    if (!checkbox || checkbox.dataset.ready === "1") return;
+    checkbox.dataset.ready = "1";
+    chrome.storage.sync.get(["allClassesSelectAll"], (data) => {
+      checkbox.checked = data.allClassesSelectAll !== false;
+    });
+    checkbox.addEventListener("change", () => {
+      chrome.storage.sync.set({ allClassesSelectAll: checkbox.checked });
+      if (checkbox.checked) hideAllClassesPicker(panel);
+    });
+    ["click", "mousedown", "mouseup"].forEach((eventName) => {
+      checkbox.addEventListener(eventName, (e) => e.stopPropagation());
+    });
+  }
+
+  function setupAllClassesPickerConfirm(panel) {
+    const btn = panel.querySelector("#mh-allclasses-start-selected");
+    if (!btn || btn.dataset.ready === "1") return;
+    btn.dataset.ready = "1";
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
+      const picker = panel.querySelector("#mh-allclasses-picker");
+      if (!loader || !picker) return;
+      let journals = [];
+      try {
+        journals = JSON.parse(picker.dataset.journals || "[]");
+      } catch (err) {
+        journals = [];
+      }
+      const checkedIndexes = [...panel.querySelectorAll("#mh-allclasses-picker-list input[type=checkbox]:checked")]
+        .map((input) => Number(input.dataset.mhIndex));
+      const selected = journals.filter((journal, index) => checkedIndexes.includes(index));
+      if (!selected.length) {
+        setAllClassesStatus(panel, "Отметь хотя бы один класс.", "warn");
+        return;
+      }
+      hideAllClassesPicker(panel);
+      const result = await loader.startAllClassesInBackground(selected);
+      if (!result.ok) {
+        setAllClassesStatus(panel, "Не удалось запустить сбор.", "warn");
+      } else {
+        setAllClassesStatus(panel, "Сбор запущен в фоновой вкладке — можно продолжать работать здесь, она сама закроется по завершении.", "muted");
+        refreshAllClassesExportLabel(panel);
+      }
+    });
+  }
+
+  let allClassesReadyListenerBound = false;
+  function setupAllClassesAutoReadyListener() {
+    if (allClassesReadyListenerBound) return;
+    allClassesReadyListenerBound = true;
+    window.addEventListener("mesh-helper-all-classes-ready", async (e) => {
+      const journals = (e.detail && e.detail.journals) || [];
+      const panel = document.getElementById(PANEL_ID);
+      if (!panel) return;
+      const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
+      const selectAll = await getAllClassesSelectAllSetting();
+      if (selectAll) {
+        if (!loader || !journals.length) {
+          setAllClassesStatus(panel, "Карточки классов не найдены. Разверните нужные параллели и нажмите ещё раз.", "warn");
+          return;
+        }
+        const result = await loader.startAllClassesInBackground(journals);
+        if (!result.ok) {
+          setAllClassesStatus(panel, "Карточки классов не найдены. Разверните нужные параллели и нажмите ещё раз.", "warn");
+        } else {
+          setAllClassesStatus(panel, "Сбор запущен в фоновой вкладке — можно продолжать работать здесь, она сама закроется по завершении.", "muted");
+          refreshAllClassesExportLabel(panel);
+        }
+      } else {
+        renderAllClassesPicker(panel, journals);
+      }
+    });
+  }
+
   function setupAllClassesExport(panel) {
     setupAllClassesToggle(panel);
+    setupAllClassesSelectAll(panel);
+    setupAllClassesPickerConfirm(panel);
+    setupAllClassesAutoReadyListener();
     const btn = panel.querySelector("#mh-export-allclasses");
     if (btn && btn.dataset.ready !== "1") {
       btn.dataset.ready = "1";
@@ -335,14 +457,24 @@
           }
           return;
         }
-        const result = await loader.requestAllClassesFromAnyPage();
-        if (result.navigating) {
-          setAllClassesStatus(panel, "Открываем страницу «Мои классы» и запускаем сбор автоматически...", "muted");
-        } else if (!result.ok) {
-          setAllClassesStatus(panel, "Карточки классов не найдены. Разверните нужные параллели и нажмите ещё раз.", "warn");
+        hideAllClassesPicker(panel);
+        const navResult = await loader.requestAllClassesFromAnyPage();
+        if (navResult.navigating) {
+          setAllClassesStatus(panel, "Открываем страницу «Мои классы»...", "muted");
+          return;
+        }
+        setAllClassesStatus(panel, "Ищем классы на странице...", "muted");
+        const [selectAll, journals] = await Promise.all([getAllClassesSelectAllSetting(), loader.prepareAllClassesList()]);
+        if (selectAll) {
+          const result = await loader.startAllClassesInBackground(journals);
+          if (!result.ok) {
+            setAllClassesStatus(panel, "Карточки классов не найдены. Разверните нужные параллели и нажмите ещё раз.", "warn");
+          } else {
+            setAllClassesStatus(panel, "Сбор запущен в фоновой вкладке — можно продолжать работать здесь, она сама закроется по завершении.", "muted");
+            refreshAllClassesExportLabel(panel);
+          }
         } else {
-          setAllClassesStatus(panel, "Сбор запущен в фоновой вкладке — можно продолжать работать здесь, она сама закроется по завершении.", "muted");
-          refreshAllClassesExportLabel(panel);
+          renderAllClassesPicker(panel, journals);
         }
       });
     }
@@ -417,10 +549,15 @@
         <div class="mh-section mh-allclasses-export">
           <div id="mh-allclasses-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>Все классы (по предмету)</span><span class="mh-class-arrow">▼</span></div>
           <div class="mh-allclasses-menu">
+            <label class="mh-toggle-row" for="mh-allclasses-select-all"><input id="mh-allclasses-select-all" type="checkbox" checked><span>Все видимые классы</span></label>
             <button id="mh-export-allclasses" class="mh-class-export-btn" type="button">Собрать по всем классам</button>
             <div class="mh-class-progress-track"><div id="mh-allclasses-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>
             <div id="mh-allclasses-progress-text" class="mh-class-progress-text">0%</div>
             <div id="mh-allclasses-export-status" class="mh-class-status" data-tone="muted">На странице «Мои классы» разверните нужные параллели и нажмите — соберёт проблемных учеников и общий список по всем классам сразу.</div>
+            <div id="mh-allclasses-picker" class="mh-allclasses-picker" style="display:none;">
+              <div id="mh-allclasses-picker-list" class="mh-allclasses-picker-list"></div>
+              <button id="mh-allclasses-start-selected" class="mh-class-export-btn" type="button">Собрать выбранные</button>
+            </div>
           </div>
         </div>`;
       document.body.appendChild(panel);
