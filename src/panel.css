@@ -94,6 +94,13 @@
 
 #mesh-helper-panel.mh-checks-open .mh-checks-menu { display: block; }
 
+.mh-results-menu {
+  display: none;
+  margin-top: 10px;
+}
+
+#mesh-helper-panel.mh-results-open .mh-results-menu { display: block; }
+
 .mh-label,
 .mh-section-title {
   position: relative;

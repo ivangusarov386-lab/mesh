@@ -131,6 +131,30 @@
     }
   }
 
+  const RESULTS_OPEN_KEY = "meshHelperResultsOpen";
+
+  function setupResultsToggle(panel) {
+    const toggle = panel.querySelector("#mh-results-toggle");
+    const menu = panel.querySelector(".mh-results-menu");
+    const arrow = toggle?.querySelector(".mh-checks-arrow");
+    if (!toggle || !menu || toggle.dataset.ready === "1") return;
+    toggle.dataset.ready = "1";
+    let open = localStorage.getItem(RESULTS_OPEN_KEY) === "1";
+    const apply = () => {
+      panel.classList.toggle("mh-results-open", open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      if (arrow) arrow.textContent = open ? "▲" : "▼";
+    };
+    apply();
+    toggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      open = !open;
+      localStorage.setItem(RESULTS_OPEN_KEY, open ? "1" : "0");
+      apply();
+    });
+  }
+
   function setupExportMenu(panel) {
     const toggle = panel.querySelector("#mh-export-toggle");
     const menu = panel.querySelector(".mh-export-menu");
@@ -623,7 +647,14 @@
             <label class="mh-toggle-row" for="mh-check-correct-finals"><input id="mh-check-correct-finals" type="checkbox"><span>Проверка итогов</span></label>
           </div>
         </div>
-        <div class="mh-section mh-results"><div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div><div class="mh-export-wrap"><button id="mh-export-toggle" class="mh-export-toggle" type="button" aria-expanded="false">Экспорт ▼</button><div class="mh-export-menu"><button id="mh-export-problems" class="mh-export" type="button">Выгрузить проблемных</button><button id="mh-export-all" class="mh-export" type="button">Выгрузить весь класс</button></div></div><div id="mh-list" class="mh-list"></div></div>
+        <div class="mh-section mh-results">
+          <div id="mh-results-toggle" class="mh-checks-toggle" role="button" aria-expanded="false"><span>Текущий урок</span><span class="mh-checks-arrow">▼</span></div>
+          <div class="mh-results-menu">
+            <div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div>
+            <div class="mh-export-wrap"><button id="mh-export-toggle" class="mh-export-toggle" type="button" aria-expanded="false">Экспорт ▼</button><div class="mh-export-menu"><button id="mh-export-problems" class="mh-export" type="button">Выгрузить проблемных</button><button id="mh-export-all" class="mh-export" type="button">Выгрузить весь класс</button></div></div>
+            <div id="mh-list" class="mh-list"></div>
+          </div>
+        </div>
         <div class="mh-section mh-class-export">
           <div id="mh-class-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>Мой класс</span><span class="mh-class-arrow">▼</span></div>
           <div class="mh-class-menu">
@@ -656,6 +687,7 @@
     ensureMiniMin(panel);
     setupCollapse(panel);
     setupChecksMenu(panel);
+    setupResultsToggle(panel);
     setupExportMenu(panel);
     setupClassExport(panel);
     setupAllClassesExport(panel);
