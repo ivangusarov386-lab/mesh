@@ -544,34 +544,31 @@
 
     const classes = batch.queue.map((item) => ({ id: item.id, classLabel: item.classLabel || item.text, text: item.text }));
     const problemAvgThreshold = await getProblemAvgThreshold();
+    const CLASS_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог"];
 
     const problems = [];
-    const allRows = [];
+    let studentsTotal = 0;
 
-    classes.forEach((cls) => {
+    const classSheets = classes.map((cls) => {
       const result = batch.results[cls.id];
-      if (!result) return;
-      const marks = result.marks || [];
-      const attendances = result.attendances || [];
-      const heldLessons = result.heldLessons;
-      const students = (result.students || []).slice().sort((a, b) => a.name.localeCompare(b.name, "ru"));
+      const marks = result?.marks || [];
+      const attendances = result?.attendances || [];
+      const heldLessons = result?.heldLessons;
+      const students = (result?.students || []).slice().sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
-      students.forEach((student) => {
+      const rows = [workbook.row(CLASS_HEADER, () => "Header")];
+      students.forEach((student, index) => {
+        studentsTotal += 1;
         const { count, avg } = averageForStudent(marks, student.id);
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
-        allRows.push({
-          classLabel: cls.classLabel,
-          name: student.name,
-          grades: gradesTextForStudent(marks, student.id),
-          avg: count ? avg : "",
-          heldLessons: heldLessons || 0,
-          absences,
-          percent,
-          final: count ? possibleFinal(avg) : ""
-        });
+        rows.push(workbook.row(
+          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg) : ""],
+          (value, colIndex) => (colIndex === 6 && percent >= 50 ? "BadAbsence" : "Default")
+        ));
         if (count && avg <= problemAvgThreshold) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Низкий средний балл", value: avg });
         if (heldLessons && percent >= 50) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Много пропусков", value: `${percent}%` });
       });
+      return workbook.worksheet(cls.classLabel, rows);
     });
 
     const problemsRows = [
@@ -585,21 +582,11 @@
     }
     const problemsSheet = workbook.worksheet("Проблемы", problemsRows);
 
-    const allHeader = ["Класс", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог"];
-    const allSheetRows = [workbook.row(allHeader, () => "Header")];
-    allRows.forEach((row) => {
-      allSheetRows.push(workbook.row(
-        [row.classLabel, row.name, row.grades, row.avg, row.heldLessons, row.absences, `${row.percent}%`, row.final],
-        (value, colIndex) => (colIndex === 6 && row.percent >= 50 ? "BadAbsence" : "Default")
-      ));
-    });
-    const allSheet = workbook.worksheet("Все классы", allSheetRows);
-
     const date = new Date().toISOString().slice(0, 10);
-    workbook.downloadWorkbook(`mesh_vse_klassy_${date}.xlsx`, [problemsSheet, allSheet]);
+    workbook.downloadWorkbook(`mesh_vse_klassy_${date}.xlsx`, [problemsSheet, ...classSheets]);
 
-    log(`Excel сформирован: ${classes.length} классов, ${allRows.length} учеников.`);
-    return { ok: true, classes: classes.length, students: allRows.length };
+    log(`Excel сформирован: ${classes.length} классов, ${studentsTotal} учеников.`);
+    return { ok: true, classes: classes.length, students: studentsTotal };
   }
 
   async function resumeIfRunning() {
