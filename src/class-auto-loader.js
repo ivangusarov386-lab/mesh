@@ -132,16 +132,55 @@
     });
   }
 
+  const MY_CLASSES_PATH = "/teacher/study-process/journal/my";
+  const AUTO_START_ALL_CLASSES_FLAG = "meshHelperAutoStartAllClasses";
+
+  function isMyClassesListPage() {
+    return location.pathname === MY_CLASSES_PATH;
+  }
+
+  function expandAllParallels() {
+    document.querySelectorAll('section[data-test-component^="journalListSection-"]').forEach((section) => {
+      if (section.querySelector(CLASS_CARD_SELECTOR)) return;
+      const heading = section.querySelector("h6");
+      if (heading) heading.click();
+    });
+  }
+
   function startAllClassesInBackground() {
-    const journals = collectMyClassesPage();
-    if (!journals.length) {
-      log("Карточки классов не найдены. Откройте страницу «Мои классы», разверните нужные параллели и повторите.");
-      return Promise.resolve({ ok: false, reason: "no-journals-found" });
-    }
-    log(`Старт в фоне (все классы по предмету): ${journals.length} журналов.`);
+    expandAllParallels();
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "start", journals, exportKind: "subject" }, () => {
-        resolve({ ok: true, total: journals.length });
+      setTimeout(() => {
+        const journals = collectMyClassesPage();
+        if (!journals.length) {
+          log("Карточки классов не найдены. Откройте страницу «Мои классы», разверните нужные параллели и повторите.");
+          resolve({ ok: false, reason: "no-journals-found" });
+          return;
+        }
+        log(`Старт в фоне (все классы по предмету): ${journals.length} журналов.`);
+        chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "start", journals, exportKind: "subject" }, () => {
+          resolve({ ok: true, total: journals.length });
+        });
+      }, 400);
+    });
+  }
+
+  function requestAllClassesFromAnyPage() {
+    if (isMyClassesListPage()) return startAllClassesInBackground();
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ [AUTO_START_ALL_CLASSES_FLAG]: true }, () => {
+        location.href = MY_CLASSES_PATH;
+        resolve({ ok: true, navigating: true });
+      });
+    });
+  }
+
+  function autoStartAllClassesIfRequested() {
+    if (!isMyClassesListPage()) return;
+    chrome.storage.local.get(AUTO_START_ALL_CLASSES_FLAG, (data) => {
+      if (!data?.[AUTO_START_ALL_CLASSES_FLAG]) return;
+      chrome.storage.local.remove(AUTO_START_ALL_CLASSES_FLAG, () => {
+        startAllClassesInBackground();
       });
     });
   }
@@ -655,8 +694,10 @@
     collectJournalsFromList,
     startAllClassesInBackground,
     exportAllClassesWorkbook,
-    collectMyClassesPage
+    collectMyClassesPage,
+    requestAllClassesFromAnyPage
   };
 
   resumeIfRunning();
+  autoStartAllClassesIfRequested();
 })();

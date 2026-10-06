@@ -335,9 +335,11 @@
           }
           return;
         }
-        const result = await loader.startAllClassesInBackground();
-        if (!result.ok) {
-          setAllClassesStatus(panel, "Карточки классов не найдены. Откройте «Мои классы», разверните нужные параллели и нажмите ещё раз.", "warn");
+        const result = await loader.requestAllClassesFromAnyPage();
+        if (result.navigating) {
+          setAllClassesStatus(panel, "Открываем страницу «Мои классы» и запускаем сбор автоматически...", "muted");
+        } else if (!result.ok) {
+          setAllClassesStatus(panel, "Карточки классов не найдены. Разверните нужные параллели и нажмите ещё раз.", "warn");
         } else {
           setAllClassesStatus(panel, "Сбор запущен в фоновой вкладке — можно продолжать работать здесь, она сама закроется по завершении.", "muted");
           refreshAllClassesExportLabel(panel);
