@@ -39,6 +39,15 @@
   display: block;
 }
 
+.mh-allclasses-menu {
+  display: none;
+  margin-top: 10px;
+}
+
+#mesh-helper-panel.mh-allclasses-open .mh-allclasses-menu {
+  display: block;
+}
+
 .mh-class-export-btn {
   width: 100%;
   min-height: 34px;

@@ -23,12 +23,13 @@ async function getBatch() {
   return data?.[STORAGE_KEY] || null;
 }
 
-async function startBackgroundBatch(journals) {
+async function startBackgroundBatch(journals, exportKind) {
   if (!Array.isArray(journals) || !journals.length) return;
 
   const batch = {
     status: "running",
     mode: "background",
+    exportKind: exportKind === "subject" ? "subject" : "class",
     startedAt: Date.now(),
     queue: journals.map((journal) => ({ ...journal, status: "pending" })),
     currentIndex: 0,
@@ -55,7 +56,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.source !== SOURCE) return undefined;
 
   if (message.type === "start") {
-    startBackgroundBatch(message.journals).then(() => sendResponse({ ok: true }));
+    startBackgroundBatch(message.journals, message.exportKind).then(() => sendResponse({ ok: true }));
     return true;
   }
 

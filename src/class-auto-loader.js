@@ -32,6 +32,7 @@
   const NAV_DELAY_MS = 900;
   const MARKS_WAIT_TIMEOUT_MS = 15000;
   const JOURNAL_LINK_SELECTOR = 'a[href*="/journal/grade/"]';
+  const CLASS_CARD_SELECTOR = '[data-test-component="journalCardRoute"]';
 
   function log(...args) {
     console.log("[МЭШ помощник][class-auto-loader]", ...args);
@@ -72,6 +73,25 @@
       .filter((journal) => (seen.has(journal.id) ? false : (seen.add(journal.id), true)));
   }
 
+  function collectMyClassesPage() {
+    const seen = new Set();
+    const results = [];
+    document.querySelectorAll(CLASS_CARD_SELECTOR).forEach((card) => {
+      const link = card.querySelector('a[href*="/journal/my/"]');
+      if (!link) return;
+      const match = link.href.match(/\/journal\/my\/(\d+)/);
+      if (!match) return;
+      const id = match[1];
+      if (seen.has(id)) return;
+      seen.add(id);
+      const labelEl = card.querySelector(":scope > div:first-child span");
+      const classLabel = (labelEl?.textContent || "").replace(/\s+/g, " ").trim().replace(/\s*класс\s*$/i, "") || "?";
+      const text = (link.textContent || "").replace(/\s+/g, " ").trim();
+      results.push({ id, text, classLabel });
+    });
+    return results;
+  }
+
   function navigateToIndex(batch, index) {
     const item = batch.queue[index];
     if (!item) return;
@@ -107,6 +127,20 @@
     log(`Старт в фоне: ${journals.length} журналов. Можно продолжать работать в этой вкладке.`);
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "start", journals }, () => {
+        resolve({ ok: true, total: journals.length });
+      });
+    });
+  }
+
+  function startAllClassesInBackground() {
+    const journals = collectMyClassesPage();
+    if (!journals.length) {
+      log("Карточки классов не найдены. Откройте страницу «Мои классы», разверните нужные параллели и повторите.");
+      return Promise.resolve({ ok: false, reason: "no-journals-found" });
+    }
+    log(`Старт в фоне (все классы по предмету): ${journals.length} журналов.`);
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "start", journals, exportKind: "subject" }, () => {
         resolve({ ok: true, total: journals.length });
       });
     });
@@ -495,6 +529,79 @@
     return { ok: true, students: students.length, subjects: subjects.length };
   }
 
+  async function exportAllClassesWorkbook() {
+    const batch = await getStorage(STORAGE_KEY);
+    if (!batch || batch.status !== "done") {
+      log("Выгрузка ещё не завершена (или не запускалась) — сначала startAllClassesInBackground().");
+      return { ok: false, reason: "not-done" };
+    }
+
+    const workbook = window.__MESH_HELPER_CLASS_WORKBOOK__;
+    if (!workbook) {
+      log("Модуль class-workbook.js не загружен — обновите страницу.");
+      return { ok: false, reason: "no-workbook-module" };
+    }
+
+    const classes = batch.queue.map((item) => ({ id: item.id, classLabel: item.classLabel || item.text, text: item.text }));
+    const problemAvgThreshold = await getProblemAvgThreshold();
+
+    const problems = [];
+    const allRows = [];
+
+    classes.forEach((cls) => {
+      const result = batch.results[cls.id];
+      if (!result) return;
+      const marks = result.marks || [];
+      const attendances = result.attendances || [];
+      const heldLessons = result.heldLessons;
+      const students = (result.students || []).slice().sort((a, b) => a.name.localeCompare(b.name, "ru"));
+
+      students.forEach((student) => {
+        const { count, avg } = averageForStudent(marks, student.id);
+        const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        allRows.push({
+          classLabel: cls.classLabel,
+          name: student.name,
+          grades: gradesTextForStudent(marks, student.id),
+          avg: count ? avg : "",
+          heldLessons: heldLessons || 0,
+          absences,
+          percent,
+          final: count ? possibleFinal(avg) : ""
+        });
+        if (count && avg <= problemAvgThreshold) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Низкий средний балл", value: avg });
+        if (heldLessons && percent >= 50) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Много пропусков", value: `${percent}%` });
+      });
+    });
+
+    const problemsRows = [
+      workbook.row([`Проблемы по всем классам (средний балл ≤ ${problemAvgThreshold} или пропуски ≥ 50%)`], () => "Header"),
+      workbook.row(["Класс", "ФИО", "Проблема", "Значение"], () => "Header")
+    ];
+    if (problems.length) {
+      problems.forEach((problem) => problemsRows.push(workbook.row([problem.classLabel, problem.student, problem.label, problem.value], () => "Default")));
+    } else {
+      problemsRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", ""], () => "Default"));
+    }
+    const problemsSheet = workbook.worksheet("Проблемы", problemsRows);
+
+    const allHeader = ["Класс", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог"];
+    const allSheetRows = [workbook.row(allHeader, () => "Header")];
+    allRows.forEach((row) => {
+      allSheetRows.push(workbook.row(
+        [row.classLabel, row.name, row.grades, row.avg, row.heldLessons, row.absences, `${row.percent}%`, row.final],
+        (value, colIndex) => (colIndex === 6 && row.percent >= 50 ? "BadAbsence" : "Default")
+      ));
+    });
+    const allSheet = workbook.worksheet("Все классы", allSheetRows);
+
+    const date = new Date().toISOString().slice(0, 10);
+    workbook.downloadWorkbook(`mesh_vse_klassy_${date}.xlsx`, [problemsSheet, allSheet]);
+
+    log(`Excel сформирован: ${classes.length} классов, ${allRows.length} учеников.`);
+    return { ok: true, classes: classes.length, students: allRows.length };
+  }
+
   async function resumeIfRunning() {
     const batch = await getStorage(STORAGE_KEY);
     if (!batch || batch.status !== "running") return;
@@ -510,10 +617,12 @@
     const marks = found ? captureMarksForJournal(journalId) : [];
     const attendances = captureAttendances();
     const heldLessons = countHeldLessons();
-    mergeStudentProfiles(batch, captureStudentProfiles());
+    const profiles = captureStudentProfiles();
+    mergeStudentProfiles(batch, profiles);
+    const students = profiles.map((profile) => ({ id: getProfileId(profile), name: getProfileName(profile) })).filter((student) => student.id);
 
     item.status = found ? "done" : "empty";
-    batch.results[journalId] = { text: item.text, count: marks.length, marks, attendances, heldLessons, capturedAt: Date.now() };
+    batch.results[journalId] = { text: item.text, classLabel: item.classLabel, count: marks.length, marks, attendances, heldLessons, students, capturedAt: Date.now() };
     log(`${item.text}: ${found ? `поймано записей: ${marks.length}` : "таймаут, оценок не поймано"}`);
 
     const nextIndex = batch.currentIndex + 1;
@@ -525,7 +634,11 @@
       await setStorage(STORAGE_KEY, batch);
       log(`Готово. Журналов обработано: ${batch.queue.length}.`);
       if (batch.mode === "background") {
-        await exportWorkbook();
+        if (batch.exportKind === "subject") {
+          await exportAllClassesWorkbook();
+        } else {
+          await exportWorkbook();
+        }
         await notifyBackgroundAdvance();
         await clearBatch();
         log("Файл скачан автоматически, состояние сброшено — можно запускать заново.");
@@ -545,7 +658,18 @@
     }, NAV_DELAY_MS);
   }
 
-  window.__MESH_HELPER_CLASS_AUTO_LOADER__ = { startBatch, startBatchInBackground, stopBatch, getResults, exportCsv, exportWorkbook, collectJournalsFromList };
+  window.__MESH_HELPER_CLASS_AUTO_LOADER__ = {
+    startBatch,
+    startBatchInBackground,
+    stopBatch,
+    getResults,
+    exportCsv,
+    exportWorkbook,
+    collectJournalsFromList,
+    startAllClassesInBackground,
+    exportAllClassesWorkbook,
+    collectMyClassesPage
+  };
 
   resumeIfRunning();
 })();

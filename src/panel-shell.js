@@ -159,12 +159,13 @@
     const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
     if (!btn || !loader) return;
     loader.getResults().then((batch) => {
-      if (batch?.status === "done") {
+      const mine = batch && batch.exportKind !== "subject";
+      if (mine && batch.status === "done") {
         btn.textContent = "Скачать Excel";
         btn.disabled = false;
         setClassProgress(panel, 100);
         setClassStatus(panel, `Готово: собраны данные по ${batch.queue.length} предметам. Можно скачать файл.`, "ok");
-      } else if (batch?.status === "running") {
+      } else if (mine && batch.status === "running") {
         const percent = batch.queue.length ? Math.round((batch.currentIndex / batch.queue.length) * 100) : 0;
         btn.textContent = "Идёт сбор...";
         btn.disabled = true;
@@ -214,11 +215,16 @@
           return;
         }
         const batch = await loader.getResults();
-        if (batch?.status === "done") {
+        if (batch?.status === "done" && batch.exportKind !== "subject") {
           loader.exportWorkbook();
           return;
         }
-        if (batch?.status === "running") return;
+        if (batch?.status === "running") {
+          if (batch.exportKind === "subject") {
+            setClassStatus(panel, "Сейчас уже идёт другой сбор («Все классы») — дождитесь завершения.", "warn");
+          }
+          return;
+        }
         const result = await loader.startBatchInBackground();
         if (!result.ok) {
           setClassStatus(panel, "Список журналов не найден на этой странице. Откройте «Журналы класса» и нажмите ещё раз.", "warn");
@@ -229,6 +235,103 @@
       });
     }
     refreshClassExportLabel(panel);
+  }
+
+  function setAllClassesProgress(panel, percent) {
+    const fill = panel.querySelector("#mh-allclasses-progress-fill");
+    const text = panel.querySelector("#mh-allclasses-progress-text");
+    if (fill) fill.style.width = `${percent}%`;
+    if (text) text.textContent = `${percent}%`;
+  }
+
+  function setAllClassesStatus(panel, message, tone) {
+    const status = panel.querySelector("#mh-allclasses-export-status");
+    if (!status) return;
+    status.textContent = message;
+    status.dataset.tone = tone;
+  }
+
+  function refreshAllClassesExportLabel(panel) {
+    const btn = panel.querySelector("#mh-export-allclasses");
+    const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
+    if (!btn || !loader) return;
+    loader.getResults().then((batch) => {
+      const mine = batch && batch.exportKind === "subject";
+      if (mine && batch.status === "done") {
+        btn.textContent = "Скачать Excel";
+        btn.disabled = false;
+        setAllClassesProgress(panel, 100);
+        setAllClassesStatus(panel, `Готово: собраны данные по ${batch.queue.length} классам. Можно скачать файл.`, "ok");
+      } else if (mine && batch.status === "running") {
+        const percent = batch.queue.length ? Math.round((batch.currentIndex / batch.queue.length) * 100) : 0;
+        btn.textContent = "Идёт сбор...";
+        btn.disabled = true;
+        setAllClassesProgress(panel, percent);
+        setAllClassesStatus(panel, `Собрано ${batch.currentIndex} из ${batch.queue.length} классов — идёт в фоновой вкладке, можно продолжать работать здесь.`, "muted");
+      } else {
+        btn.textContent = "Собрать по всем классам";
+        btn.disabled = false;
+        setAllClassesProgress(panel, 0);
+        setAllClassesStatus(panel, "На странице «Мои классы» разверните нужные параллели и нажмите — соберёт проблемных учеников и общий список по всем классам сразу.", "muted");
+      }
+    });
+  }
+
+  function setupAllClassesToggle(panel) {
+    const toggle = panel.querySelector("#mh-allclasses-toggle");
+    const arrow = toggle?.querySelector(".mh-class-arrow");
+    if (!toggle || toggle.dataset.ready === "1") return;
+    toggle.dataset.ready = "1";
+    let open = localStorage.getItem("meshHelperAllClassesOpen") === "1";
+    const apply = () => {
+      panel.classList.toggle("mh-allclasses-open", open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      if (arrow) arrow.textContent = open ? "▲" : "▼";
+    };
+    apply();
+    toggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      open = !open;
+      localStorage.setItem("meshHelperAllClassesOpen", open ? "1" : "0");
+      apply();
+    });
+  }
+
+  function setupAllClassesExport(panel) {
+    setupAllClassesToggle(panel);
+    const btn = panel.querySelector("#mh-export-allclasses");
+    if (btn && btn.dataset.ready !== "1") {
+      btn.dataset.ready = "1";
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
+        if (!loader) {
+          setAllClassesStatus(panel, "Модуль выгрузки не загружен. Обновите страницу и попробуйте снова.", "warn");
+          return;
+        }
+        const batch = await loader.getResults();
+        if (batch?.status === "done" && batch.exportKind === "subject") {
+          loader.exportAllClassesWorkbook();
+          return;
+        }
+        if (batch?.status === "running") {
+          if (batch.exportKind !== "subject") {
+            setAllClassesStatus(panel, "Сейчас уже идёт другой сбор («Мой класс») — дождитесь завершения.", "warn");
+          }
+          return;
+        }
+        const result = await loader.startAllClassesInBackground();
+        if (!result.ok) {
+          setAllClassesStatus(panel, "Карточки классов не найдены. Откройте «Мои классы», разверните нужные параллели и нажмите ещё раз.", "warn");
+        } else {
+          setAllClassesStatus(panel, "Сбор запущен в фоновой вкладке — можно продолжать работать здесь, она сама закроется по завершении.", "muted");
+          refreshAllClassesExportLabel(panel);
+        }
+      });
+    }
+    refreshAllClassesExportLabel(panel);
   }
 
   function setupDrag(panel) {
@@ -295,6 +398,15 @@
             <div id="mh-class-progress-text" class="mh-class-progress-text">0%</div>
             <div id="mh-class-export-status" class="mh-class-status" data-tone="muted">Соберите оценки, пропуски и итоги по всем предметам класса в один Excel-файл.</div>
           </div>
+        </div>
+        <div class="mh-section mh-allclasses-export">
+          <div id="mh-allclasses-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>Все классы (по предмету)</span><span class="mh-class-arrow">▼</span></div>
+          <div class="mh-allclasses-menu">
+            <button id="mh-export-allclasses" class="mh-class-export-btn" type="button">Собрать по всем классам</button>
+            <div class="mh-class-progress-track"><div id="mh-allclasses-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>
+            <div id="mh-allclasses-progress-text" class="mh-class-progress-text">0%</div>
+            <div id="mh-allclasses-export-status" class="mh-class-status" data-tone="muted">На странице «Мои классы» разверните нужные параллели и нажмите — соберёт проблемных учеников и общий список по всем классам сразу.</div>
+          </div>
         </div>`;
       document.body.appendChild(panel);
     }
@@ -304,6 +416,7 @@
     setupChecksMenu(panel);
     setupExportMenu(panel);
     setupClassExport(panel);
+    setupAllClassesExport(panel);
     setupDrag(panel);
     const minInput = panel.querySelector("#mh-min");
     const save = panel.querySelector("#mh-save");
