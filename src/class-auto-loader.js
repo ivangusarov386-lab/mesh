@@ -581,12 +581,17 @@
 
     svodRows.push(workbook.row([""], () => "Default"));
     svodRows.push(workbook.row(["Итого по каждому ученику — агрегат по ВСЕМ предметам класса сразу"], () => "Header"));
-    svodRows.push(workbook.row(["№", "ФИО", "Средний балл (все предметы)", "Оценок всего", "Н по факту", "Н % по факту", "Риск (Н ≥ 50%)"], () => "Header"));
+    svodRows.push(workbook.row(["№", "ФИО", "Средний балл (все предметы)", "Оценок всего", "Н по факту", "Н % по факту", "Риск (Н ≥ 50%)", "Риск академической задолженности"], () => "Header"));
     students.forEach((student, index) => {
       const stats = overallStatsForStudent(subjects, batch, student.id);
+      const academicRisk = stats.avg !== null && stats.avg <= ACADEMIC_DEBT_AVG_MAX ? "Да" : "Нет";
       svodRows.push(workbook.row(
-        [index + 1, student.name, stats.avg ?? "", stats.count, stats.absences, `${stats.percent}%`, stats.risk ? "да" : ""],
-        (value, colIndex) => (colIndex === 6 && stats.risk ? "BadAbsence" : "Default")
+        [index + 1, student.name, stats.avg ?? "", stats.count, stats.absences, `${stats.percent}%`, stats.risk ? "да" : "", academicRisk],
+        (value, colIndex) => {
+          if (colIndex === 6 && stats.risk) return "BadAbsence";
+          if (colIndex === 7 && academicRisk === "Да") return "BadAbsence";
+          return "Default";
+        }
       ));
     });
     const svodSheet = workbook.worksheet("СВОД", svodRows);
@@ -597,11 +602,11 @@
     const studentRows = [
       workbook.row(["Ученик:", students[0]?.name || ""], (value, colIndex) => (colIndex === 0 ? "Header" : "Default")),
       workbook.row([]),
-      workbook.row(["Предмет", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", ""], () => "Header")
+      workbook.row(["Предмет", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Риск академической задолженности", ""], () => "Header")
     ];
 
     subjectSheets.forEach((sheet, index) => {
-      const range = `${sheetRef(sheet.name)}!$B:$I`;
+      const range = `${sheetRef(sheet.name)}!$B:$J`;
       const lookup = (col, fallback) => workbook.formula(`IFERROR(VLOOKUP($B$1,${range},${col},FALSE),${fallback})`);
       studentRows.push(workbook.row([
         subjects[index].text,
@@ -611,6 +616,7 @@
         lookup(5, '""'),
         lookup(6, '""'),
         lookup(7, '""'),
+        lookup(9, '"Нет"'),
         lookup(8, "0")
       ], () => "Default"));
     });
@@ -618,11 +624,12 @@
     const firstDataRow = 4;
     const lastDataRow = 3 + subjectSheets.length;
     const studentSheet = workbook.worksheet("Ученик", studentRows, {
-      hiddenCols: [8],
+      hiddenCols: [9],
       dataValidations: [{ sqref: "B1", formula1: "MESH_STUDENTS" }],
       conditionalFormats: [
         { sqref: `C${firstDataRow}:C${lastDataRow}`, formula: `AND(C${firstDataRow}<>"",C${firstDataRow}<=${problemAvgThreshold})`, dxfId: 0 },
-        { sqref: `F${firstDataRow}:F${lastDataRow}`, formula: `$H${firstDataRow}>=50`, dxfId: 1 }
+        { sqref: `F${firstDataRow}:F${lastDataRow}`, formula: `$I${firstDataRow}>=50`, dxfId: 1 },
+        { sqref: `H${firstDataRow}:H${lastDataRow}`, formula: `H${firstDataRow}="Да"`, dxfId: 1 }
       ]
     });
 
