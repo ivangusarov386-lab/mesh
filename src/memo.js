@@ -42,11 +42,17 @@
       const groupEl = document.createElement("div");
       groupEl.className = "memo-group";
 
-      const header = document.createElement("div");
+      const header = document.createElement("label");
       header.className = "memo-group-header";
-      header.textContent = key === "?" ? "Без класса" : `Класс ${key}`;
+      const headerCheckbox = document.createElement("input");
+      headerCheckbox.type = "checkbox";
+      const headerSpan = document.createElement("span");
+      headerSpan.textContent = key === "?" ? "Без класса" : `Класс ${key}`;
+      header.appendChild(headerCheckbox);
+      header.appendChild(headerSpan);
       groupEl.appendChild(header);
 
+      const rowCheckboxes = [];
       items.forEach((item) => {
         const row = document.createElement("label");
         row.className = "memo-row";
@@ -59,6 +65,17 @@
         row.appendChild(checkbox);
         row.appendChild(span);
         groupEl.appendChild(row);
+        rowCheckboxes.push(checkbox);
+      });
+
+      headerCheckbox.checked = rowCheckboxes.every((cb) => cb.checked);
+      headerCheckbox.addEventListener("change", () => {
+        rowCheckboxes.forEach((cb) => { cb.checked = headerCheckbox.checked; });
+      });
+      rowCheckboxes.forEach((cb) => {
+        cb.addEventListener("change", () => {
+          headerCheckbox.checked = rowCheckboxes.every((c) => c.checked);
+        });
       });
 
       list.appendChild(groupEl);

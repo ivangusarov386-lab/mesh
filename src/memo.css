@@ -100,9 +100,13 @@ textarea {
 }
 
 .memo-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 800;
   font-size: 13px;
   padding: 4px 0;
+  cursor: pointer;
 }
 
 .memo-row {
