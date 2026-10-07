@@ -685,20 +685,24 @@
             return "Default";
           }
         ));
-        if (count && avg <= problemAvgThreshold) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Низкий средний балл", value: avg });
-        if (heldLessons && percent >= 50) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Много пропусков", value: `${percent}%` });
+        const combinedAcademicRisk = (count && avg <= ACADEMIC_DEBT_AVG_MAX) || (heldLessons && percent >= 50) ? "Да" : "Нет";
+        if (count && avg <= problemAvgThreshold) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Низкий средний балл", value: avg, academicRisk: combinedAcademicRisk });
+        if (heldLessons && percent >= 50) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Много пропусков", value: `${percent}%`, academicRisk: combinedAcademicRisk });
       });
       return workbook.worksheet(cls.classLabel, rows);
     });
 
     const problemsRows = [
       workbook.row([`Проблемы по всем классам (средний балл ≤ ${problemAvgThreshold} или пропуски ≥ 50%)`], () => "Header"),
-      workbook.row(["Класс", "ФИО", "Проблема", "Значение"], () => "Header")
+      workbook.row(["Класс", "ФИО", "Проблема", "Значение", "Риск академической задолженности"], () => "Header")
     ];
     if (problems.length) {
-      problems.forEach((problem) => problemsRows.push(workbook.row([problem.classLabel, problem.student, problem.label, problem.value], () => "Default")));
+      problems.forEach((problem) => problemsRows.push(workbook.row(
+        [problem.classLabel, problem.student, problem.label, problem.value, problem.academicRisk],
+        (value, colIndex) => (colIndex === 4 && problem.academicRisk === "Да" ? "BadAbsence" : "Default")
+      )));
     } else {
-      problemsRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", ""], () => "Default"));
+      problemsRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", ""], () => "Default"));
     }
     const problemsSheet = workbook.worksheet("Проблемы", problemsRows);
 
