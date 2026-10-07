@@ -29,6 +29,7 @@
   window.__meshHelperClassAutoLoaderInstalled = true;
 
   const STORAGE_KEY = "meshHelperClassBatch";
+  const LAST_PROBLEMS_KEY = "meshHelperLastProblems";
   const NAV_DELAY_MS = 900;
   const MARKS_WAIT_TIMEOUT_MS = 15000;
   const JOURNAL_LINK_SELECTOR = 'a[href*="/journal/grade/"]';
@@ -705,6 +706,8 @@
       problemsRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", ""], () => "Default"));
     }
     const problemsSheet = workbook.worksheet("Проблемы", problemsRows);
+
+    await setStorage(LAST_PROBLEMS_KEY, { generatedAt: Date.now(), problems });
 
     const date = new Date().toISOString().slice(0, 10);
     workbook.downloadWorkbook(`mesh_vse_klassy_${date}.xlsx`, [problemsSheet, ...classSheets]);

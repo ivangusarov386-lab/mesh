@@ -110,6 +110,12 @@
   margin-top: 8px;
 }
 
+.mh-memo-btn {
+  margin-top: 8px;
+  background: linear-gradient(180deg, #0f766e 0%, #0d5f59 100%);
+  box-shadow: 0 2px 5px rgba(15, 118, 110, .25);
+}
+
 .mh-class-stop-btn {
   width: 100%;
   min-height: 30px;

@@ -543,12 +543,24 @@
     });
   }
 
+  function setupMemoButton(panel) {
+    const btn = panel.querySelector("#mh-open-memo");
+    if (!btn || btn.dataset.ready === "1") return;
+    btn.dataset.ready = "1";
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "open-memo" });
+    });
+  }
+
   function setupAllClassesExport(panel) {
     setupAllClassesToggle(panel);
     setupAllClassesSelectAll(panel);
     setupAllClassesPickerConfirm(panel);
     setupAllClassesAutoReadyListener();
     setupAllClassesStop(panel);
+    setupMemoButton(panel);
     const btn = panel.querySelector("#mh-export-allclasses");
     if (btn && btn.dataset.ready !== "1") {
       btn.dataset.ready = "1";
@@ -681,6 +693,7 @@
               <div id="mh-allclasses-picker-list" class="mh-allclasses-picker-list"></div>
               <button id="mh-allclasses-start-selected" class="mh-class-export-btn" type="button">Собрать выбранные</button>
             </div>
+            <button id="mh-open-memo" class="mh-class-export-btn mh-memo-btn" type="button">Служебная записка</button>
           </div>
         </div>`;
       document.body.appendChild(panel);

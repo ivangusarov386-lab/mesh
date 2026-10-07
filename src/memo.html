@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Служебная записка — МЭШ Помощник учителя</title>
+<link rel="stylesheet" href="memo.css">
+</head>
+<body>
+  <div class="memo-wrap">
+    <h1>Служебная записка</h1>
+    <p class="memo-hint">Черновик текста собран автоматически — поправь под себя перед скачиванием.</p>
+
+    <div id="memo-empty" class="memo-empty" style="display:none;">
+      Данных не найдено. Сначала выполните сбор «Все классы (по предмету)» в панели расширения на странице school.mos.ru, затем откройте эту вкладку заново.
+    </div>
+
+    <div id="memo-content" style="display:none;">
+      <section class="memo-section">
+        <label for="memo-header">Текст перед списком (кому адресовано, вступление)</label>
+        <textarea id="memo-header" rows="8"></textarea>
+      </section>
+
+      <section class="memo-section">
+        <h2>Ученики</h2>
+        <p class="memo-subhint">Отметь, кто войдёт в записку. По умолчанию отмечены те, у кого реальный риск академической задолженности.</p>
+        <div class="memo-toolbar">
+          <button id="memo-select-all" type="button">Отметить всех</button>
+          <button id="memo-select-none" type="button">Снять все</button>
+        </div>
+        <div id="memo-list" class="memo-list"></div>
+      </section>
+
+      <section class="memo-section">
+        <label for="memo-footer">Текст после списка (просьба, подпись)</label>
+        <textarea id="memo-footer" rows="8"></textarea>
+      </section>
+
+      <button id="memo-download" class="memo-download-btn" type="button">Скачать .docx</button>
+      <div id="memo-status" class="memo-status"></div>
+    </div>
+  </div>
+  <script src="memo.js"></script>
+</body>
+</html>

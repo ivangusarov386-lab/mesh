@@ -80,5 +80,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "open-memo") {
+    chrome.tabs.create({ url: chrome.runtime.getURL("src/memo.html") }).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+
   return undefined;
 });
