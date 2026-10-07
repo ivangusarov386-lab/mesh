@@ -15,7 +15,7 @@
   const TOGGLE_ID = "mh-notes-toggle";
 
   function currentJournalId() {
-    const match = location.pathname.match(/\/journal\/grade\/(\d+)/);
+    const match = location.pathname.match(/\/journal\/(?:grade|my)\/(\d+)/);
     return match ? match[1] : null;
   }
 
