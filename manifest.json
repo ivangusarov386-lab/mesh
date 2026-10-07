@@ -44,11 +44,13 @@
         "src/clean-panel.js",
         "src/final-summary-guard.js",
         "src/class-workbook.js",
-        "src/class-auto-loader.js"
+        "src/class-auto-loader.js",
+        "src/notes-panel.js"
       ],
       "css": [
         "src/panel.css",
-        "src/class-panel.css"
+        "src/class-panel.css",
+        "src/notes-panel.css"
       ],
       "run_at": "document_idle"
     }
