@@ -12,7 +12,7 @@
 
   const STORAGE_KEY = "meshHelperNotes";
   const DRAWER_ID = "mesh-helper-notes-drawer";
-  const TOGGLE_ID = "mh-notes-toggle";
+  const TOGGLE_ID = "mh-notes-open";
 
   function currentJournalId() {
     const match = location.pathname.match(/\/journal\/(?:grade|my)\/(\d+)/);
@@ -216,22 +216,15 @@
   function ensureToggleButton() {
     const panel = document.getElementById("mesh-helper-panel");
     if (!panel) return false;
-    const header = panel.querySelector(".mh-header");
-    if (!header || header.querySelector(`#${TOGGLE_ID}`)) return true;
-
-    const btn = document.createElement("button");
-    btn.id = TOGGLE_ID;
-    btn.type = "button";
-    btn.className = "mhn-toggle-btn";
-    btn.textContent = "📝";
-    btn.title = "Заметки к классу";
+    const btn = panel.querySelector(`#${TOGGLE_ID}`);
+    if (!btn) return false;
+    if (btn.dataset.mhnReady === "1") return true;
+    btn.dataset.mhnReady = "1";
     btn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       toggleDrawer();
     });
-    header.style.position = header.style.position || "relative";
-    header.appendChild(btn);
     return true;
   }
 
