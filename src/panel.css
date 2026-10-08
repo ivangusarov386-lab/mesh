@@ -143,13 +143,25 @@
   margin-top: 4px;
 }
 
+.mh-final-periods-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
 #mh-academic-periods {
-  padding: 4px 6px;
+  width: 100%;
+  padding: 6px 8px;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   font-size: 12px;
   background: #ffffff;
   color: #334155;
+  box-sizing: border-box;
 }
 
 .mh-results-menu {
