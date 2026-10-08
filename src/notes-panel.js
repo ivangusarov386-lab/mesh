@@ -53,18 +53,42 @@
       <div class="mhn-subtitle"></div>
       <div class="mhn-add">
         <textarea class="mhn-input" rows="3" placeholder="Новая заметка..."></textarea>
-        <button class="mhn-add-btn" type="button">Добавить</button>
+        <div class="mhn-add-row">
+          <button class="mhn-add-btn" type="button">Добавить</button>
+          <button class="mhn-cancel-btn" type="button" style="display:none;">Отмена</button>
+        </div>
       </div>
       <div class="mhn-list"></div>
     `;
     document.body.appendChild(drawer);
 
     drawer.querySelector(".mhn-close").addEventListener("click", closeDrawer);
-    drawer.querySelector(".mhn-add-btn").addEventListener("click", addNote);
+    drawer.querySelector(".mhn-add-btn").addEventListener("click", saveNote);
+    drawer.querySelector(".mhn-cancel-btn").addEventListener("click", clearEditMode);
     return drawer;
   }
 
-  async function addNote() {
+  let editingId = null;
+
+  function setEditMode(id, text) {
+    editingId = id;
+    const drawer = ensureDrawer();
+    const input = drawer.querySelector(".mhn-input");
+    input.value = text;
+    input.focus();
+    drawer.querySelector(".mhn-add-btn").textContent = "Сохранить";
+    drawer.querySelector(".mhn-cancel-btn").style.display = "inline-block";
+  }
+
+  function clearEditMode() {
+    editingId = null;
+    const drawer = ensureDrawer();
+    drawer.querySelector(".mhn-input").value = "";
+    drawer.querySelector(".mhn-add-btn").textContent = "Добавить";
+    drawer.querySelector(".mhn-cancel-btn").style.display = "none";
+  }
+
+  async function saveNote() {
     const journalId = currentJournalId();
     if (!journalId) return;
     const drawer = ensureDrawer();
@@ -74,10 +98,16 @@
 
     const all = await getAllNotes();
     if (!all[journalId]) all[journalId] = [];
-    all[journalId].unshift({ id: `${Date.now()}_${Math.random().toString(36).slice(2)}`, date: Date.now(), text });
+
+    if (editingId) {
+      const note = all[journalId].find((item) => item.id === editingId);
+      if (note) note.text = text;
+    } else {
+      all[journalId].unshift({ id: `${Date.now()}_${Math.random().toString(36).slice(2)}`, date: Date.now(), text });
+    }
     await saveAllNotes(all);
 
-    input.value = "";
+    clearEditMode();
     renderList(all[journalId]);
   }
 
@@ -87,6 +117,7 @@
     const all = await getAllNotes();
     all[journalId] = (all[journalId] || []).filter((note) => note.id !== id);
     await saveAllNotes(all);
+    if (id === editingId) clearEditMode();
     renderList(all[journalId]);
   }
 
@@ -101,9 +132,18 @@
       <div class="mhn-item">
         <div class="mhn-item-date">${escapeHtml(formatDate(note.date))}</div>
         <div class="mhn-item-text">${escapeHtml(note.text)}</div>
-        <button class="mhn-item-delete" type="button" data-id="${escapeHtml(note.id)}" aria-label="Удалить">×</button>
+        <div class="mhn-item-actions">
+          <button class="mhn-item-edit" type="button" data-id="${escapeHtml(note.id)}" aria-label="Редактировать">✎</button>
+          <button class="mhn-item-delete" type="button" data-id="${escapeHtml(note.id)}" aria-label="Удалить">×</button>
+        </div>
       </div>
     `).join("");
+    list.querySelectorAll(".mhn-item-edit").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const note = notes.find((item) => item.id === btn.dataset.id);
+        if (note) setEditMode(note.id, note.text);
+      });
+    });
     list.querySelectorAll(".mhn-item-delete").forEach((btn) => {
       btn.addEventListener("click", () => deleteNote(btn.dataset.id));
     });
@@ -130,6 +170,7 @@
   let watchTimer = null;
 
   async function refreshDrawerContent(journalId) {
+    if (journalId !== lastSeenJournalId) clearEditMode();
     const drawer = ensureDrawer();
     drawer.querySelector(".mhn-subtitle").textContent = journalId ? journalTitle() : "Откройте журнал класса, чтобы вести заметки.";
     drawer.querySelector(".mhn-add").style.display = journalId ? "block" : "none";
