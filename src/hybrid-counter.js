@@ -22,6 +22,11 @@
     return Number.isFinite(n) && n > 0 ? n : 5;
   }
 
+  function finalRoundThreshold() {
+    const n = Number(document.querySelector("#mh-final-round-threshold")?.value);
+    return Number.isFinite(n) && n > 0 && n < 1 ? n : 0.6;
+  }
+
   function marks() {
     const main = window.__MESH_HELPER_MARKS__;
     if (main && Array.isArray(main.marks) && main.marks.length) return main.marks;
@@ -170,9 +175,10 @@
   function correctFinalFromAverage(avg) {
     const n = Number(avg);
     if (!Number.isFinite(n)) return "";
-    if (n >= 4.6) return 5;
-    if (n >= 3.6) return 4;
-    if (n >= 2.6) return 3;
+    const t = finalRoundThreshold();
+    if (n >= 4 + t) return 5;
+    if (n >= 3 + t) return 4;
+    if (n >= 2 + t) return 3;
     return 2;
   }
 

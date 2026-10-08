@@ -481,13 +481,22 @@
     });
   }
 
-  function possibleFinal(avg) {
+  function possibleFinal(avg, threshold = 0.6) {
     const n = Number(avg);
     if (!Number.isFinite(n)) return "";
-    if (n >= 4.6) return 5;
-    if (n >= 3.6) return 4;
-    if (n >= 2.6) return 3;
+    if (n >= 4 + threshold) return 5;
+    if (n >= 3 + threshold) return 4;
+    if (n >= 2 + threshold) return 3;
     return 2;
+  }
+
+  function getFinalRoundThreshold() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(["finalRoundThreshold"], (data) => {
+        const value = Number(data.finalRoundThreshold);
+        resolve(Number.isFinite(value) && value > 0 && value < 1 ? value : 0.6);
+      });
+    });
   }
 
   function gradesTextForStudent(marks, studentId) {
@@ -542,6 +551,7 @@
     const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Н% (служ.)", "Риск академической задолженности"];
     const problemAvgThreshold = await getProblemAvgThreshold();
     const absencePercentThreshold = await getAbsencePercentThreshold();
+    const finalRoundThreshold = await getFinalRoundThreshold();
 
     const subjectSheets = subjects.map((subject) => {
       const marks = batch.results[subject.id]?.marks || [];
@@ -553,7 +563,7 @@
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
         const academicRisk = count && avg <= problemAvgThreshold ? "Да" : "Нет";
         rows.push(workbook.row(
-          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg) : "", percent, academicRisk],
+          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalRoundThreshold) : "", percent, academicRisk],
           (value, colIndex) => {
             if (colIndex === 6 && percent >= absencePercentThreshold) return "BadAbsence";
             if (colIndex === 9 && academicRisk === "Да") return "BadAbsence";
@@ -669,6 +679,7 @@
     const classes = batch.queue.map((item) => ({ id: item.id, classLabel: item.classLabel || item.text, text: item.text }));
     const problemAvgThreshold = await getProblemAvgThreshold();
     const absencePercentThreshold = await getAbsencePercentThreshold();
+    const finalRoundThreshold = await getFinalRoundThreshold();
     const CLASS_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Риск академической задолженности"];
 
     const problems = [];
@@ -688,7 +699,7 @@
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
         const academicRisk = count && avg <= problemAvgThreshold ? "Да" : "Нет";
         rows.push(workbook.row(
-          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg) : "", academicRisk],
+          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalRoundThreshold) : "", academicRisk],
           (value, colIndex) => {
             if (colIndex === 6 && percent >= absencePercentThreshold) return "BadAbsence";
             if (colIndex === 8 && academicRisk === "Да") return "BadAbsence";

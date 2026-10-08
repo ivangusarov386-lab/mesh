@@ -2,6 +2,7 @@
   const DEFAULT_MIN = 5;
   const DEFAULT_CLASS_PROBLEM_AVG = 3;
   const DEFAULT_CLASS_ABSENCE_PERCENT = 50;
+  const DEFAULT_FINAL_ROUND_THRESHOLD = 0.6;
   const PANEL_ID = "mesh-helper-panel";
   const MINI_MIN_ID = "mh-mini-min";
   const CHECKS_OPEN_KEY = "meshHelperChecksOpen";
@@ -680,11 +681,12 @@
         <div class="mh-section mh-settings"><label class="mh-label" for="mh-min">Минимум оценок</label><div class="mh-settings-row"><input id="mh-min" type="number" min="1"><button id="mh-save" type="button">Сохранить</button></div></div>
         <div class="mh-section mh-notes-row"><button id="mh-notes-open" class="mh-class-toggle mh-notes-toggle" type="button"><span class="mh-notes-label-wrap"><span class="mh-notes-icon">📝</span><span class="mh-notes-label">Заметки к классу</span></span><span class="mh-notes-arrow">▸</span></button></div>
         <div class="mh-section mh-checks">
-          <div id="mh-checks-toggle" class="mh-checks-toggle" role="button" aria-expanded="false"><span>Проверка оценок</span><span class="mh-checks-actions"><button id="mh-checks-help" class="mh-help" type="button" aria-label="Справка">?</button><span class="mh-checks-arrow">▼</span></span><div class="mh-help-popover"><b>Подсветка недобора</b> — красная подсветка учеников, у которых меньше оценок, чем указано в минимуме.<br><br><b>Контроль итогов</b> — синяя рамка, если итоговая оценка или «Г» не выставлены.<br><br><b>Проверка итогов</b> — жёлтая подсветка, если итог выставлен не по расчёту.</div></div>
+          <div id="mh-checks-toggle" class="mh-checks-toggle" role="button" aria-expanded="false"><span>Проверка оценок</span><span class="mh-checks-actions"><button id="mh-checks-help" class="mh-help" type="button" aria-label="Справка">?</button><span class="mh-checks-arrow">▼</span></span><div class="mh-help-popover"><b>Подсветка недобора</b> — красная подсветка учеников, у которых меньше оценок, чем указано в минимуме.<br><br><b>Контроль итогов</b> — синяя рамка, если итоговая оценка или «Г» не выставлены.<br><br><b>Проверка итогов</b> — жёлтая подсветка, если итог выставлен не по расчёту. Порог округления ниже определяет, с какой дробной части средний балл округляется вверх (разные школы считают по-разному, например 2,5 — где-то «3», где-то «2»).</div></div>
           <div class="mh-checks-menu">
             <label class="mh-toggle-row" for="mh-highlight-low"><input id="mh-highlight-low" type="checkbox"><span>Подсветка недобора</span></label>
             <label class="mh-toggle-row" for="mh-check-finals"><input id="mh-check-finals" type="checkbox"><span>Контроль итогов</span></label>
             <label class="mh-toggle-row" for="mh-check-correct-finals"><input id="mh-check-correct-finals" type="checkbox"><span>Проверка итогов</span></label>
+            <div class="mh-class-threshold-row"><label for="mh-final-round-threshold">Порог округления (0,1–0,9)</label><input id="mh-final-round-threshold" type="number" min="0.1" max="0.9" step="0.05"></div>
           </div>
         </div>
         <div class="mh-section mh-results">
@@ -743,7 +745,8 @@
     const correctFinals = panel.querySelector("#mh-check-correct-finals");
     const classAvgInputs = [panel.querySelector("#mh-class-min-avg"), panel.querySelector("#mh-allclasses-min-avg")].filter(Boolean);
     const classAbsenceInputs = [panel.querySelector("#mh-class-min-absence"), panel.querySelector("#mh-allclasses-min-absence")].filter(Boolean);
-    chrome.storage.sync.get(["minGrades", "checkFinals", "checkCorrectFinals", "classProblemAvg", "classAbsencePercent"], (data) => {
+    const finalRoundInput = panel.querySelector("#mh-final-round-threshold");
+    chrome.storage.sync.get(["minGrades", "checkFinals", "checkCorrectFinals", "classProblemAvg", "classAbsencePercent", "finalRoundThreshold"], (data) => {
       const value = typeof data.minGrades === "number" ? data.minGrades : DEFAULT_MIN;
       syncMiniMin(panel, value);
       if (finals) finals.checked = data.checkFinals === true;
@@ -752,10 +755,12 @@
       const absenceValue = typeof data.classAbsencePercent === "number" ? data.classAbsencePercent : DEFAULT_CLASS_ABSENCE_PERCENT;
       classAvgInputs.forEach((input) => { input.value = avgValue; });
       classAbsenceInputs.forEach((input) => { input.value = absenceValue; });
+      if (finalRoundInput) finalRoundInput.value = typeof data.finalRoundThreshold === "number" ? data.finalRoundThreshold : DEFAULT_FINAL_ROUND_THRESHOLD;
       notifyFinalsState(finals, correctFinals);
     });
     setupThresholdInputs(panel, "classProblemAvg", ["mh-class-min-avg", "mh-allclasses-min-avg"], DEFAULT_CLASS_PROBLEM_AVG);
     setupThresholdInputs(panel, "classAbsencePercent", ["mh-class-min-absence", "mh-allclasses-min-absence"], DEFAULT_CLASS_ABSENCE_PERCENT);
+    setupThresholdInputs(panel, "finalRoundThreshold", ["mh-final-round-threshold"], DEFAULT_FINAL_ROUND_THRESHOLD);
     if (save && save.dataset.ready !== "1") {
       save.dataset.ready = "1";
       save.addEventListener("click", () => saveMin(panel, minInput.value));
