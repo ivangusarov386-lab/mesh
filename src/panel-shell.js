@@ -2,7 +2,12 @@
   const DEFAULT_MIN = 5;
   const DEFAULT_CLASS_PROBLEM_AVG = 3;
   const DEFAULT_CLASS_ABSENCE_PERCENT = 50;
-  const DEFAULT_FINAL_ROUND_THRESHOLD = 0.6;
+  const DEFAULT_FINAL_GRADE_RANGES = {
+    2: { from: 1, to: 2.59 },
+    3: { from: 2.6, to: 3.59 },
+    4: { from: 3.6, to: 4.59 },
+    5: { from: 4.6, to: 5 }
+  };
   const PANEL_ID = "mesh-helper-panel";
   const MINI_MIN_ID = "mh-mini-min";
   const CHECKS_OPEN_KEY = "meshHelperChecksOpen";
@@ -264,6 +269,73 @@
         input.addEventListener(eventName, (e) => e.stopPropagation());
       });
     });
+  }
+
+  function applyFinalRanges(ranges) {
+    window.__MESH_HELPER_FINAL_RANGES__ = ranges;
+    window.dispatchEvent(new CustomEvent("mesh-helper-final-criteria-changed"));
+  }
+
+  function setupFinalCriteria(panel) {
+    const box = panel.querySelector("#mh-final-criteria");
+    const correctFinals = panel.querySelector("#mh-check-correct-finals");
+    const saveBtn = panel.querySelector("#mh-final-criteria-save");
+    const status = panel.querySelector("#mh-final-criteria-status");
+    if (!box) return;
+
+    if (correctFinals && correctFinals.dataset.mhCriteriaBound !== "1") {
+      correctFinals.dataset.mhCriteriaBound = "1";
+      correctFinals.addEventListener("change", () => {
+        box.style.display = correctFinals.checked ? "block" : "none";
+      });
+    }
+    if (correctFinals) box.style.display = correctFinals.checked ? "block" : "none";
+
+    [...box.querySelectorAll("input")].forEach((input) => {
+      if (input.dataset.ready === "1") return;
+      input.dataset.ready = "1";
+      ["click", "mousedown", "mouseup", "pointerdown", "pointerup"].forEach((eventName) => {
+        input.addEventListener(eventName, (e) => e.stopPropagation());
+      });
+    });
+
+    chrome.storage.sync.get(["finalGradeRanges"], (data) => {
+      const ranges = data.finalGradeRanges || DEFAULT_FINAL_GRADE_RANGES;
+      [2, 3, 4, 5].forEach((grade) => {
+        const range = ranges[grade] || DEFAULT_FINAL_GRADE_RANGES[grade];
+        const fromInput = box.querySelector(`.mh-final-from[data-grade="${grade}"]`);
+        const toInput = box.querySelector(`.mh-final-to[data-grade="${grade}"]`);
+        if (fromInput) fromInput.value = range.from;
+        if (toInput) toInput.value = range.to;
+      });
+      applyFinalRanges(ranges);
+    });
+
+    if (saveBtn && saveBtn.dataset.ready !== "1") {
+      saveBtn.dataset.ready = "1";
+      saveBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const ranges = {};
+        [2, 3, 4, 5].forEach((grade) => {
+          const fromInput = box.querySelector(`.mh-final-from[data-grade="${grade}"]`);
+          const toInput = box.querySelector(`.mh-final-to[data-grade="${grade}"]`);
+          const from = Number(fromInput?.value);
+          const to = Number(toInput?.value);
+          ranges[grade] = {
+            from: Number.isFinite(from) ? from : DEFAULT_FINAL_GRADE_RANGES[grade].from,
+            to: Number.isFinite(to) ? to : DEFAULT_FINAL_GRADE_RANGES[grade].to
+          };
+        });
+        chrome.storage.sync.set({ finalGradeRanges: ranges }, () => {
+          applyFinalRanges(ranges);
+          if (status) {
+            status.textContent = "Критерии сохранены.";
+            status.dataset.tone = "ok";
+          }
+        });
+      });
+    }
   }
 
   function setupClassStop(panel) {
@@ -686,8 +758,15 @@
             <label class="mh-toggle-row" for="mh-highlight-low"><input id="mh-highlight-low" type="checkbox"><span>Подсветка недобора</span></label>
             <label class="mh-toggle-row" for="mh-check-finals"><input id="mh-check-finals" type="checkbox"><span>Контроль итогов</span></label>
             <label class="mh-toggle-row" for="mh-check-correct-finals"><input id="mh-check-correct-finals" type="checkbox"><span>Проверка итогов</span></label>
-            <div class="mh-class-threshold-row"><label for="mh-final-round-threshold">Порог округления итоговых</label><input id="mh-final-round-threshold" type="number" min="0.1" max="0.9" step="0.05"></div>
-            <div class="mh-threshold-hint">С какой дробной части среднего балла итог округляется вверх. Например: при 0,6 средний 2.5 → итог «2» (нужно 2.6, чтобы стало «3»). При 0,5 средний 2.5 → итог уже «3». Разные школы считают по-разному — подбери своё значение.</div>
+            <div id="mh-final-criteria" class="mh-final-criteria" style="display:none;">
+              <div class="mh-final-criteria-title">Критерии округления итоговой</div>
+              <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 2</span><input class="mh-final-from" data-grade="2" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="2" type="number" step="0.01" min="1" max="5"></div>
+              <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 3</span><input class="mh-final-from" data-grade="3" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="3" type="number" step="0.01" min="1" max="5"></div>
+              <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 4</span><input class="mh-final-from" data-grade="4" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="4" type="number" step="0.01" min="1" max="5"></div>
+              <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 5</span><input class="mh-final-from" data-grade="5" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="5" type="number" step="0.01" min="1" max="5"></div>
+              <button id="mh-final-criteria-save" class="mh-class-export-btn" type="button">Сохранить критерии</button>
+              <div id="mh-final-criteria-status" class="mh-class-status" data-tone="muted"></div>
+            </div>
           </div>
         </div>
         <div class="mh-section mh-results">
@@ -746,8 +825,7 @@
     const correctFinals = panel.querySelector("#mh-check-correct-finals");
     const classAvgInputs = [panel.querySelector("#mh-class-min-avg"), panel.querySelector("#mh-allclasses-min-avg")].filter(Boolean);
     const classAbsenceInputs = [panel.querySelector("#mh-class-min-absence"), panel.querySelector("#mh-allclasses-min-absence")].filter(Boolean);
-    const finalRoundInput = panel.querySelector("#mh-final-round-threshold");
-    chrome.storage.sync.get(["minGrades", "checkFinals", "checkCorrectFinals", "classProblemAvg", "classAbsencePercent", "finalRoundThreshold"], (data) => {
+    chrome.storage.sync.get(["minGrades", "checkFinals", "checkCorrectFinals", "classProblemAvg", "classAbsencePercent"], (data) => {
       const value = typeof data.minGrades === "number" ? data.minGrades : DEFAULT_MIN;
       syncMiniMin(panel, value);
       if (finals) finals.checked = data.checkFinals === true;
@@ -756,12 +834,11 @@
       const absenceValue = typeof data.classAbsencePercent === "number" ? data.classAbsencePercent : DEFAULT_CLASS_ABSENCE_PERCENT;
       classAvgInputs.forEach((input) => { input.value = avgValue; });
       classAbsenceInputs.forEach((input) => { input.value = absenceValue; });
-      if (finalRoundInput) finalRoundInput.value = typeof data.finalRoundThreshold === "number" ? data.finalRoundThreshold : DEFAULT_FINAL_ROUND_THRESHOLD;
       notifyFinalsState(finals, correctFinals);
     });
     setupThresholdInputs(panel, "classProblemAvg", ["mh-class-min-avg", "mh-allclasses-min-avg"], DEFAULT_CLASS_PROBLEM_AVG);
     setupThresholdInputs(panel, "classAbsencePercent", ["mh-class-min-absence", "mh-allclasses-min-absence"], DEFAULT_CLASS_ABSENCE_PERCENT);
-    setupThresholdInputs(panel, "finalRoundThreshold", ["mh-final-round-threshold"], DEFAULT_FINAL_ROUND_THRESHOLD);
+    setupFinalCriteria(panel);
     if (save && save.dataset.ready !== "1") {
       save.dataset.ready = "1";
       save.addEventListener("click", () => saveMin(panel, minInput.value));

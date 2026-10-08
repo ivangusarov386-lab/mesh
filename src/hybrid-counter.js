@@ -22,9 +22,26 @@
     return Number.isFinite(n) && n > 0 ? n : 5;
   }
 
-  function finalRoundThreshold() {
-    const n = Number(document.querySelector("#mh-final-round-threshold")?.value);
-    return Number.isFinite(n) && n > 0 && n < 1 ? n : 0.6;
+  const DEFAULT_FINAL_GRADE_RANGES = {
+    2: { from: 1, to: 2.59 },
+    3: { from: 2.6, to: 3.59 },
+    4: { from: 3.6, to: 4.59 },
+    5: { from: 4.6, to: 5 }
+  };
+
+  function gradeFromRanges(avg) {
+    const n = Number(avg);
+    if (!Number.isFinite(n)) return "";
+    const ranges = window.__MESH_HELPER_FINAL_RANGES__ || DEFAULT_FINAL_GRADE_RANGES;
+    for (const grade of [5, 4, 3, 2]) {
+      const r = ranges[grade];
+      if (r && n >= r.from && n <= r.to) return grade;
+    }
+    for (const grade of [5, 4, 3, 2]) {
+      const r = ranges[grade];
+      if (r && n >= r.from) return grade;
+    }
+    return 2;
   }
 
   function marks() {
@@ -173,13 +190,7 @@
   }
 
   function correctFinalFromAverage(avg) {
-    const n = Number(avg);
-    if (!Number.isFinite(n)) return "";
-    const t = finalRoundThreshold();
-    if (n >= 4 + t) return 5;
-    if (n >= 3 + t) return 4;
-    if (n >= 2 + t) return 3;
-    return 2;
+    return gradeFromRanges(avg);
   }
 
   function averageFromRow(row) {
@@ -504,6 +515,7 @@
   window.addEventListener("mesh-helper-panel-ready", bindExportButtons);
   window.addEventListener("mesh-helper-min-grades-changed", fastApplyFromCache);
   window.addEventListener("mesh-helper-highlight-toggle", () => schedule(250));
+  window.addEventListener("mesh-helper-final-criteria-changed", () => schedule(100));
   window.addEventListener("mesh-helper-marks-updated", () => schedule(900));
   window.addEventListener("message", (e) => {
     if (e.source === window && e.data?.source === "mesh-helper-marks-hook" && e.data?.type === "marks-response") schedule(900);

@@ -481,22 +481,33 @@
     });
   }
 
-  function possibleFinal(avg, threshold = 0.6) {
-    const n = Number(avg);
-    if (!Number.isFinite(n)) return "";
-    if (n >= 4 + threshold) return 5;
-    if (n >= 3 + threshold) return 4;
-    if (n >= 2 + threshold) return 3;
-    return 2;
-  }
+  const DEFAULT_FINAL_GRADE_RANGES = {
+    2: { from: 1, to: 2.59 },
+    3: { from: 2.6, to: 3.59 },
+    4: { from: 3.6, to: 4.59 },
+    5: { from: 4.6, to: 5 }
+  };
 
-  function getFinalRoundThreshold() {
+  function getFinalGradeRanges() {
     return new Promise((resolve) => {
-      chrome.storage.sync.get(["finalRoundThreshold"], (data) => {
-        const value = Number(data.finalRoundThreshold);
-        resolve(Number.isFinite(value) && value > 0 && value < 1 ? value : 0.6);
+      chrome.storage.sync.get(["finalGradeRanges"], (data) => {
+        resolve(data.finalGradeRanges || DEFAULT_FINAL_GRADE_RANGES);
       });
     });
+  }
+
+  function possibleFinal(avg, ranges = DEFAULT_FINAL_GRADE_RANGES) {
+    const n = Number(avg);
+    if (!Number.isFinite(n)) return "";
+    for (const grade of [5, 4, 3, 2]) {
+      const r = ranges[grade];
+      if (r && n >= r.from && n <= r.to) return grade;
+    }
+    for (const grade of [5, 4, 3, 2]) {
+      const r = ranges[grade];
+      if (r && n >= r.from) return grade;
+    }
+    return 2;
   }
 
   function gradesTextForStudent(marks, studentId) {
@@ -551,7 +562,7 @@
     const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Н% (служ.)", "Риск академической задолженности"];
     const problemAvgThreshold = await getProblemAvgThreshold();
     const absencePercentThreshold = await getAbsencePercentThreshold();
-    const finalRoundThreshold = await getFinalRoundThreshold();
+    const finalGradeRanges = await getFinalGradeRanges();
 
     const subjectSheets = subjects.map((subject) => {
       const marks = batch.results[subject.id]?.marks || [];
@@ -563,7 +574,7 @@
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
         const academicRisk = count && avg <= problemAvgThreshold ? "Да" : "Нет";
         rows.push(workbook.row(
-          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalRoundThreshold) : "", percent, academicRisk],
+          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", percent, academicRisk],
           (value, colIndex) => {
             if (colIndex === 6 && percent >= absencePercentThreshold) return "BadAbsence";
             if (colIndex === 9 && academicRisk === "Да") return "BadAbsence";
@@ -679,7 +690,7 @@
     const classes = batch.queue.map((item) => ({ id: item.id, classLabel: item.classLabel || item.text, text: item.text }));
     const problemAvgThreshold = await getProblemAvgThreshold();
     const absencePercentThreshold = await getAbsencePercentThreshold();
-    const finalRoundThreshold = await getFinalRoundThreshold();
+    const finalGradeRanges = await getFinalGradeRanges();
     const CLASS_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Риск академической задолженности"];
 
     const problems = [];
@@ -699,7 +710,7 @@
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
         const academicRisk = count && avg <= problemAvgThreshold ? "Да" : "Нет";
         rows.push(workbook.row(
-          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalRoundThreshold) : "", academicRisk],
+          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", academicRisk],
           (value, colIndex) => {
             if (colIndex === 6 && percent >= absencePercentThreshold) return "BadAbsence";
             if (colIndex === 8 && academicRisk === "Да") return "BadAbsence";

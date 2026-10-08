@@ -94,15 +94,53 @@
 
 #mesh-helper-panel.mh-checks-open .mh-checks-menu { display: block; }
 
-.mh-threshold-hint {
-  margin: -2px 2px 6px;
-  padding: 7px 9px;
-  border-radius: 9px;
+.mh-final-criteria {
+  margin-top: 4px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
   background: #f8fafc;
-  color: #64748b;
+}
+
+.mh-final-criteria-title {
   font-size: 11px;
-  font-weight: 600;
-  line-height: 1.35;
+  font-weight: 800;
+  color: #334155;
+  margin-bottom: 8px;
+}
+
+.mh-final-criteria-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.mh-final-grade-label {
+  flex: 1 0 auto;
+  white-space: nowrap;
+}
+
+.mh-final-dash {
+  color: #94a3b8;
+}
+
+.mh-final-from,
+.mh-final-to {
+  width: 52px;
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+#mh-final-criteria-save {
+  margin-top: 4px;
 }
 
 .mh-results-menu {
