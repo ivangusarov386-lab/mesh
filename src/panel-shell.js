@@ -1,12 +1,13 @@
 (() => {
   const DEFAULT_MIN = 5;
   const DEFAULT_CLASS_PROBLEM_AVG = 3;
+  const DEFAULT_CLASS_ABSENCE_PERCENT = 50;
   const PANEL_ID = "mesh-helper-panel";
   const MINI_MIN_ID = "mh-mini-min";
   const CHECKS_OPEN_KEY = "meshHelperChecksOpen";
   let panelAttempts = 0;
   let minSaveTimer = null;
-  let classAvgSaveTimer = null;
+  const thresholdSaveTimers = {};
   let batchStorageListenerReady = false;
 
   function setupBatchStorageListener() {
@@ -237,6 +238,30 @@
       open = !open;
       localStorage.setItem("meshHelperClassOpen", open ? "1" : "0");
       apply();
+    });
+  }
+
+  function setupThresholdInputs(panel, storageKey, selectors, defaultValue) {
+    const inputs = selectors.map((id) => panel.querySelector(`#${id}`)).filter(Boolean);
+    inputs.forEach((input) => {
+      if (input.dataset.ready === "1") return;
+      input.dataset.ready = "1";
+      const save = () => {
+        const value = Number(input.value);
+        const normalized = Number.isFinite(value) && value > 0 ? value : defaultValue;
+        clearTimeout(thresholdSaveTimers[storageKey]);
+        thresholdSaveTimers[storageKey] = setTimeout(() => {
+          chrome.storage.sync.set({ [storageKey]: normalized });
+          inputs.forEach((other) => {
+            if (other !== input) other.value = normalized;
+          });
+        }, 150);
+      };
+      input.addEventListener("input", save);
+      input.addEventListener("change", save);
+      ["click", "mousedown", "mouseup", "pointerdown", "pointerup"].forEach((eventName) => {
+        input.addEventListener(eventName, (e) => e.stopPropagation());
+      });
     });
   }
 
@@ -674,6 +699,7 @@
           <div id="mh-class-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>Мой класс</span><span class="mh-class-arrow">▼</span></div>
           <div class="mh-class-menu">
             <div class="mh-class-threshold-row"><label for="mh-class-min-avg">Проблема при среднем ≤</label><input id="mh-class-min-avg" type="number" min="1" max="5" step="0.1"></div>
+            <div class="mh-class-threshold-row"><label for="mh-class-min-absence">Проблема при пропусках ≥ (%)</label><input id="mh-class-min-absence" type="number" min="1" max="100" step="1"></div>
             <button id="mh-export-class" class="mh-class-export-btn" type="button">Собрать все предметы</button>
             <button id="mh-class-stop" class="mh-class-stop-btn" type="button" style="display:none;">Остановить сбор</button>
             <div class="mh-class-progress-track"><div id="mh-class-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>
@@ -684,6 +710,8 @@
         <div class="mh-section mh-allclasses-export">
           <div id="mh-allclasses-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>Все классы (по предмету)</span><span class="mh-class-arrow">▼</span></div>
           <div class="mh-allclasses-menu">
+            <div class="mh-class-threshold-row"><label for="mh-allclasses-min-avg">Проблема при среднем ≤</label><input id="mh-allclasses-min-avg" type="number" min="1" max="5" step="0.1"></div>
+            <div class="mh-class-threshold-row"><label for="mh-allclasses-min-absence">Проблема при пропусках ≥ (%)</label><input id="mh-allclasses-min-absence" type="number" min="1" max="100" step="1"></div>
             <label class="mh-toggle-row" for="mh-allclasses-select-all"><input id="mh-allclasses-select-all" type="checkbox" checked><span>Все видимые классы</span></label>
             <button id="mh-export-allclasses" class="mh-class-export-btn" type="button">Собрать по всем классам</button>
             <button id="mh-allclasses-stop" class="mh-class-stop-btn" type="button" style="display:none;">Остановить сбор</button>
@@ -713,29 +741,21 @@
     const save = panel.querySelector("#mh-save");
     const finals = panel.querySelector("#mh-check-finals");
     const correctFinals = panel.querySelector("#mh-check-correct-finals");
-    const classMinAvg = panel.querySelector("#mh-class-min-avg");
-    chrome.storage.sync.get(["minGrades", "checkFinals", "checkCorrectFinals", "classProblemAvg"], (data) => {
+    const classAvgInputs = [panel.querySelector("#mh-class-min-avg"), panel.querySelector("#mh-allclasses-min-avg")].filter(Boolean);
+    const classAbsenceInputs = [panel.querySelector("#mh-class-min-absence"), panel.querySelector("#mh-allclasses-min-absence")].filter(Boolean);
+    chrome.storage.sync.get(["minGrades", "checkFinals", "checkCorrectFinals", "classProblemAvg", "classAbsencePercent"], (data) => {
       const value = typeof data.minGrades === "number" ? data.minGrades : DEFAULT_MIN;
       syncMiniMin(panel, value);
       if (finals) finals.checked = data.checkFinals === true;
       if (correctFinals) correctFinals.checked = data.checkCorrectFinals === true;
-      if (classMinAvg) classMinAvg.value = typeof data.classProblemAvg === "number" ? data.classProblemAvg : DEFAULT_CLASS_PROBLEM_AVG;
+      const avgValue = typeof data.classProblemAvg === "number" ? data.classProblemAvg : DEFAULT_CLASS_PROBLEM_AVG;
+      const absenceValue = typeof data.classAbsencePercent === "number" ? data.classAbsencePercent : DEFAULT_CLASS_ABSENCE_PERCENT;
+      classAvgInputs.forEach((input) => { input.value = avgValue; });
+      classAbsenceInputs.forEach((input) => { input.value = absenceValue; });
       notifyFinalsState(finals, correctFinals);
     });
-    if (classMinAvg && classMinAvg.dataset.ready !== "1") {
-      classMinAvg.dataset.ready = "1";
-      const saveClassAvg = () => {
-        const value = Number(classMinAvg.value);
-        const normalized = Number.isFinite(value) && value > 0 ? value : DEFAULT_CLASS_PROBLEM_AVG;
-        clearTimeout(classAvgSaveTimer);
-        classAvgSaveTimer = setTimeout(() => chrome.storage.sync.set({ classProblemAvg: normalized }), 150);
-      };
-      classMinAvg.addEventListener("input", saveClassAvg);
-      classMinAvg.addEventListener("change", saveClassAvg);
-      ["click", "mousedown", "mouseup", "pointerdown", "pointerup"].forEach((eventName) => {
-        classMinAvg.addEventListener(eventName, (e) => e.stopPropagation());
-      });
-    }
+    setupThresholdInputs(panel, "classProblemAvg", ["mh-class-min-avg", "mh-allclasses-min-avg"], DEFAULT_CLASS_PROBLEM_AVG);
+    setupThresholdInputs(panel, "classAbsencePercent", ["mh-class-min-absence", "mh-allclasses-min-absence"], DEFAULT_CLASS_ABSENCE_PERCENT);
     if (save && save.dataset.ready !== "1") {
       save.dataset.ready = "1";
       save.addEventListener("click", () => saveMin(panel, minInput.value));

@@ -472,6 +472,15 @@
     });
   }
 
+  function getAbsencePercentThreshold() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(["classAbsencePercent"], (data) => {
+        const value = Number(data.classAbsencePercent);
+        resolve(Number.isFinite(value) && value > 0 ? value : 50);
+      });
+    });
+  }
+
   function possibleFinal(avg) {
     const n = Number(avg);
     if (!Number.isFinite(n)) return "";
@@ -489,7 +498,7 @@
       .join(", ");
   }
 
-  function overallStatsForStudent(subjects, batch, studentId) {
+  function overallStatsForStudent(subjects, batch, studentId, absenceThreshold) {
     const allGrades = [];
     let absences = 0;
     let total = 0;
@@ -503,7 +512,7 @@
       const subAbsences = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId).length;
       absences += subAbsences;
       total += heldLessons;
-      if (heldLessons && Math.round((subAbsences / heldLessons) * 1000) / 10 >= 50) risk = true;
+      if (heldLessons && Math.round((subAbsences / heldLessons) * 1000) / 10 >= absenceThreshold) risk = true;
     });
     const avg = allGrades.length ? Math.round((allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length) * 100) / 100 : null;
     const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
@@ -531,7 +540,8 @@
 
     const subjects = batch.queue.map((item) => ({ id: item.id, text: item.text }));
     const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Н% (служ.)", "Риск академической задолженности"];
-    const ACADEMIC_DEBT_AVG_MAX = 2.5;
+    const problemAvgThreshold = await getProblemAvgThreshold();
+    const absencePercentThreshold = await getAbsencePercentThreshold();
 
     const subjectSheets = subjects.map((subject) => {
       const marks = batch.results[subject.id]?.marks || [];
@@ -541,11 +551,11 @@
       students.forEach((student, index) => {
         const { count, avg } = averageForStudent(marks, student.id);
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
-        const academicRisk = count && avg <= ACADEMIC_DEBT_AVG_MAX ? "Да" : "Нет";
+        const academicRisk = count && avg <= problemAvgThreshold ? "Да" : "Нет";
         rows.push(workbook.row(
           [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg) : "", percent, academicRisk],
           (value, colIndex) => {
-            if (colIndex === 6 && percent >= 50) return "BadAbsence";
+            if (colIndex === 6 && percent >= absencePercentThreshold) return "BadAbsence";
             if (colIndex === 9 && academicRisk === "Да") return "BadAbsence";
             return "Default";
           }
@@ -554,7 +564,6 @@
       return workbook.worksheet(subject.text, rows, { hiddenCols: [9] });
     });
 
-    const problemAvgThreshold = await getProblemAvgThreshold();
     const problems = [];
     students.forEach((student) => {
       subjects.forEach((subject) => {
@@ -564,12 +573,12 @@
         const { count, avg } = averageForStudent(marks, student.id);
         const { percent } = attendanceForStudent(attendances, student.id, heldLessons);
         if (count && avg <= problemAvgThreshold) problems.push({ student: student.name, subject: subject.text, label: "Низкий средний балл", value: avg });
-        if (heldLessons && percent >= 50) problems.push({ student: student.name, subject: subject.text, label: "Много пропусков", value: `${percent}%` });
+        if (heldLessons && percent >= absencePercentThreshold) problems.push({ student: student.name, subject: subject.text, label: "Много пропусков", value: `${percent}%` });
       });
     });
 
     const svodRows = [
-      workbook.row([`Проблемы по предметам (средний балл ≤ ${problemAvgThreshold} или пропуски ≥ 50%)`], () => "Header"),
+      workbook.row([`Проблемы по предметам (средний балл ≤ ${problemAvgThreshold} или пропуски ≥ ${absencePercentThreshold}%)`], () => "Header"),
       workbook.row(["№", "ФИО", "Предмет", "Проблема", "Значение"], () => "Header")
     ];
     if (problems.length) {
@@ -582,10 +591,10 @@
 
     svodRows.push(workbook.row([""], () => "Default"));
     svodRows.push(workbook.row(["Итого по каждому ученику — агрегат по ВСЕМ предметам класса сразу"], () => "Header"));
-    svodRows.push(workbook.row(["№", "ФИО", "Средний балл (все предметы)", "Оценок всего", "Н по факту", "Н % по факту", "Риск (Н ≥ 50%)", "Риск академической задолженности"], () => "Header"));
+    svodRows.push(workbook.row(["№", "ФИО", "Средний балл (все предметы)", "Оценок всего", "Н по факту", "Н % по факту", `Риск (Н ≥ ${absencePercentThreshold}%)`, "Риск академической задолженности"], () => "Header"));
     students.forEach((student, index) => {
-      const stats = overallStatsForStudent(subjects, batch, student.id);
-      const academicRisk = stats.avg !== null && stats.avg <= ACADEMIC_DEBT_AVG_MAX ? "Да" : "Нет";
+      const stats = overallStatsForStudent(subjects, batch, student.id, absencePercentThreshold);
+      const academicRisk = stats.avg !== null && stats.avg <= problemAvgThreshold ? "Да" : "Нет";
       svodRows.push(workbook.row(
         [index + 1, student.name, stats.avg ?? "", stats.count, stats.absences, `${stats.percent}%`, stats.risk ? "да" : "", academicRisk],
         (value, colIndex) => {
@@ -629,7 +638,7 @@
       dataValidations: [{ sqref: "B1", formula1: "MESH_STUDENTS" }],
       conditionalFormats: [
         { sqref: `C${firstDataRow}:C${lastDataRow}`, formula: `AND(C${firstDataRow}<>"",C${firstDataRow}<=${problemAvgThreshold})`, dxfId: 0 },
-        { sqref: `F${firstDataRow}:F${lastDataRow}`, formula: `$I${firstDataRow}>=50`, dxfId: 1 },
+        { sqref: `F${firstDataRow}:F${lastDataRow}`, formula: `$I${firstDataRow}>=${absencePercentThreshold}`, dxfId: 1 },
         { sqref: `H${firstDataRow}:H${lastDataRow}`, formula: `H${firstDataRow}="Да"`, dxfId: 1 }
       ]
     });
@@ -659,7 +668,7 @@
 
     const classes = batch.queue.map((item) => ({ id: item.id, classLabel: item.classLabel || item.text, text: item.text }));
     const problemAvgThreshold = await getProblemAvgThreshold();
-    const ACADEMIC_DEBT_AVG_MAX = 2.5;
+    const absencePercentThreshold = await getAbsencePercentThreshold();
     const CLASS_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Риск академической задолженности"];
 
     const problems = [];
@@ -677,24 +686,24 @@
         studentsTotal += 1;
         const { count, avg } = averageForStudent(marks, student.id);
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
-        const academicRisk = count && avg <= ACADEMIC_DEBT_AVG_MAX ? "Да" : "Нет";
+        const academicRisk = count && avg <= problemAvgThreshold ? "Да" : "Нет";
         rows.push(workbook.row(
           [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg) : "", academicRisk],
           (value, colIndex) => {
-            if (colIndex === 6 && percent >= 50) return "BadAbsence";
+            if (colIndex === 6 && percent >= absencePercentThreshold) return "BadAbsence";
             if (colIndex === 8 && academicRisk === "Да") return "BadAbsence";
             return "Default";
           }
         ));
-        const combinedAcademicRisk = (count && avg <= ACADEMIC_DEBT_AVG_MAX) || (heldLessons && percent >= 50) ? "Да" : "Нет";
+        const combinedAcademicRisk = (count && avg <= problemAvgThreshold) || (heldLessons && percent >= absencePercentThreshold) ? "Да" : "Нет";
         if (count && avg <= problemAvgThreshold) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Низкий средний балл", value: avg, academicRisk: combinedAcademicRisk });
-        if (heldLessons && percent >= 50) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Много пропусков", value: `${percent}%`, academicRisk: combinedAcademicRisk });
+        if (heldLessons && percent >= absencePercentThreshold) problems.push({ classLabel: cls.classLabel, student: student.name, label: "Много пропусков", value: `${percent}%`, academicRisk: combinedAcademicRisk });
       });
       return workbook.worksheet(cls.classLabel, rows);
     });
 
     const problemsRows = [
-      workbook.row([`Проблемы по всем классам (средний балл ≤ ${problemAvgThreshold} или пропуски ≥ 50%)`], () => "Header"),
+      workbook.row([`Проблемы по всем классам (средний балл ≤ ${problemAvgThreshold} или пропуски ≥ ${absencePercentThreshold}%)`], () => "Header"),
       workbook.row(["Класс", "ФИО", "Проблема", "Значение", "Риск академической задолженности"], () => "Header")
     ];
     if (problems.length) {
