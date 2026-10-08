@@ -291,7 +291,8 @@
     }
     if (correctFinals) box.style.display = correctFinals.checked ? "block" : "none";
 
-    [...box.querySelectorAll("input")].forEach((input) => {
+    const periodsSelect = panel.querySelector("#mh-academic-periods");
+    [...box.querySelectorAll("input"), periodsSelect].filter(Boolean).forEach((input) => {
       if (input.dataset.ready === "1") return;
       input.dataset.ready = "1";
       ["click", "mousedown", "mouseup", "pointerdown", "pointerup"].forEach((eventName) => {
@@ -299,7 +300,7 @@
       });
     });
 
-    chrome.storage.sync.get(["finalGradeRanges"], (data) => {
+    chrome.storage.sync.get(["finalGradeRanges", "academicPeriodsCount"], (data) => {
       const ranges = data.finalGradeRanges || DEFAULT_FINAL_GRADE_RANGES;
       [2, 3, 4, 5].forEach((grade) => {
         const range = ranges[grade] || DEFAULT_FINAL_GRADE_RANGES[grade];
@@ -308,6 +309,7 @@
         if (fromInput) fromInput.value = range.from;
         if (toInput) toInput.value = range.to;
       });
+      if (periodsSelect) periodsSelect.value = [2, 3, 4].includes(data.academicPeriodsCount) ? data.academicPeriodsCount : 4;
       applyFinalRanges(ranges);
     });
 
@@ -327,7 +329,9 @@
             to: Number.isFinite(to) ? to : DEFAULT_FINAL_GRADE_RANGES[grade].to
           };
         });
-        chrome.storage.sync.set({ finalGradeRanges: ranges }, () => {
+        const periodsValue = Number(periodsSelect?.value);
+        const periodsCount = [2, 3, 4].includes(periodsValue) ? periodsValue : 4;
+        chrome.storage.sync.set({ finalGradeRanges: ranges, academicPeriodsCount: periodsCount }, () => {
           applyFinalRanges(ranges);
           if (status) {
             status.textContent = "Критерии сохранены.";
@@ -760,6 +764,7 @@
             <label class="mh-toggle-row" for="mh-check-correct-finals"><input id="mh-check-correct-finals" type="checkbox"><span>Проверка итогов</span></label>
             <div id="mh-final-criteria" class="mh-final-criteria" style="display:none;">
               <div class="mh-final-criteria-title">Критерии округления итоговой</div>
+              <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Учебных периодов в году</span><select id="mh-academic-periods"><option value="4">4 (четверти)</option><option value="3">3 (триместры)</option><option value="2">2 (полугодия)</option></select></div>
               <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 2</span><input class="mh-final-from" data-grade="2" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="2" type="number" step="0.01" min="1" max="5"></div>
               <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 3</span><input class="mh-final-from" data-grade="3" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="3" type="number" step="0.01" min="1" max="5"></div>
               <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 4</span><input class="mh-final-from" data-grade="4" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="4" type="number" step="0.01" min="1" max="5"></div>
