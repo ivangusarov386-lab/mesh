@@ -94,6 +94,17 @@
 
 #mesh-helper-panel.mh-checks-open .mh-checks-menu { display: block; }
 
+.mh-threshold-hint {
+  margin: -2px 2px 6px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .mh-results-menu {
   display: none;
   margin-top: 10px;
