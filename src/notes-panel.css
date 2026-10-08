@@ -1,3 +1,34 @@
+.mh-notes-toggle {
+  border: 1px solid #fbbf24 !important;
+  background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%) !important;
+  box-shadow: 0 1px 3px rgba(217, 119, 6, .18) !important;
+}
+
+.mh-notes-toggle:hover {
+  background: linear-gradient(180deg, #fef3c7 0%, #fde68a 100%) !important;
+  border-color: #f59e0b !important;
+}
+
+.mh-notes-label-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mh-notes-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.mh-notes-label {
+  color: #92400e;
+  font-weight: 800;
+}
+
+.mh-notes-arrow {
+  color: #b45309;
+}
+
 #mesh-helper-notes-drawer {
   position: fixed;
   width: 340px;

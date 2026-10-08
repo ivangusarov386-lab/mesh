@@ -653,7 +653,7 @@
       panel.innerHTML = `
         <div class="mh-header"><div class="mh-title">Помощник учителя</div></div>
         <div class="mh-section mh-settings"><label class="mh-label" for="mh-min">Минимум оценок</label><div class="mh-settings-row"><input id="mh-min" type="number" min="1"><button id="mh-save" type="button">Сохранить</button></div></div>
-        <div class="mh-section mh-notes-row"><button id="mh-notes-open" class="mh-class-toggle" type="button"><span>Заметки к классу</span><span class="mh-notes-arrow">▸</span></button></div>
+        <div class="mh-section mh-notes-row"><button id="mh-notes-open" class="mh-class-toggle mh-notes-toggle" type="button"><span class="mh-notes-label-wrap"><span class="mh-notes-icon">📝</span><span class="mh-notes-label">Заметки к классу</span></span><span class="mh-notes-arrow">▸</span></button></div>
         <div class="mh-section mh-checks">
           <div id="mh-checks-toggle" class="mh-checks-toggle" role="button" aria-expanded="false"><span>Проверка оценок</span><span class="mh-checks-actions"><button id="mh-checks-help" class="mh-help" type="button" aria-label="Справка">?</button><span class="mh-checks-arrow">▼</span></span><div class="mh-help-popover"><b>Подсветка недобора</b> — красная подсветка учеников, у которых меньше оценок, чем указано в минимуме.<br><br><b>Контроль итогов</b> — синяя рамка, если итоговая оценка или «Г» не выставлены.<br><br><b>Проверка итогов</b> — жёлтая подсветка, если итог выставлен не по расчёту.</div></div>
           <div class="mh-checks-menu">
