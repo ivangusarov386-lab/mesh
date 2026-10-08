@@ -126,19 +126,44 @@
     drawer.style.height = `${Math.min(rect.height, window.innerHeight)}px`;
   }
 
-  async function openDrawer() {
-    const journalId = currentJournalId();
+  let lastSeenJournalId;
+  let watchTimer = null;
+
+  async function refreshDrawerContent(journalId) {
     const drawer = ensureDrawer();
     drawer.querySelector(".mhn-subtitle").textContent = journalId ? journalTitle() : "Откройте журнал класса, чтобы вести заметки.";
     drawer.querySelector(".mhn-add").style.display = journalId ? "block" : "none";
+    renderList(journalId ? (await getAllNotes())[journalId] || [] : []);
+    lastSeenJournalId = journalId;
+  }
+
+  function startWatching() {
+    stopWatching();
+    watchTimer = setInterval(() => {
+      const journalId = currentJournalId();
+      if (journalId === lastSeenJournalId) return;
+      refreshDrawerContent(journalId);
+    }, 700);
+  }
+
+  function stopWatching() {
+    if (watchTimer) clearInterval(watchTimer);
+    watchTimer = null;
+  }
+
+  async function openDrawer() {
+    const journalId = currentJournalId();
+    const drawer = ensureDrawer();
     drawer.classList.add("mhn-open");
     positionDrawer(drawer);
-    renderList(journalId ? (await getAllNotes())[journalId] || [] : []);
+    await refreshDrawerContent(journalId);
+    startWatching();
   }
 
   function closeDrawer() {
     const drawer = document.getElementById(DRAWER_ID);
     if (drawer) drawer.classList.remove("mhn-open");
+    stopWatching();
   }
 
   function toggleDrawer() {
