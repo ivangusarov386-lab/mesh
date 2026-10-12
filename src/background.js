@@ -11,41 +11,47 @@
 //  следующий, когда content script сообщает, что закончил.
 // ==========================================================
 
-const STORAGE_KEY = "meshHelperClassBatch";
+const DEFAULT_STORAGE_KEY = "meshHelperClassBatch";
 const SOURCE = "mesh-helper-background";
 
-function journalUrl(id) {
-  return `https://school.mos.ru/teacher/study-process/journal/grade/${id}?logon_source=teacher_mentor_journals`;
+function journalUrl(item, exportKind) {
+  if (exportKind === "admin") {
+    return `https://school.mos.ru/educationmanagement/manage/journals/group?targetGroupId=${item.id}&selectedGroupId=-10&selectedTeacherId=-10`;
+  }
+  return `https://school.mos.ru/teacher/study-process/journal/grade/${item.id}?logon_source=teacher_mentor_journals`;
 }
 
-async function getBatch() {
-  const data = await chrome.storage.local.get(STORAGE_KEY);
-  return data?.[STORAGE_KEY] || null;
+async function getBatch(storageKey) {
+  const data = await chrome.storage.local.get(storageKey);
+  return data?.[storageKey] || null;
 }
 
-async function startBackgroundBatch(journals, exportKind) {
+async function startBackgroundBatch(journals, exportKind, storageKey) {
   if (!Array.isArray(journals) || !journals.length) return;
 
+  const key = storageKey || DEFAULT_STORAGE_KEY;
+  const kind = exportKind === "subject" ? "subject" : exportKind === "admin" ? "admin" : "class";
   const batch = {
     status: "running",
     mode: "background",
-    exportKind: exportKind === "subject" ? "subject" : "class",
+    exportKind: kind,
     startedAt: Date.now(),
     queue: journals.map((journal) => ({ ...journal, status: "pending" })),
     currentIndex: 0,
     results: {}
   };
-  await chrome.storage.local.set({ [STORAGE_KEY]: batch });
-  const tab = await chrome.tabs.create({ url: journalUrl(journals[0].id), active: false });
-  const fresh = await getBatch();
+  await chrome.storage.local.set({ [key]: batch });
+  const tab = await chrome.tabs.create({ url: journalUrl(journals[0], kind), active: false });
+  const fresh = await getBatch(key);
   if (fresh && fresh.status === "running") {
     fresh.tabId = tab.id;
-    await chrome.storage.local.set({ [STORAGE_KEY]: fresh });
+    await chrome.storage.local.set({ [key]: fresh });
   }
 }
 
-async function advanceBackgroundBatch(tabId) {
-  const batch = await getBatch();
+async function advanceBackgroundBatch(tabId, storageKey) {
+  const key = storageKey || DEFAULT_STORAGE_KEY;
+  const batch = await getBatch(key);
   if (!batch || batch.status !== "running" || batch.mode !== "background") return;
 
   if (batch.currentIndex >= batch.queue.length) {
@@ -54,11 +60,12 @@ async function advanceBackgroundBatch(tabId) {
   }
 
   const nextItem = batch.queue[batch.currentIndex];
-  if (tabId && nextItem) chrome.tabs.update(tabId, { url: journalUrl(nextItem.id) }).catch(() => {});
+  if (tabId && nextItem) chrome.tabs.update(tabId, { url: journalUrl(nextItem, batch.exportKind) }).catch(() => {});
 }
 
-async function stopBackgroundBatch() {
-  const batch = await getBatch();
+async function stopBackgroundBatch(storageKey) {
+  const key = storageKey || DEFAULT_STORAGE_KEY;
+  const batch = await getBatch(key);
   if (batch?.tabId) chrome.tabs.remove(batch.tabId).catch(() => {});
 }
 
@@ -66,17 +73,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.source !== SOURCE) return undefined;
 
   if (message.type === "start") {
-    startBackgroundBatch(message.journals, message.exportKind).then(() => sendResponse({ ok: true }));
+    startBackgroundBatch(message.journals, message.exportKind, message.storageKey).then(() => sendResponse({ ok: true }));
     return true;
   }
 
   if (message.type === "advance") {
-    advanceBackgroundBatch(sender.tab?.id).then(() => sendResponse({ ok: true }));
+    advanceBackgroundBatch(sender.tab?.id, message.storageKey).then(() => sendResponse({ ok: true }));
     return true;
   }
 
   if (message.type === "stop") {
-    stopBackgroundBatch().then(() => sendResponse({ ok: true }));
+    stopBackgroundBatch(message.storageKey).then(() => sendResponse({ ok: true }));
     return true;
   }
 

@@ -252,6 +252,158 @@
     return findMissingHomeworkDates(schedule, todayDate);
   }
 
+  // ---- Фоновый обход журналов: открывает каждый targetGroupId в фоновой ----
+  // ---- вкладке (как «Все классы»), ждёт загрузки и собирает «Отсутствует ----
+  // ---- ДЗ» по каждому. Отдельный storage key — не пересекается с батчем ----
+  // ---- «Мой класс»/«Все классы» в class-auto-loader.js. ----
+
+  const ADMIN_STORAGE_KEY = "meshHelperAdminBatch";
+  const ADMIN_LAST_RESULTS_KEY = "meshHelperAdminLastResults";
+  const ADMIN_MARKS_WAIT_TIMEOUT_MS = 15000;
+
+  function currentAdminJournalIdFromQuery() {
+    return new URLSearchParams(location.search).get("targetGroupId");
+  }
+
+  function getStorage(key) {
+    return new Promise((resolve) => chrome.storage.local.get(key, (result) => resolve(result?.[key])));
+  }
+
+  function setStorage(key, value) {
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ [key]: value }, () => {
+        if (chrome.runtime.lastError) {
+          console.error("[МЭШ помощник][admin-collector] ОШИБКА ЗАПИСИ в storage:", chrome.runtime.lastError.message);
+        }
+        resolve();
+      });
+    });
+  }
+
+  function waitForAdminMarks() {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (found) => {
+        if (done) return;
+        done = true;
+        window.removeEventListener("mesh-helper-marks-updated", onUpdate);
+        resolve(found);
+      };
+      const onUpdate = () => finish(true);
+      window.addEventListener("mesh-helper-marks-updated", onUpdate);
+      if (window.__MESH_HELPER_MARKS__?.loadedAt) {
+        finish(true);
+        return;
+      }
+      setTimeout(() => finish(false), ADMIN_MARKS_WAIT_TIMEOUT_MS);
+    });
+  }
+
+  async function startAdminBatchInBackground(journals) {
+    if (!Array.isArray(journals) || !journals.length) {
+      log("Пустой список журналов — нечего собирать.");
+      return { ok: false, reason: "empty" };
+    }
+    const batch = {
+      status: "running",
+      mode: "background",
+      startedAt: Date.now(),
+      queue: journals.map((j) => ({ ...j, status: "pending" })),
+      currentIndex: 0,
+      results: {}
+    };
+    await setStorage(ADMIN_STORAGE_KEY, batch);
+    log(`Старт в фоне (Отсутствует ДЗ): ${journals.length} журналов.`);
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { source: "mesh-helper-background", type: "start", journals, exportKind: "admin", storageKey: ADMIN_STORAGE_KEY },
+        () => resolve({ ok: true, total: journals.length })
+      );
+    });
+  }
+
+  async function collectMissingHomeworkForParallel(n) {
+    const journals = await collectParallel(n);
+    return startAdminBatchInBackground(journals);
+  }
+
+  function clearAdminBatch() {
+    return new Promise((resolve) => chrome.storage.local.remove(ADMIN_STORAGE_KEY, resolve));
+  }
+
+  async function stopAdminBatch() {
+    const batch = await getStorage(ADMIN_STORAGE_KEY);
+    if (batch) {
+      batch.status = "stopped";
+      await setStorage(ADMIN_STORAGE_KEY, batch);
+      if (batch.mode === "background") {
+        chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "stop", storageKey: ADMIN_STORAGE_KEY });
+      }
+    }
+    log("Сбор «Отсутствует ДЗ» остановлен пользователем.");
+    await clearAdminBatch();
+  }
+
+  async function getAdminBatchState() {
+    return (await getStorage(ADMIN_STORAGE_KEY)) || null;
+  }
+
+  async function getLastMissingHomeworkResults() {
+    return (await getStorage(ADMIN_LAST_RESULTS_KEY)) || null;
+  }
+
+  async function resumeAdminBatchIfRunning() {
+    const batch = await getStorage(ADMIN_STORAGE_KEY);
+    if (!batch || batch.status !== "running") return;
+
+    const journalId = currentAdminJournalIdFromQuery();
+    const item = batch.queue[batch.currentIndex];
+    if (!item || !journalId || String(item.id) !== String(journalId)) return;
+
+    item.status = "loading";
+    await setStorage(ADMIN_STORAGE_KEY, batch);
+
+    const found = await waitForAdminMarks();
+
+    const freshCheck = await getStorage(ADMIN_STORAGE_KEY);
+    if (!freshCheck || freshCheck.status !== "running") {
+      log("Сбор «Отсутствует ДЗ» остановлен пользователем — не продолжаю.");
+      return;
+    }
+
+    const missingHomeworkDates = getMissingHomeworkDatesForCurrentJournal();
+    item.status = found ? "done" : "empty";
+    batch.results[journalId] = {
+      id: item.id,
+      subject: item.subject,
+      classLabel: item.classLabel,
+      classId: item.classId,
+      missingHomeworkDates,
+      capturedAt: Date.now()
+    };
+    log(`${item.classLabel} / ${item.subject}: ${missingHomeworkDates.length ? "отсутствует ДЗ — " + missingHomeworkDates.join(", ") : "пропусков нет"}`);
+
+    const nextIndex = batch.currentIndex + 1;
+    batch.currentIndex = nextIndex;
+    await setStorage(ADMIN_STORAGE_KEY, batch);
+
+    if (nextIndex >= batch.queue.length) {
+      batch.status = "done";
+      await setStorage(ADMIN_STORAGE_KEY, batch);
+      await setStorage(ADMIN_LAST_RESULTS_KEY, { results: batch.results, finishedAt: Date.now() });
+      log(`Готово. Журналов обработано: ${batch.queue.length}. Результат — getLastMissingHomeworkResults().`);
+      if (batch.mode === "background") {
+        chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance", storageKey: ADMIN_STORAGE_KEY });
+        await clearAdminBatch();
+      }
+      return;
+    }
+
+    if (batch.mode === "background") {
+      chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance", storageKey: ADMIN_STORAGE_KEY });
+    }
+  }
+
   window.__MESH_HELPER_ADMIN_COLLECTOR__ = {
     isAdminJournalsPage,
     selectParallel,
@@ -262,10 +414,17 @@
     collectParallel,
     collectParallels,
     findMissingHomeworkDates,
-    getMissingHomeworkDatesForCurrentJournal
+    getMissingHomeworkDatesForCurrentJournal,
+    startAdminBatchInBackground,
+    collectMissingHomeworkForParallel,
+    stopAdminBatch,
+    getAdminBatchState,
+    getLastMissingHomeworkResults
   };
 
   if (isAdminJournalsPage()) {
     log("готов. window.__MESH_HELPER_ADMIN_COLLECTOR__.collectParallel(N) для сбора одной параллели.");
   }
+
+  resumeAdminBatchIfRunning();
 })();
