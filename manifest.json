@@ -45,7 +45,8 @@
         "src/final-summary-guard.js",
         "src/class-workbook.js",
         "src/class-auto-loader.js",
-        "src/notes-panel.js"
+        "src/notes-panel.js",
+        "src/admin-collector.js"
       ],
       "css": [
         "src/panel.css",
