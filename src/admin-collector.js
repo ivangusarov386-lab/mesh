@@ -300,6 +300,33 @@
     });
   }
 
+  // schedule_items (с полями homeworks_to_give/to_verify) грузится отдельным,
+  // более медленным запросом, чем оценки — дожидаться только marks недостаточно
+  // (проверено вживую: при быстром фоновом обходе расписание начала сентября
+  // не успевало накопиться, и результат получался ложно пустым).
+  function waitForAdminApiKind(kind, fallbackMs = 12000) {
+    const GRACE_MS = 1200;
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        window.removeEventListener("mesh-helper-api-updated", onUpdate);
+        resolve();
+      };
+      const onUpdate = (event) => {
+        if (event?.detail?.kind === kind) setTimeout(finish, GRACE_MS);
+      };
+      window.addEventListener("mesh-helper-api-updated", onUpdate);
+      const current = window.__MESH_HELPER_API__?.[kind];
+      if (Array.isArray(current) && current.length) {
+        setTimeout(finish, GRACE_MS);
+        return;
+      }
+      setTimeout(finish, fallbackMs);
+    });
+  }
+
   async function startAdminBatchInBackground(journals) {
     if (!Array.isArray(journals) || !journals.length) {
       log("Пустой список журналов — нечего собирать.");
@@ -412,7 +439,7 @@
     item.status = "loading";
     await setStorage(ADMIN_STORAGE_KEY, batch);
 
-    const found = await waitForAdminMarks();
+    const [found] = await Promise.all([waitForAdminMarks(), waitForAdminApiKind("schedule")]);
 
     const freshCheck = await getStorage(ADMIN_STORAGE_KEY);
     if (!freshCheck || freshCheck.status !== "running") {
