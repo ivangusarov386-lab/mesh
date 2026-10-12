@@ -29,6 +29,25 @@
 //  /educationmanagement/manage/journals):
 //    window.__MESH_HELPER_ADMIN_COLLECTOR__.collectParallel(8).then(console.log)
 //    window.__MESH_HELPER_ADMIN_COLLECTOR__.collectParallels([7, 8]).then(console.log)
+//
+//  Отсутствует ДЗ — на странице конкретного журнала:
+//    window.__MESH_HELPER_ADMIN_COLLECTOR__.getMissingHomeworkDatesForCurrentJournal()
+//
+//  Важное про семантику API (найдено экспериментально, см. сессию
+//  переписки — не очевидно и легко перепутать заново):
+//  каждый урок (schedule_item) из /schedule_items несёт два поля:
+//    - homeworks_to_give   — ДЗ, у которого date_assigned_on СОВПАЛ
+//      с датой именно этого урока. НЕНАДЁЖНО: учитель часто создаёт
+//      ДЗ не в день урока (а, например, вечером того же дня или
+//      через день), и тогда это поле у «правильного» урока = null,
+//      хотя ДЗ реально было задано для проверки к следующему уроку.
+//    - homeworks_to_verify — ДЗ, у которого date_prepared_for
+//      (срок проверки) СОВПАЛ с датой этого урока. НАДЁЖНО: именно
+//      это поле соответствует тому, что видит учитель во
+//      всплывающем окне «Домашнее задание» при клике на дату, и
+//      тексту «Домашнее задание отсутствует», когда оно пустое.
+//  Поэтому «отсутствует ДЗ» для урока определяется по
+//  homeworks_to_verify, а не по homeworks_to_give.
 // ==========================================================
 
 (() => {
@@ -186,6 +205,53 @@
     return all;
   }
 
+  // ---- «Отсутствует ДЗ»: дата урока считается «без ДЗ», если к ней ----
+  // ---- не привязано ни одной записи homeworks_to_verify (см. выше). ----
+
+  function compareYmd(a, b) {
+    return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+  }
+
+  function formatYmd([y, m, d]) {
+    return `${String(d).padStart(2, "0")}.${String(m).padStart(2, "0")}.${y}`;
+  }
+
+  function todayYmd() {
+    const now = new Date();
+    return [now.getFullYear(), now.getMonth() + 1, now.getDate()];
+  }
+
+  function findMissingHomeworkDates(scheduleItems, todayDate) {
+    const today = todayDate || todayYmd();
+    const seen = new Set();
+    const results = [];
+
+    (scheduleItems || [])
+      .filter((item) => Array.isArray(item?.date) && item.date.length === 3 && item.lesson_name)
+      .filter((item) => compareYmd(item.date, today) <= 0)
+      .forEach((item) => {
+        const hasVerify = Array.isArray(item.homeworks_to_verify) && item.homeworks_to_verify.length > 0;
+        if (hasVerify) return;
+        const key = item.date.join("-");
+        if (seen.has(key)) return;
+        seen.add(key);
+        results.push(formatYmd(item.date));
+      });
+
+    results.sort((a, b) => {
+      const pa = a.split(".").reverse().join("-");
+      const pb = b.split(".").reverse().join("-");
+      return pa.localeCompare(pb);
+    });
+
+    return results;
+  }
+
+  function getMissingHomeworkDatesForCurrentJournal(todayDate) {
+    const schedule = window.__MESH_HELPER_API__?.schedule || [];
+    return findMissingHomeworkDates(schedule, todayDate);
+  }
+
   window.__MESH_HELPER_ADMIN_COLLECTOR__ = {
     isAdminJournalsPage,
     selectParallel,
@@ -194,7 +260,9 @@
     collectCurrentClassSubjects,
     collectAllClassesInCurrentParallel,
     collectParallel,
-    collectParallels
+    collectParallels,
+    findMissingHomeworkDates,
+    getMissingHomeworkDatesForCurrentJournal
   };
 
   if (isAdminJournalsPage()) {
