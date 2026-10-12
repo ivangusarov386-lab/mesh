@@ -228,6 +228,7 @@
 
     (scheduleItems || [])
       .filter((item) => Array.isArray(item?.date) && item.date.length === 3 && item.lesson_name)
+      .filter((item) => !item.cancelled)
       .filter((item) => compareYmd(item.date, today) <= 0)
       .forEach((item) => {
         const hasVerify = Array.isArray(item.homeworks_to_verify) && item.homeworks_to_verify.length > 0;
