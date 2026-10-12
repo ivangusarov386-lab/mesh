@@ -359,6 +359,47 @@
     return (await getStorage(ADMIN_LAST_RESULTS_KEY)) || null;
   }
 
+  function csvValue(value) {
+    return `"${String(value ?? "").replace(/"/g, '""')}"`;
+  }
+
+  async function downloadMissingHomeworkResultsCsv() {
+    const stored = await getLastMissingHomeworkResults();
+    const rows = Object.values(stored?.results || {});
+    if (!rows.length) {
+      log("Нечего выгружать — сначала запустите сбор (collectMissingHomeworkForParallel).");
+      return { ok: false, reason: "no-results" };
+    }
+
+    rows.sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ru") || a.subject.localeCompare(b.subject, "ru"));
+
+    const headers = ["Класс", "Предмет", "Отсутствует ДЗ (даты)", "targetGroupId"];
+    const csvRows = rows.map((r) => [
+      r.classLabel,
+      r.subject,
+      r.missingHomeworkDates?.length ? r.missingHomeworkDates.join(", ") : "",
+      r.id
+    ]);
+
+    const csv = "﻿" + [headers, ...csvRows].map((row) => row.map(csvValue).join(";")).join("\n");
+    const date = new Date().toISOString().slice(0, 10);
+    const partialSuffix = stored.partial ? `_partial_${stored.processedCount}of${stored.totalCount}` : "";
+    const filename = `mesh_admin_otsutstvuet_dz${partialSuffix}_${date}.csv`;
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+    log(`Экспортировано: ${rows.length} журналов → ${filename}`);
+    return { ok: true, rows: rows.length, filename };
+  }
+
   async function resumeAdminBatchIfRunning() {
     const batch = await getStorage(ADMIN_STORAGE_KEY);
     if (!batch || batch.status !== "running") return;
@@ -432,7 +473,8 @@
     collectMissingHomeworkForParallel,
     stopAdminBatch,
     getAdminBatchState,
-    getLastMissingHomeworkResults
+    getLastMissingHomeworkResults,
+    downloadMissingHomeworkResultsCsv
   };
 
   if (isAdminJournalsPage()) {
