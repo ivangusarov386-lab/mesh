@@ -11,7 +11,8 @@
     "/attestation_periods_schedule",
     "/final_marks",
     "/attendances",
-    "/schedule_items"
+    "/schedule_items",
+    "/homeworks"
   ];
 
   if (window.__meshHelperMarksHookInstalled) return;
