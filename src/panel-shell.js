@@ -783,6 +783,9 @@
       const groupEl = document.createElement("div");
       groupEl.className = "mh-allclasses-picker-group";
 
+      const headerRow = document.createElement("div");
+      headerRow.className = "mh-admin-group-header-row";
+
       const headerEl = document.createElement("label");
       headerEl.className = "mh-allclasses-picker-group-header";
       const headerCheckbox = document.createElement("input");
@@ -791,7 +794,30 @@
       headerSpan.textContent = `${key} параллель (${items.length})`;
       headerEl.appendChild(headerCheckbox);
       headerEl.appendChild(headerSpan);
-      groupEl.appendChild(headerEl);
+
+      const arrowBtn = document.createElement("button");
+      arrowBtn.type = "button";
+      arrowBtn.className = "mh-admin-group-arrow";
+      arrowBtn.setAttribute("aria-label", "Развернуть/свернуть параллель");
+      arrowBtn.textContent = "▸";
+
+      headerRow.appendChild(headerEl);
+      headerRow.appendChild(arrowBtn);
+      groupEl.appendChild(headerRow);
+
+      const rowsWrap = document.createElement("div");
+      rowsWrap.className = "mh-admin-group-rows";
+      rowsWrap.style.display = "none";
+      groupEl.appendChild(rowsWrap);
+
+      let expanded = false;
+      arrowBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        expanded = !expanded;
+        rowsWrap.style.display = expanded ? "grid" : "none";
+        arrowBtn.textContent = expanded ? "▾" : "▸";
+      });
 
       const rowCheckboxes = [];
       items.forEach(({ cls, index }) => {
@@ -804,7 +830,7 @@
         span.textContent = cls.label || "?";
         row.appendChild(checkbox);
         row.appendChild(span);
-        groupEl.appendChild(row);
+        rowsWrap.appendChild(row);
         rowCheckboxes.push(checkbox);
       });
 

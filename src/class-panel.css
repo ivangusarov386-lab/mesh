@@ -101,6 +101,44 @@
   cursor: pointer;
 }
 
+.mh-admin-group-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.mh-admin-group-header-row .mh-allclasses-picker-group-header {
+  flex: 1;
+  min-width: 0;
+}
+
+.mh-admin-group-arrow {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.mh-admin-group-arrow:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.mh-admin-group-rows {
+  display: grid;
+  gap: 4px;
+}
+
 .mh-class-export-btn {
   width: 100%;
   min-height: 34px;
