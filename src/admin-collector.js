@@ -351,6 +351,167 @@
     });
   }
 
+  // ---- Захват оценок/посещаемости/учителя для текущего журнала — тот же ----
+  // ---- подход, что в class-auto-loader.js, продублирован здесь, т.к. это ----
+  // ---- отдельный модуль/closure и там эти функции не экспортированы. ----
+
+  function getStudentIdFromMark(mark) {
+    const id = mark?.student_profile_id ?? mark?.studentProfileId ?? mark?.student_profile?.id ?? mark?.student?.id;
+    return id !== undefined && id !== null ? String(id) : null;
+  }
+
+  function getMarkValue(mark) {
+    return String(mark?.name || mark?.value || mark?.mark || mark?.mark_value || "").trim();
+  }
+
+  function isGrade(value) {
+    return /^[1-5]$/.test(value);
+  }
+
+  function getStudentIdFromAttendance(record) {
+    const id = record?.student_profile_id ?? record?.studentProfileId;
+    return id !== undefined && id !== null ? String(id) : null;
+  }
+
+  function getProfileId(profile) {
+    const id = profile?.id ?? profile?.student_profile_id ?? profile?.studentProfileId;
+    return id !== undefined && id !== null ? String(id) : null;
+  }
+
+  function getProfileName(profile) {
+    const short = profile?.short_name || profile?.shortName;
+    if (short) return String(short).trim();
+    const parts = [profile?.last_name || profile?.lastName, profile?.first_name || profile?.firstName, profile?.middle_name || profile?.middleName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    return parts || `Ученик ${profile?.id ?? ""}`.trim();
+  }
+
+  function averageForStudent(marks, studentId) {
+    const grades = marks
+      .filter((mark) => getStudentIdFromMark(mark) === studentId)
+      .map(getMarkValue)
+      .filter(isGrade)
+      .map(Number);
+    if (!grades.length) return { count: 0, avg: null };
+    const avg = Math.round((grades.reduce((sum, grade) => sum + grade, 0) / grades.length) * 100) / 100;
+    return { count: grades.length, avg };
+  }
+
+  function attendanceForStudent(attendances, studentId, heldLessons) {
+    const absences = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId).length;
+    const total = heldLessons || 0;
+    const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
+    return { absences, total, percent };
+  }
+
+  function gradesTextForStudent(marks, studentId) {
+    return marks
+      .filter((mark) => getStudentIdFromMark(mark) === studentId)
+      .map(getMarkValue)
+      .filter(isGrade)
+      .join(", ");
+  }
+
+  function captureMarksForJournal(journalId) {
+    const api = window.__MESH_HELPER_API__ || {};
+    const marks = Array.isArray(api.marks) ? api.marks : [];
+    const own = marks.filter((mark) => {
+      const groupId = mark?.group_id || mark?.groupId || mark?.journal_id || mark?.journalId;
+      return groupId !== undefined && String(groupId) === String(journalId);
+    });
+    return own.length ? own : marks;
+  }
+
+  function isLessonHeld(record) {
+    if (record?.cancelled) return false;
+    const parts = Array.isArray(record?.date) ? record.date : null;
+    if (!parts || parts.length < 3) return false;
+    const [y, m, d] = parts;
+    const lessonDate = new Date(y, m - 1, d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    lessonDate.setHours(0, 0, 0, 0);
+    return lessonDate.getTime() <= today.getTime();
+  }
+
+  function countHeldLessonsForJournal(journalId) {
+    const api = window.__MESH_HELPER_API__ || {};
+    const schedule = Array.isArray(api.schedule) ? api.schedule : [];
+    return schedule.filter((item) => String(item.group_id) === String(journalId) && isLessonHeld(item)).length;
+  }
+
+  function teacherNameForJournal(journalId) {
+    const api = window.__MESH_HELPER_API__ || {};
+    const schedule = Array.isArray(api.schedule) ? api.schedule : [];
+    const withTeacher = schedule.find((item) => String(item.group_id) === String(journalId) && item.teacher_name);
+    return withTeacher?.teacher_name || "";
+  }
+
+  function captureStudentsForJournal() {
+    const api = window.__MESH_HELPER_API__ || {};
+    const profiles = Array.isArray(api.studentProfiles) ? api.studentProfiles : [];
+    const byId = new Map();
+    profiles.forEach((profile) => {
+      const id = getProfileId(profile);
+      if (!id || byId.has(id)) return;
+      byId.set(id, { id, name: getProfileName(profile) });
+    });
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  }
+
+  // ---- Настраиваемые пороги — те же ключи chrome.storage.sync, что уже ----
+  // ---- редактируются в панели у «Мой класс»/«Все классы»: значение, ----
+  // ---- выставленное там, автоматически действует и здесь. ----
+
+  function getProblemAvgThreshold() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(["classProblemAvg"], (data) => {
+        const value = Number(data.classProblemAvg);
+        resolve(Number.isFinite(value) && value > 0 ? value : 3);
+      });
+    });
+  }
+
+  function getAbsencePercentThreshold() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(["classAbsencePercent"], (data) => {
+        const value = Number(data.classAbsencePercent);
+        resolve(Number.isFinite(value) && value > 0 ? value : 50);
+      });
+    });
+  }
+
+  const DEFAULT_FINAL_GRADE_RANGES = {
+    2: { from: 1, to: 2.59 },
+    3: { from: 2.6, to: 3.59 },
+    4: { from: 3.6, to: 4.59 },
+    5: { from: 4.6, to: 5 }
+  };
+
+  function getFinalGradeRanges() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(["finalGradeRanges"], (data) => {
+        resolve(data.finalGradeRanges || DEFAULT_FINAL_GRADE_RANGES);
+      });
+    });
+  }
+
+  function possibleFinal(avg, ranges = DEFAULT_FINAL_GRADE_RANGES) {
+    const n = Number(avg);
+    if (!Number.isFinite(n)) return "";
+    for (const grade of [5, 4, 3, 2]) {
+      const r = ranges[grade];
+      if (r && n >= r.from && n <= r.to) return grade;
+    }
+    for (const grade of [5, 4, 3, 2]) {
+      const r = ranges[grade];
+      if (r && n >= r.from) return grade;
+    }
+    return 2;
+  }
+
   async function startAdminBatchInBackground(journals) {
     if (!Array.isArray(journals) || !journals.length) {
       log("Пустой список журналов — нечего собирать.");
@@ -452,6 +613,82 @@
     return { ok: true, rows: rows.length, filename };
   }
 
+  // ---- Выгрузка .xlsx: один лист на журнал (класс+предмет), без общего ----
+  // ---- листа «Ученик» (по просьбе — это именно его явно не хотели видеть ----
+  // ---- в режиме администратора). Пороги среднего балла/Н% и диапазоны ----
+  // ---- итоговых — те же настраиваемые значения, что в «Мой класс». ----
+  // ---- Риск академической задолженности подсвечивает ВСЮ строку целиком. ----
+
+  async function downloadAdminParallelWorkbook() {
+    const workbook = window.__MESH_HELPER_CLASS_WORKBOOK__;
+    if (!workbook) {
+      log("Модуль class-workbook.js не загружен — обновите страницу.");
+      return { ok: false, reason: "no-workbook-module" };
+    }
+
+    const stored = await getLastMissingHomeworkResults();
+    const rows = Object.values(stored?.results || {});
+    if (!rows.length) {
+      log("Нечего выгружать — сначала запустите сбор (collectMissingHomeworkForParallel).");
+      return { ok: false, reason: "no-results" };
+    }
+
+    const problemAvgThreshold = await getProblemAvgThreshold();
+    const absencePercentThreshold = await getAbsencePercentThreshold();
+    const finalGradeRanges = await getFinalGradeRanges();
+
+    const HEADER = [
+      "№", "ФИО", "Оценки", "Средний балл", "Уроков проведено",
+      "Н по факту", "Н % по факту", "Расчётный итог",
+      "Риск академической задолженности", "ДЗ отсутствие", "Учитель"
+    ];
+
+    rows.sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ru") || a.subject.localeCompare(b.subject, "ru"));
+
+    const sheets = rows.map((journal) => {
+      const students = journal.students || [];
+      const marks = journal.marks || [];
+      const attendances = journal.attendances || [];
+      const heldLessons = journal.heldLessons || 0;
+      const missingText = journal.missingHomeworkDates?.length ? journal.missingHomeworkDates.join(", ") : "";
+
+      const sheetRows = [workbook.row(HEADER, () => "Header")];
+      students.forEach((student, index) => {
+        const { count, avg } = averageForStudent(marks, student.id);
+        const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        const avgRisk = count > 0 && avg <= problemAvgThreshold;
+        const absenceRisk = heldLessons > 0 && percent >= absencePercentThreshold;
+        const academicRisk = avgRisk || absenceRisk ? "Да" : "Нет";
+        sheetRows.push(workbook.row(
+          [
+            index + 1,
+            student.name,
+            gradesTextForStudent(marks, student.id),
+            count ? avg : "",
+            heldLessons,
+            absences,
+            `${percent}%`,
+            count ? possibleFinal(avg, finalGradeRanges) : "",
+            academicRisk,
+            missingText,
+            journal.teacher || ""
+          ],
+          () => (academicRisk === "Да" ? "BadAbsence" : "Default")
+        ));
+      });
+
+      return workbook.worksheet(`${journal.classLabel} ${journal.subject}`, sheetRows);
+    });
+
+    const date = new Date().toISOString().slice(0, 10);
+    const partialSuffix = stored.partial ? `_partial_${stored.processedCount}of${stored.totalCount}` : "";
+    const filename = `mesh_admin_parallel${partialSuffix}_${date}.xlsx`;
+
+    workbook.downloadWorkbook(filename, sheets);
+    log(`Экспортировано: ${sheets.length} журналов → ${filename}`);
+    return { ok: true, sheets: sheets.length, filename };
+  }
+
   async function resumeAdminBatchIfRunning() {
     const batch = await getStorage(ADMIN_STORAGE_KEY);
     if (!batch || batch.status !== "running") return;
@@ -466,16 +703,24 @@
     const [found] = await Promise.all([
       waitForAdminMarks(),
       waitForAdminApiKind("schedule"),
-      waitForAdminApiKind("homeworkAbsences")
+      waitForAdminApiKind("homeworkAbsences"),
+      waitForAdminApiKind("studentProfiles"),
+      waitForAdminApiKind("attendances")
     ]);
 
     const freshCheck = await getStorage(ADMIN_STORAGE_KEY);
     if (!freshCheck || freshCheck.status !== "running") {
-      log("Сбор «Отсутствует ДЗ» остановлен пользователем — не продолжаю.");
+      log("Сбор остановлен пользователем — не продолжаю.");
       return;
     }
 
     const missingHomeworkDates = getMissingHomeworkDatesForCurrentJournal();
+    const marks = found ? captureMarksForJournal(journalId) : [];
+    const attendances = window.__MESH_HELPER_API__?.attendances || [];
+    const heldLessons = countHeldLessonsForJournal(journalId);
+    const students = captureStudentsForJournal();
+    const teacher = teacherNameForJournal(journalId);
+
     item.status = found ? "done" : "empty";
     batch.results[journalId] = {
       id: item.id,
@@ -483,9 +728,14 @@
       classLabel: item.classLabel,
       classId: item.classId,
       missingHomeworkDates,
+      marks,
+      attendances,
+      heldLessons,
+      students,
+      teacher,
       capturedAt: Date.now()
     };
-    log(`${item.classLabel} / ${item.subject}: ${missingHomeworkDates.length ? "отсутствует ДЗ — " + missingHomeworkDates.join(", ") : "пропусков нет"}`);
+    log(`${item.classLabel} / ${item.subject}: учеников ${students.length}, оценок ${marks.length}, ${missingHomeworkDates.length ? "отсутствует ДЗ — " + missingHomeworkDates.join(", ") : "ДЗ без пропусков"}`);
 
     const nextIndex = batch.currentIndex + 1;
     batch.currentIndex = nextIndex;
@@ -530,7 +780,8 @@
     stopAdminBatch,
     getAdminBatchState,
     getLastMissingHomeworkResults,
-    downloadMissingHomeworkResultsCsv
+    downloadMissingHomeworkResultsCsv,
+    downloadAdminParallelWorkbook
   };
 
   if (isAdminJournalsPage()) {
