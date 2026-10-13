@@ -173,10 +173,14 @@
     return deduped;
   }
 
-  async function collectAllClassesInCurrentParallel() {
+  async function collectAllClassesInCurrentParallel(classIdFilter) {
     const classes = await getClassOptions();
-    const realClasses = classes.filter((c) => !/НДО/.test(c.label));
-    log(`классов для сбора (без НДО): ${realClasses.length} из ${classes.length}`);
+    let realClasses = classes.filter((c) => !/НДО/.test(c.label));
+    if (Array.isArray(classIdFilter) && classIdFilter.length) {
+      const filterIds = new Set(classIdFilter.map(String));
+      realClasses = realClasses.filter((c) => filterIds.has(String(c.id)));
+    }
+    log(`классов для сбора: ${realClasses.length} из ${classes.length}`);
     const result = [];
     for (const cls of realClasses) {
       await selectClassById(cls.id);
@@ -188,9 +192,9 @@
     return result;
   }
 
-  async function collectParallel(n) {
+  async function collectParallel(n, classIdFilter) {
     await selectParallel(n);
-    const data = await collectAllClassesInCurrentParallel();
+    const data = await collectAllClassesInCurrentParallel(classIdFilter);
     log(`параллель ${n}: итого записей — ${data.length}`);
     return data;
   }
@@ -203,6 +207,47 @@
     }
     log(`всего по параллелям [${numbers.join(", ")}]: ${all.length} записей`);
     return all;
+  }
+
+  // ---- Список классов по параллелям (без захода в предметы — быстро) ----
+  // ---- для пикера в панели: отметить нужные классы галочками. ----
+
+  async function listClassesForParallel(n) {
+    const selected = await selectParallel(n);
+    if (!selected) return []; // такой параллели нет в школе — не приписываем ей чужие классы
+    const classes = await getClassOptions();
+    return classes.filter((c) => !/НДО/.test(c.label)).map((c) => ({ id: c.id, label: c.label, parallel: n }));
+  }
+
+  async function listAllClasses(parallels) {
+    const nums = Array.isArray(parallels) && parallels.length ? parallels : Array.from({ length: 11 }, (_, i) => i + 1);
+    const all = [];
+    for (const n of nums) {
+      const classes = await listClassesForParallel(n);
+      if (classes.length) all.push(...classes);
+      log(`параллель ${n}: классов найдено — ${classes.length}`);
+    }
+    return all;
+  }
+
+  async function collectSelectedClasses(selection) {
+    const byParallel = new Map();
+    (selection || []).forEach((cls) => {
+      const parallel = Number(cls.parallel);
+      if (!byParallel.has(parallel)) byParallel.set(parallel, []);
+      byParallel.get(parallel).push(cls.id);
+    });
+    const all = [];
+    for (const [parallel, classIds] of byParallel) {
+      const data = await collectParallel(parallel, classIds);
+      all.push(...data);
+    }
+    return all;
+  }
+
+  async function collectMissingHomeworkForSelectedClasses(selection) {
+    const journals = await collectSelectedClasses(selection);
+    return startAdminBatchInBackground(journals);
   }
 
   // ---- «Отсутствует ДЗ»: дата урока считается «без ДЗ», если к ней ----
@@ -777,6 +822,10 @@
     getMissingHomeworkDatesForCurrentJournal,
     startAdminBatchInBackground,
     collectMissingHomeworkForParallel,
+    listClassesForParallel,
+    listAllClasses,
+    collectSelectedClasses,
+    collectMissingHomeworkForSelectedClasses,
     stopAdminBatch,
     getAdminBatchState,
     getLastMissingHomeworkResults,

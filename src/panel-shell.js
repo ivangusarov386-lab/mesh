@@ -20,11 +20,14 @@
     if (batchStorageListenerReady) return;
     batchStorageListenerReady = true;
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== "local" || !changes.meshHelperClassBatch) return;
+      if (area !== "local") return;
       const panel = document.getElementById(PANEL_ID);
       if (!panel) return;
-      refreshClassExportLabel(panel);
-      refreshAllClassesExportLabel(panel);
+      if (changes.meshHelperClassBatch) {
+        refreshClassExportLabel(panel);
+        refreshAllClassesExportLabel(panel);
+      }
+      if (changes.meshHelperAdminBatch) refreshAdminExportLabel(panel);
     });
   }
 
@@ -709,6 +712,253 @@
     refreshAllClassesExportLabel(panel);
   }
 
+  function isAdminJournalsListPage() {
+    return location.pathname.startsWith("/educationmanagement/manage/journals") && !location.pathname.includes("/group");
+  }
+
+  function setupAdminToggle(panel) {
+    const toggle = panel.querySelector("#mh-admin-toggle");
+    const arrow = toggle?.querySelector(".mh-class-arrow");
+    if (!toggle || toggle.dataset.ready === "1") return;
+    toggle.dataset.ready = "1";
+    let open = localStorage.getItem("meshHelperAdminOpen") === "1";
+    const apply = () => {
+      panel.classList.toggle("mh-admin-open", open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      if (arrow) arrow.textContent = open ? "▲" : "▼";
+    };
+    apply();
+    toggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      open = !open;
+      localStorage.setItem("meshHelperAdminOpen", open ? "1" : "0");
+      apply();
+    });
+  }
+
+  function setAdminProgress(panel, percent) {
+    const fill = panel.querySelector("#mh-admin-progress-fill");
+    const text = panel.querySelector("#mh-admin-progress-text");
+    if (fill) fill.style.width = `${percent}%`;
+    if (text) text.textContent = `${percent}%`;
+  }
+
+  function setAdminStatus(panel, message, tone) {
+    const status = panel.querySelector("#mh-admin-export-status");
+    if (!status) return;
+    status.textContent = message;
+    status.dataset.tone = tone;
+  }
+
+  function hideAdminPicker(panel) {
+    const picker = panel.querySelector("#mh-admin-picker");
+    if (picker) picker.style.display = "none";
+    const list = panel.querySelector("#mh-admin-picker-list");
+    if (list) list.innerHTML = "";
+  }
+
+  function renderAdminPicker(panel, classes) {
+    const picker = panel.querySelector("#mh-admin-picker");
+    const list = panel.querySelector("#mh-admin-picker-list");
+    if (!picker || !list) return;
+    if (!classes.length) {
+      setAdminStatus(panel, "Классы не найдены.", "warn");
+      hideAdminPicker(panel);
+      return;
+    }
+    list.innerHTML = "";
+
+    const groups = new Map();
+    classes.forEach((cls, index) => {
+      const key = String(cls.parallel);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ cls, index });
+    });
+
+    const sortedKeys = [...groups.keys()].sort((a, b) => Number(a) - Number(b));
+
+    sortedKeys.forEach((key) => {
+      const items = groups.get(key);
+      const groupEl = document.createElement("div");
+      groupEl.className = "mh-allclasses-picker-group";
+
+      const headerEl = document.createElement("label");
+      headerEl.className = "mh-allclasses-picker-group-header";
+      const headerCheckbox = document.createElement("input");
+      headerCheckbox.type = "checkbox";
+      const headerSpan = document.createElement("span");
+      headerSpan.textContent = `${key} параллель (${items.length})`;
+      headerEl.appendChild(headerCheckbox);
+      headerEl.appendChild(headerSpan);
+      groupEl.appendChild(headerEl);
+
+      const rowCheckboxes = [];
+      items.forEach(({ cls, index }) => {
+        const row = document.createElement("label");
+        row.className = "mh-allclasses-picker-row";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.dataset.mhIndex = String(index);
+        const span = document.createElement("span");
+        span.textContent = cls.label || "?";
+        row.appendChild(checkbox);
+        row.appendChild(span);
+        groupEl.appendChild(row);
+        rowCheckboxes.push(checkbox);
+      });
+
+      headerCheckbox.addEventListener("change", () => {
+        rowCheckboxes.forEach((cb) => { cb.checked = headerCheckbox.checked; });
+      });
+      rowCheckboxes.forEach((cb) => {
+        cb.addEventListener("change", () => {
+          headerCheckbox.checked = rowCheckboxes.length > 0 && rowCheckboxes.every((c) => c.checked);
+        });
+      });
+
+      list.appendChild(groupEl);
+    });
+
+    picker.dataset.classes = JSON.stringify(classes);
+    picker.style.display = "block";
+    setAdminStatus(panel, `Найдено классов: ${classes.length}. Отметь нужные и нажми «Собрать выбранные».`, "muted");
+  }
+
+  function setupAdminLoadClasses(panel) {
+    const btn = panel.querySelector("#mh-admin-load-classes");
+    if (!btn || btn.dataset.ready === "1") return;
+    btn.dataset.ready = "1";
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const collector = window.__MESH_HELPER_ADMIN_COLLECTOR__;
+      if (!collector) {
+        setAdminStatus(panel, "Модуль admin-collector.js не загружен. Обновите страницу.", "warn");
+        return;
+      }
+      btn.disabled = true;
+      hideAdminPicker(panel);
+      setAdminStatus(panel, "Загружаем список классов по всем параллелям — это может занять минуту...", "muted");
+      try {
+        const classes = await collector.listAllClasses();
+        renderAdminPicker(panel, classes);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  function setupAdminPickerConfirm(panel) {
+    const btn = panel.querySelector("#mh-admin-start-selected");
+    if (!btn || btn.dataset.ready === "1") return;
+    btn.dataset.ready = "1";
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const collector = window.__MESH_HELPER_ADMIN_COLLECTOR__;
+      const picker = panel.querySelector("#mh-admin-picker");
+      if (!collector || !picker) return;
+      let classes = [];
+      try {
+        classes = JSON.parse(picker.dataset.classes || "[]");
+      } catch (err) {
+        classes = [];
+      }
+      const checkedIndexes = [...panel.querySelectorAll("#mh-admin-picker-list input[type=checkbox]:checked")]
+        .map((input) => Number(input.dataset.mhIndex))
+        .filter((n) => Number.isFinite(n));
+      const selected = classes.filter((cls, index) => checkedIndexes.includes(index));
+      if (!selected.length) {
+        setAdminStatus(panel, "Отметь хотя бы один класс.", "warn");
+        return;
+      }
+      hideAdminPicker(panel);
+      setAdminStatus(panel, "Запускаем сбор в фоновой вкладке...", "muted");
+      const result = await collector.collectMissingHomeworkForSelectedClasses(selected);
+      if (!result?.ok) {
+        setAdminStatus(panel, "Не удалось запустить сбор.", "warn");
+      } else {
+        setAdminStatus(panel, `Сбор запущен (${result.total} журналов) в фоновой вкладке — можно продолжать работать здесь.`, "muted");
+        refreshAdminExportLabel(panel);
+      }
+    });
+  }
+
+  function setupAdminStop(panel) {
+    const stopBtn = panel.querySelector("#mh-admin-stop");
+    if (!stopBtn || stopBtn.dataset.ready === "1") return;
+    stopBtn.dataset.ready = "1";
+    stopBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const collector = window.__MESH_HELPER_ADMIN_COLLECTOR__;
+      if (!collector) return;
+      await collector.stopAdminBatch();
+      refreshAdminExportLabel(panel);
+    });
+  }
+
+  function setupAdminDownloads(panel) {
+    const csvBtn = panel.querySelector("#mh-admin-download-csv");
+    const xlsxBtn = panel.querySelector("#mh-admin-download-xlsx");
+    if (csvBtn && csvBtn.dataset.ready !== "1") {
+      csvBtn.dataset.ready = "1";
+      csvBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const collector = window.__MESH_HELPER_ADMIN_COLLECTOR__;
+        if (!collector) return;
+        const result = await collector.downloadMissingHomeworkResultsCsv();
+        if (!result?.ok) setAdminStatus(panel, "Нечего выгружать — сначала запустите сбор.", "warn");
+      });
+    }
+    if (xlsxBtn && xlsxBtn.dataset.ready !== "1") {
+      xlsxBtn.dataset.ready = "1";
+      xlsxBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const collector = window.__MESH_HELPER_ADMIN_COLLECTOR__;
+        if (!collector) return;
+        const result = await collector.downloadAdminParallelWorkbook();
+        if (!result?.ok) setAdminStatus(panel, "Нечего выгружать — сначала запустите сбор.", "warn");
+      });
+    }
+  }
+
+  function refreshAdminExportLabel(panel) {
+    const stopBtn = panel.querySelector("#mh-admin-stop");
+    const collector = window.__MESH_HELPER_ADMIN_COLLECTOR__;
+    if (!collector) return;
+    collector.getAdminBatchState().then((batch) => {
+      if (!batch) {
+        if (stopBtn) stopBtn.style.display = "none";
+        return;
+      }
+      if (stopBtn) stopBtn.style.display = batch.status === "running" ? "block" : "none";
+      if (batch.status === "running") {
+        const percent = batch.queue.length ? Math.round((batch.currentIndex / batch.queue.length) * 100) : 0;
+        setAdminProgress(panel, percent);
+        setAdminStatus(panel, `Собрано ${batch.currentIndex} из ${batch.queue.length} журналов — идёт в фоновой вкладке.`, "muted");
+      } else if (batch.status === "done") {
+        setAdminProgress(panel, 100);
+        setAdminStatus(panel, `Готово: собрано ${batch.queue.length} журналов. Можно скачивать.`, "ok");
+      }
+    });
+  }
+
+  function setupAdminExport(panel) {
+    const section = panel.querySelector("#mh-admin-export");
+    if (section) section.style.display = isAdminJournalsListPage() ? "block" : "none";
+    if (!isAdminJournalsListPage()) return;
+    setupAdminToggle(panel);
+    setupAdminLoadClasses(panel);
+    setupAdminPickerConfirm(panel);
+    setupAdminStop(panel);
+    setupAdminDownloads(panel);
+    refreshAdminExportLabel(panel);
+  }
+
   function setupDrag(panel) {
     if (panel.dataset.mhDragReady === "1") return;
     panel.dataset.mhDragReady = "1";
@@ -811,6 +1061,24 @@
             </div>
             <button id="mh-open-memo" class="mh-class-export-btn mh-memo-btn" type="button">Служебная записка</button>
           </div>
+        </div>
+        <div class="mh-section mh-admin-export" id="mh-admin-export" style="display:none;">
+          <div id="mh-admin-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>Режим администратора</span><span class="mh-class-arrow">▼</span></div>
+          <div class="mh-admin-menu">
+            <div class="mh-class-threshold-row"><label for="mh-admin-min-avg">Проблема при среднем ≤</label><input id="mh-admin-min-avg" type="number" min="1" max="5" step="0.1"></div>
+            <div class="mh-class-threshold-row"><label for="mh-admin-min-absence">Проблема при пропусках ≥ (%)</label><input id="mh-admin-min-absence" type="number" min="1" max="100" step="1"></div>
+            <button id="mh-admin-load-classes" class="mh-class-export-btn" type="button">Загрузить список классов</button>
+            <div id="mh-admin-picker" class="mh-allclasses-picker" style="display:none;">
+              <div id="mh-admin-picker-list" class="mh-allclasses-picker-list"></div>
+              <button id="mh-admin-start-selected" class="mh-class-export-btn" type="button">Собрать выбранные</button>
+            </div>
+            <button id="mh-admin-stop" class="mh-class-stop-btn" type="button" style="display:none;">Остановить сбор</button>
+            <div class="mh-class-progress-track"><div id="mh-admin-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>
+            <div id="mh-admin-progress-text" class="mh-class-progress-text">0%</div>
+            <div id="mh-admin-export-status" class="mh-class-status" data-tone="muted">Нажми «Загрузить список классов», отметь нужные и запусти сбор.</div>
+            <button id="mh-admin-download-csv" class="mh-class-export-btn" type="button">Скачать CSV (Отсутствует ДЗ)</button>
+            <button id="mh-admin-download-xlsx" class="mh-class-export-btn" type="button">Скачать Excel</button>
+          </div>
         </div>`;
       document.body.appendChild(panel);
     }
@@ -822,14 +1090,15 @@
     setupExportMenu(panel);
     setupClassExport(panel);
     setupAllClassesExport(panel);
+    setupAdminExport(panel);
     setupBatchStorageListener();
     setupDrag(panel);
     const minInput = panel.querySelector("#mh-min");
     const save = panel.querySelector("#mh-save");
     const finals = panel.querySelector("#mh-check-finals");
     const correctFinals = panel.querySelector("#mh-check-correct-finals");
-    const classAvgInputs = [panel.querySelector("#mh-class-min-avg"), panel.querySelector("#mh-allclasses-min-avg")].filter(Boolean);
-    const classAbsenceInputs = [panel.querySelector("#mh-class-min-absence"), panel.querySelector("#mh-allclasses-min-absence")].filter(Boolean);
+    const classAvgInputs = [panel.querySelector("#mh-class-min-avg"), panel.querySelector("#mh-allclasses-min-avg"), panel.querySelector("#mh-admin-min-avg")].filter(Boolean);
+    const classAbsenceInputs = [panel.querySelector("#mh-class-min-absence"), panel.querySelector("#mh-allclasses-min-absence"), panel.querySelector("#mh-admin-min-absence")].filter(Boolean);
     chrome.storage.sync.get(["minGrades", "checkFinals", "checkCorrectFinals", "classProblemAvg", "classAbsencePercent"], (data) => {
       const value = typeof data.minGrades === "number" ? data.minGrades : DEFAULT_MIN;
       syncMiniMin(panel, value);
@@ -841,8 +1110,8 @@
       classAbsenceInputs.forEach((input) => { input.value = absenceValue; });
       notifyFinalsState(finals, correctFinals);
     });
-    setupThresholdInputs(panel, "classProblemAvg", ["mh-class-min-avg", "mh-allclasses-min-avg"], DEFAULT_CLASS_PROBLEM_AVG);
-    setupThresholdInputs(panel, "classAbsencePercent", ["mh-class-min-absence", "mh-allclasses-min-absence"], DEFAULT_CLASS_ABSENCE_PERCENT);
+    setupThresholdInputs(panel, "classProblemAvg", ["mh-class-min-avg", "mh-allclasses-min-avg", "mh-admin-min-avg"], DEFAULT_CLASS_PROBLEM_AVG);
+    setupThresholdInputs(panel, "classAbsencePercent", ["mh-class-min-absence", "mh-allclasses-min-absence", "mh-admin-min-absence"], DEFAULT_CLASS_ABSENCE_PERCENT);
     setupFinalCriteria(panel);
     if (save && save.dataset.ready !== "1") {
       save.dataset.ready = "1";
