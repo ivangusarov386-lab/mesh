@@ -206,7 +206,12 @@
   }
 
   // ---- «Отсутствует ДЗ»: дата урока считается «без ДЗ», если к ней ----
-  // ---- не привязано ни одной записи homeworks_to_verify (см. выше). ----
+  // ---- не привязано ни одной записи homeworks_to_verify (см. выше), И ----
+  // ---- при этом учитель явно НЕ нажимал «Без домашнего задания» — это ----
+  // ---- действие создаёт отдельную запись через POST /homework_absences ----
+  // ---- (group_id + date), никак не связанную с homeworks_to_give/verify. ----
+  // ---- Такую дату нужно исключать: это осознанное решение «ДЗ не нужно», ----
+  // ---- а не упущение, которое должен ловить этот столбец. ----
 
   function compareYmd(a, b) {
     return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
@@ -221,8 +226,25 @@
     return [now.getFullYear(), now.getMonth() + 1, now.getDate()];
   }
 
-  function findMissingHomeworkDates(scheduleItems, todayDate) {
+  function parseDdMmYyyy(str) {
+    const match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String(str || ""));
+    return match ? [Number(match[3]), Number(match[2]), Number(match[1])] : null;
+  }
+
+  function buildHomeworkAbsenceKeys(homeworkAbsences) {
+    const keys = new Set();
+    (homeworkAbsences || []).forEach((rec) => {
+      if (rec?.deleted_at) return;
+      const ymd = parseDdMmYyyy(rec?.date);
+      if (!ymd || rec?.group_id === undefined || rec?.group_id === null) return;
+      keys.add(`${rec.group_id}-${ymd.join("-")}`);
+    });
+    return keys;
+  }
+
+  function findMissingHomeworkDates(scheduleItems, todayDate, homeworkAbsences) {
     const today = todayDate || todayYmd();
+    const absenceKeys = buildHomeworkAbsenceKeys(homeworkAbsences);
     const seen = new Set();
     const results = [];
 
@@ -233,6 +255,7 @@
       .forEach((item) => {
         const hasVerify = Array.isArray(item.homeworks_to_verify) && item.homeworks_to_verify.length > 0;
         if (hasVerify) return;
+        if (absenceKeys.has(`${item.group_id}-${item.date.join("-")}`)) return;
         const key = item.date.join("-");
         if (seen.has(key)) return;
         seen.add(key);
@@ -250,7 +273,8 @@
 
   function getMissingHomeworkDatesForCurrentJournal(todayDate) {
     const schedule = window.__MESH_HELPER_API__?.schedule || [];
-    return findMissingHomeworkDates(schedule, todayDate);
+    const homeworkAbsences = window.__MESH_HELPER_API__?.homeworkAbsences || [];
+    return findMissingHomeworkDates(schedule, todayDate, homeworkAbsences);
   }
 
   // ---- Фоновый обход журналов: открывает каждый targetGroupId в фоновой ----
@@ -439,7 +463,11 @@
     item.status = "loading";
     await setStorage(ADMIN_STORAGE_KEY, batch);
 
-    const [found] = await Promise.all([waitForAdminMarks(), waitForAdminApiKind("schedule")]);
+    const [found] = await Promise.all([
+      waitForAdminMarks(),
+      waitForAdminApiKind("schedule"),
+      waitForAdminApiKind("homeworkAbsences")
+    ]);
 
     const freshCheck = await getStorage(ADMIN_STORAGE_KEY);
     if (!freshCheck || freshCheck.status !== "running") {

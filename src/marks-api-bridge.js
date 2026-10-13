@@ -93,12 +93,13 @@
         attendances: [],
         schedule: [],
         homeworks: [],
+        homeworkAbsences: [],
         raw: {},
         urls: {},
         debug: {}
       };
     }
-    ["groups", "studentProfiles", "averageMarks", "finalMarks", "periods", "marks", "attendances", "schedule", "homeworks"].forEach((key) => {
+    ["groups", "studentProfiles", "averageMarks", "finalMarks", "periods", "marks", "attendances", "schedule", "homeworks", "homeworkAbsences"].forEach((key) => {
       if (!Array.isArray(window.__MESH_HELPER_API__[key])) window.__MESH_HELPER_API__[key] = [];
     });
     if (!window.__MESH_HELPER_API__.debug) window.__MESH_HELPER_API__.debug = {};
@@ -114,6 +115,7 @@
     if (value.includes("/attestation_periods_schedules") || value.includes("/attestation_periods_schedule")) return "periods";
     if (value.includes("/attendances")) return "attendances";
     if (value.includes("/schedule_items")) return "schedule";
+    if (value.includes("/homework_absences")) return "homeworkAbsences";
     if (value.includes("/homeworks")) return "homeworks";
     if (value.includes("/marks")) return "marks";
     return "raw";

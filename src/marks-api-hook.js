@@ -12,7 +12,8 @@
     "/final_marks",
     "/attendances",
     "/schedule_items",
-    "/homeworks"
+    "/homeworks",
+    "/homework_absences"
   ];
 
   if (window.__meshHelperMarksHookInstalled) return;
