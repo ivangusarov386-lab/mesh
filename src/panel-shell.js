@@ -40,8 +40,10 @@
   function syncMiniMin(panel, value) {
     const mini = panel.querySelector(`#${MINI_MIN_ID}`);
     const min = panel.querySelector("#mh-min");
+    const adminMin = panel.querySelector("#mh-admin-min-grades");
     if (mini && String(mini.value) !== String(value)) mini.value = value;
     if (min && String(min.value) !== String(value)) min.value = value;
+    if (adminMin && String(adminMin.value) !== String(value)) adminMin.value = value;
   }
 
   function normalizeMin(rawValue) {
@@ -1093,6 +1095,7 @@
           <div class="mh-admin-menu">
             <div class="mh-class-threshold-row"><label for="mh-admin-min-avg">Проблема при среднем ≤</label><input id="mh-admin-min-avg" type="number" min="1" max="5" step="0.1"></div>
             <div class="mh-class-threshold-row"><label for="mh-admin-min-absence">Проблема при пропусках ≥ (%)</label><input id="mh-admin-min-absence" type="number" min="1" max="100" step="1"></div>
+            <div class="mh-class-threshold-row"><label for="mh-admin-min-grades">Мин. оценок</label><input id="mh-admin-min-grades" type="number" min="1" step="1"></div>
             <button id="mh-admin-load-classes" class="mh-class-export-btn" type="button">Загрузить список классов</button>
             <div id="mh-admin-picker" class="mh-allclasses-picker" style="display:none;">
               <div id="mh-admin-picker-list" class="mh-allclasses-picker-list"></div>
@@ -1153,6 +1156,15 @@
           saveMin(panel, minInput.value);
           minInput.blur();
         }
+      });
+    }
+    const adminMinInput = panel.querySelector("#mh-admin-min-grades");
+    if (adminMinInput && adminMinInput.dataset.ready !== "1") {
+      adminMinInput.dataset.ready = "1";
+      adminMinInput.addEventListener("input", () => saveMin(panel, adminMinInput.value));
+      adminMinInput.addEventListener("change", () => saveMin(panel, adminMinInput.value));
+      ["click", "mousedown", "mouseup", "pointerdown", "pointerup"].forEach((eventName) => {
+        adminMinInput.addEventListener(eventName, (e) => e.stopPropagation());
       });
     }
     if (finals && finals.dataset.ready !== "1") {

@@ -528,6 +528,17 @@
     });
   }
 
+  // "minGrades" — тот же ключ, что у «Минимум оценок» (подсветка недобора
+  // на самой странице журнала), значение по умолчанию 5 там же задано.
+  function getMinGradesThreshold() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(["minGrades"], (data) => {
+        const value = Number(data.minGrades);
+        resolve(Number.isFinite(value) && value > 0 ? value : 5);
+      });
+    });
+  }
+
   const DEFAULT_FINAL_GRADE_RANGES = {
     2: { from: 1, to: 2.59 },
     3: { from: 2.6, to: 3.59 },
@@ -680,6 +691,7 @@
 
     const problemAvgThreshold = await getProblemAvgThreshold();
     const absencePercentThreshold = await getAbsencePercentThreshold();
+    const minGradesThreshold = await getMinGradesThreshold();
     const finalGradeRanges = await getFinalGradeRanges();
 
     const HEADER = [
@@ -728,8 +740,7 @@
     // ---- СВОД: проблемные ученики по всем собранным журналам, с учителем ----
     // ---- (в отличие от «Мой класс», тут у каждого предмета свой учитель, ----
     // ---- поэтому колонка «Учитель» обязательна — иначе непонятно, к кому ----
-    // ---- с этим идти). Плюс агрегат по ученику в рамках его класса — ----
-    // ---- через все собранные предметы ИМЕННО этого класса, не всей школы. ----
+    // ---- с этим идти). Три критерия: средний балл, пропуски, мало оценок. ----
 
     const problems = [];
     rows.forEach((journal) => {
@@ -741,25 +752,28 @@
         const { count, avg } = averageForStudent(marks, student.id);
         const { percent } = attendanceForStudent(attendances, student.id, heldLessons);
         if (count && avg <= problemAvgThreshold) {
-          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Низкий средний балл", value: avg, teacher: journal.teacher || "" });
+          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Низкий средний балл", value: avg, count, teacher: journal.teacher || "" });
         }
         if (heldLessons && percent >= absencePercentThreshold) {
-          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Много пропусков", value: `${percent}%`, teacher: journal.teacher || "" });
+          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Много пропусков", value: `${percent}%`, count, teacher: journal.teacher || "" });
+        }
+        if (count < minGradesThreshold) {
+          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Мало оценок", value: count, count, teacher: journal.teacher || "" });
         }
       });
     });
     problems.sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ru") || a.student.localeCompare(b.student, "ru"));
 
     const svodRows = [
-      workbook.row([`Проблемы по предметам (средний балл ≤ ${problemAvgThreshold} или пропуски ≥ ${absencePercentThreshold}%)`], () => "Header"),
-      workbook.row(["№", "ФИО", "Класс", "Предмет", "Проблема", "Значение", "Риск академической задолженности", "Учитель"], () => "Header")
+      workbook.row([`Проблемы по предметам (средний балл ≤ ${problemAvgThreshold}, пропуски ≥ ${absencePercentThreshold}% или оценок < ${minGradesThreshold})`], () => "Header"),
+      workbook.row(["№", "ФИО", "Класс", "Предмет", "Проблема", "Значение", "Количество оценок", "Риск академической задолженности", "Учитель"], () => "Header")
     ];
     if (problems.length) {
       problems.forEach((p, index) => {
-        svodRows.push(workbook.row([index + 1, p.student, p.classLabel, p.subject, p.label, p.value, "Да", p.teacher], () => "BadAbsence"));
+        svodRows.push(workbook.row([index + 1, p.student, p.classLabel, p.subject, p.label, p.value, p.count, "Да", p.teacher], () => "BadAbsence"));
       });
     } else {
-      svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", "", "", "", ""], () => "Default"));
+      svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", "", "", "", "", ""], () => "Default"));
     }
 
     const svodSheet = workbook.worksheet("СВОД", svodRows);
