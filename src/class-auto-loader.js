@@ -674,6 +674,154 @@
     return { ok: true, students: students.length, subjects: subjects.length };
   }
 
+  // ---- Экспорт по ученикам отдельными файлами в одном .zip — тот же ----
+  // ---- хендролленный подход к ZIP, что и внутри class-workbook.js для ----
+  // ---- самого .xlsx (тут упаковываются уже готовые .xlsx-файлы как ----
+  // ---- opaque-бинарники, без их распаковки/изменения). ----
+
+  function zipCrc32(bytes) {
+    let crc = ~0;
+    for (let i = 0; i < bytes.length; i++) {
+      crc ^= bytes[i];
+      for (let j = 0; j < 8; j++) {
+        crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+      }
+    }
+    return (~crc) >>> 0;
+  }
+
+  function zipU16(v) {
+    return [v & 255, (v >>> 8) & 255];
+  }
+
+  function zipU32(v) {
+    return [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+  }
+
+  async function zipBlobs(entries) {
+    const encoder = new TextEncoder();
+    const local = [];
+    const central = [];
+    let offset = 0;
+
+    for (const entry of entries) {
+      const nameBytes = encoder.encode(entry.name);
+      const dataBytes = new Uint8Array(await entry.blob.arrayBuffer());
+      const crc = zipCrc32(dataBytes);
+
+      const UTF8_FLAG = 0x0800; // имена файлов — ФИО на кириллице, иначе будут кракозябры
+
+      const localHeader = new Uint8Array([
+        ...zipU32(0x04034b50), ...zipU16(20), ...zipU16(UTF8_FLAG), ...zipU16(0), ...zipU16(0), ...zipU16(0),
+        ...zipU32(crc), ...zipU32(dataBytes.length), ...zipU32(dataBytes.length),
+        ...zipU16(nameBytes.length), ...zipU16(0)
+      ]);
+      local.push(localHeader, nameBytes, dataBytes);
+
+      const centralHeader = new Uint8Array([
+        ...zipU32(0x02014b50), ...zipU16(20), ...zipU16(20), ...zipU16(UTF8_FLAG), ...zipU16(0), ...zipU16(0), ...zipU16(0),
+        ...zipU32(crc), ...zipU32(dataBytes.length), ...zipU32(dataBytes.length),
+        ...zipU16(nameBytes.length), ...zipU16(0), ...zipU16(0), ...zipU16(0), ...zipU16(0),
+        ...zipU32(0), ...zipU32(offset)
+      ]);
+      central.push(centralHeader, nameBytes);
+
+      offset += localHeader.length + nameBytes.length + dataBytes.length;
+    }
+
+    const centralSize = central.reduce((sum, part) => sum + part.length, 0);
+    const end = new Uint8Array([
+      ...zipU32(0x06054b50), ...zipU16(0), ...zipU16(0), ...zipU16(entries.length), ...zipU16(entries.length),
+      ...zipU32(centralSize), ...zipU32(offset), ...zipU16(0)
+    ]);
+
+    return new Blob([...local, ...central, end], { type: "application/zip" });
+  }
+
+  function safeFileName(name) {
+    return String(name || "").replace(/[\\/:*?"<>|]/g, "_").trim() || "Ученик";
+  }
+
+  async function exportPerStudentZip() {
+    const batch = await getStorage(STORAGE_KEY);
+    if (!batch || batch.status !== "done") {
+      log("Выгрузка ещё не завершена (или не запускалась) — сначала startBatch().");
+      return { ok: false, reason: "not-done" };
+    }
+
+    const workbook = window.__MESH_HELPER_CLASS_WORKBOOK__;
+    if (!workbook) {
+      log("Модуль class-workbook.js не загружен — обновите страницу.");
+      return { ok: false, reason: "no-workbook-module" };
+    }
+
+    const students = Object.values(batch.studentProfiles || {}).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    if (!students.length) {
+      log("Нет данных об учениках — student_profiles не были пойманы ни на одном журнале.");
+      return { ok: false, reason: "no-students" };
+    }
+
+    const subjects = batch.queue.map((item) => ({ id: item.id, text: item.text }));
+    const problemAvgThreshold = await getProblemAvgThreshold();
+    const absencePercentThreshold = await getAbsencePercentThreshold();
+    const finalGradeRanges = await getFinalGradeRanges();
+
+    const HEADER = ["Предмет", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Риск академической задолженности"];
+
+    const usedNames = new Set();
+    const entries = [];
+    students.forEach((student) => {
+      const rows = [
+        workbook.row(["Ученик:", student.name], (value, colIndex) => (colIndex === 0 ? "Header" : "Default")),
+        workbook.row([]),
+        workbook.row(HEADER, () => "Header")
+      ];
+      subjects.forEach((subject) => {
+        const marks = batch.results[subject.id]?.marks || [];
+        const attendances = batch.results[subject.id]?.attendances || [];
+        const heldLessons = batch.results[subject.id]?.heldLessons;
+        const { count, avg } = averageForStudent(marks, student.id);
+        const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        const academicRisk = count && avg <= problemAvgThreshold ? "Да" : "Нет";
+        rows.push(workbook.row(
+          [subject.text, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", academicRisk],
+          (value, colIndex) => {
+            if (colIndex === 4 && percent >= absencePercentThreshold) return "BadAbsence";
+            if (colIndex === 7 && academicRisk === "Да") return "BadAbsence";
+            return "Default";
+          }
+        ));
+      });
+
+      const sheet = workbook.worksheet(student.name, rows);
+      const blob = workbook.buildWorkbookBlob([sheet]);
+      const baseName = safeFileName(student.name);
+      let finalName = `${baseName}.xlsx`;
+      let suffix = 2;
+      while (usedNames.has(finalName)) {
+        finalName = `${baseName} (${suffix}).xlsx`;
+        suffix += 1;
+      }
+      usedNames.add(finalName);
+      entries.push({ name: finalName, blob });
+    });
+
+    const zipBlob = await zipBlobs(entries);
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `mesh_moy_klass_po_uchenikam_${date}.zip`;
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+    log(`Экспортировано по ученикам: ${entries.length} файлов → ${filename}`);
+    return { ok: true, students: entries.length, filename };
+  }
+
   async function exportAllClassesWorkbook() {
     const batch = await getStorage(STORAGE_KEY);
     if (!batch || batch.status !== "done") {
@@ -817,6 +965,7 @@
     getResults,
     exportCsv,
     exportWorkbook,
+    exportPerStudentZip,
     collectJournalsFromList,
     startAllClassesInBackground,
     exportAllClassesWorkbook,

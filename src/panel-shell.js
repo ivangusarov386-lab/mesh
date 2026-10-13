@@ -398,6 +398,32 @@
         }
       });
     }
+    const perStudentBtn = panel.querySelector("#mh-export-class-per-student");
+    if (perStudentBtn && perStudentBtn.dataset.ready !== "1") {
+      perStudentBtn.dataset.ready = "1";
+      perStudentBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
+        if (!loader) {
+          setClassStatus(panel, "Модуль выгрузки класса не загружен. Обновите страницу и попробуйте снова.", "warn");
+          return;
+        }
+        const batch = await loader.getResults();
+        if (!batch || batch.status !== "done" || batch.exportKind === "subject") {
+          setClassStatus(panel, "Сначала соберите данные («Собрать все предметы»), потом можно скачать по ученикам.", "warn");
+          return;
+        }
+        perStudentBtn.disabled = true;
+        const result = await loader.exportPerStudentZip();
+        perStudentBtn.disabled = false;
+        if (!result?.ok) {
+          setClassStatus(panel, "Не удалось собрать файлы по ученикам.", "warn");
+        } else {
+          setClassStatus(panel, `Готово: ${result.students} файлов по ученикам в архиве.`, "ok");
+        }
+      });
+    }
     refreshClassExportLabel(panel);
   }
 
@@ -1070,6 +1096,7 @@
             <div class="mh-class-progress-track"><div id="mh-class-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>
             <div id="mh-class-progress-text" class="mh-class-progress-text">0%</div>
             <div id="mh-class-export-status" class="mh-class-status" data-tone="muted">Соберите оценки, пропуски и итоги по всем предметам класса в один Excel-файл.</div>
+            <button id="mh-export-class-per-student" class="mh-class-export-btn" type="button">Скачать по ученикам (.zip)</button>
           </div>
         </div>
         <div class="mh-section mh-allclasses-export">

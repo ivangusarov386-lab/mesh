@@ -333,7 +333,7 @@ ${overrides}
     });
   }
 
-  function downloadWorkbook(filename, sheets, options = {}) {
+  function buildWorkbookBlob(sheets, options = {}) {
     const safeSheets = (sheets || []).filter(Boolean);
     const definedNames = options.definedNames || [];
 
@@ -364,7 +364,11 @@ ${overrides}
       }))
     ];
 
-    const blob = zip(files);
+    return zip(files);
+  }
+
+  function downloadWorkbook(filename, sheets, options = {}) {
+    const blob = buildWorkbookBlob(sheets, options);
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
@@ -382,6 +386,7 @@ ${overrides}
     row,
     worksheet,
     formula,
-    downloadWorkbook
+    downloadWorkbook,
+    buildWorkbookBlob
   };
 })();
