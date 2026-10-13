@@ -459,6 +459,30 @@
       .join(", ");
   }
 
+  function overallStatsForStudentInClass(journalsForClass, studentId, absenceThreshold) {
+    const allGrades = [];
+    let absences = 0;
+    let total = 0;
+    let risk = false;
+    (journalsForClass || []).forEach((journal) => {
+      const marks = journal.marks || [];
+      const attendances = journal.attendances || [];
+      const heldLessons = journal.heldLessons || 0;
+      marks
+        .filter((mark) => getStudentIdFromMark(mark) === studentId)
+        .map(getMarkValue)
+        .filter(isGrade)
+        .forEach((value) => allGrades.push(Number(value)));
+      const subAbsences = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId).length;
+      absences += subAbsences;
+      total += heldLessons;
+      if (heldLessons && Math.round((subAbsences / heldLessons) * 1000) / 10 >= absenceThreshold) risk = true;
+    });
+    const avg = allGrades.length ? Math.round((allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length) * 100) / 100 : null;
+    const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
+    return { avg, count: allGrades.length, absences, total, percent, risk };
+  }
+
   function captureMarksForJournal(journalId) {
     const api = window.__MESH_HELPER_API__ || {};
     const marks = Array.isArray(api.marks) ? api.marks : [];
@@ -725,13 +749,83 @@
       return workbook.worksheet(`${journal.classLabel} ${journal.subject}`, sheetRows);
     });
 
+    // ---- СВОД: проблемные ученики по всем собранным журналам, с учителем ----
+    // ---- (в отличие от «Мой класс», тут у каждого предмета свой учитель, ----
+    // ---- поэтому колонка «Учитель» обязательна — иначе непонятно, к кому ----
+    // ---- с этим идти). Плюс агрегат по ученику в рамках его класса — ----
+    // ---- через все собранные предметы ИМЕННО этого класса, не всей школы. ----
+
+    const problems = [];
+    rows.forEach((journal) => {
+      const students = journal.students || [];
+      const marks = journal.marks || [];
+      const attendances = journal.attendances || [];
+      const heldLessons = journal.heldLessons || 0;
+      students.forEach((student) => {
+        const { count, avg } = averageForStudent(marks, student.id);
+        const { percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        if (count && avg <= problemAvgThreshold) {
+          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Низкий средний балл", value: avg, teacher: journal.teacher || "" });
+        }
+        if (heldLessons && percent >= absencePercentThreshold) {
+          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Много пропусков", value: `${percent}%`, teacher: journal.teacher || "" });
+        }
+      });
+    });
+    problems.sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ru") || a.student.localeCompare(b.student, "ru"));
+
+    const svodRows = [
+      workbook.row([`Проблемы по предметам (средний балл ≤ ${problemAvgThreshold} или пропуски ≥ ${absencePercentThreshold}%)`], () => "Header"),
+      workbook.row(["№", "ФИО", "Класс", "Предмет", "Проблема", "Значение", "Учитель"], () => "Header")
+    ];
+    if (problems.length) {
+      problems.forEach((p, index) => {
+        svodRows.push(workbook.row([index + 1, p.student, p.classLabel, p.subject, p.label, p.value, p.teacher], () => "Default"));
+      });
+    } else {
+      svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", "", "", ""], () => "Default"));
+    }
+
+    svodRows.push(workbook.row([""], () => "Default"));
+    svodRows.push(workbook.row(["Итого по каждому ученику — агрегат по всем собранным предметам его класса"], () => "Header"));
+    svodRows.push(workbook.row(["№", "Класс", "ФИО", "Средний балл", "Оценок всего", "Н по факту", "Н % по факту", "Риск академической задолженности"], () => "Header"));
+
+    const journalsByClass = new Map();
+    rows.forEach((journal) => {
+      if (!journalsByClass.has(journal.classLabel)) journalsByClass.set(journal.classLabel, []);
+      journalsByClass.get(journal.classLabel).push(journal);
+    });
+
+    let rowNum = 0;
+    [...journalsByClass.keys()].sort((a, b) => a.localeCompare(b, "ru")).forEach((classLabel) => {
+      const journalsForClass = journalsByClass.get(classLabel);
+      const studentsById = new Map();
+      journalsForClass.forEach((journal) => (journal.students || []).forEach((student) => {
+        if (!studentsById.has(student.id)) studentsById.set(student.id, student);
+      }));
+      const students = [...studentsById.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+
+      students.forEach((student) => {
+        const stats = overallStatsForStudentInClass(journalsForClass, student.id, absencePercentThreshold);
+        const academicRisk = (stats.avg !== null && stats.avg <= problemAvgThreshold) || stats.risk ? "Да" : "Нет";
+        rowNum += 1;
+        svodRows.push(workbook.row(
+          [rowNum, classLabel, student.name, stats.avg ?? "", stats.count, stats.absences, `${stats.percent}%`, academicRisk],
+          () => (academicRisk === "Да" ? "BadAbsence" : "Default")
+        ));
+      });
+    });
+
+    const svodSheet = workbook.worksheet("СВОД", svodRows);
+
     const date = new Date().toISOString().slice(0, 10);
     const partialSuffix = stored.partial ? `_partial_${stored.processedCount}of${stored.totalCount}` : "";
     const filename = `mesh_admin_parallel${partialSuffix}_${date}.xlsx`;
 
-    workbook.downloadWorkbook(filename, sheets);
-    log(`Экспортировано: ${sheets.length} журналов → ${filename}`);
-    return { ok: true, sheets: sheets.length, filename };
+    const allSheets = [svodSheet, ...sheets];
+    workbook.downloadWorkbook(filename, allSheets);
+    log(`Экспортировано: ${sheets.length} журналов + СВОД → ${filename}`);
+    return { ok: true, sheets: allSheets.length, filename };
   }
 
   async function resumeAdminBatchIfRunning() {
