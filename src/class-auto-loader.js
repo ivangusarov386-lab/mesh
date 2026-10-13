@@ -518,27 +518,6 @@
       .join(", ");
   }
 
-  function overallStatsForStudent(subjects, batch, studentId, absenceThreshold) {
-    const allGrades = [];
-    let absences = 0;
-    let total = 0;
-    let risk = false;
-    subjects.forEach((subject) => {
-      const marks = batch.results[subject.id]?.marks || [];
-      const attendances = batch.results[subject.id]?.attendances || [];
-      const heldLessons = batch.results[subject.id]?.heldLessons || 0;
-      const gradeValues = marks.filter((mark) => getStudentIdFromMark(mark) === studentId).map(getMarkValue).filter(isGrade);
-      gradeValues.forEach((value) => allGrades.push(Number(value)));
-      const subAbsences = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId).length;
-      absences += subAbsences;
-      total += heldLessons;
-      if (heldLessons && Math.round((subAbsences / heldLessons) * 1000) / 10 >= absenceThreshold) risk = true;
-    });
-    const avg = allGrades.length ? Math.round((allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length) * 100) / 100 : null;
-    const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
-    return { avg, count: allGrades.length, absences, total, percent, risk };
-  }
-
   async function exportWorkbook() {
     const batch = await getStorage(STORAGE_KEY);
     if (!batch || batch.status !== "done") {
@@ -572,14 +551,12 @@
       students.forEach((student, index) => {
         const { count, avg } = averageForStudent(marks, student.id);
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
-        const academicRisk = count && avg <= problemAvgThreshold ? "Да" : "Нет";
+        const avgRisk = count > 0 && avg <= problemAvgThreshold;
+        const absenceRisk = heldLessons > 0 && percent >= absencePercentThreshold;
+        const academicRisk = avgRisk || absenceRisk ? "Да" : "Нет";
         rows.push(workbook.row(
           [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", percent, academicRisk],
-          (value, colIndex) => {
-            if (colIndex === 6 && percent >= absencePercentThreshold) return "BadAbsence";
-            if (colIndex === 9 && academicRisk === "Да") return "BadAbsence";
-            return "Default";
-          }
+          () => (academicRisk === "Да" ? "BadAbsence" : "Default")
         ));
       });
       return workbook.worksheet(subject.text, rows, { hiddenCols: [9] });
@@ -610,21 +587,6 @@
       svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", ""], () => "Default"));
     }
 
-    svodRows.push(workbook.row([""], () => "Default"));
-    svodRows.push(workbook.row(["Итого по каждому ученику — агрегат по ВСЕМ предметам класса сразу"], () => "Header"));
-    svodRows.push(workbook.row(["№", "ФИО", "Средний балл (все предметы)", "Оценок всего", "Н по факту", "Н % по факту", `Риск (Н ≥ ${absencePercentThreshold}%)`, "Риск академической задолженности"], () => "Header"));
-    students.forEach((student, index) => {
-      const stats = overallStatsForStudent(subjects, batch, student.id, absencePercentThreshold);
-      const academicRisk = stats.avg !== null && stats.avg <= problemAvgThreshold ? "Да" : "Нет";
-      svodRows.push(workbook.row(
-        [index + 1, student.name, stats.avg ?? "", stats.count, stats.absences, `${stats.percent}%`, stats.risk ? "да" : "", academicRisk],
-        (value, colIndex) => {
-          if (colIndex === 6 && stats.risk) return "BadAbsence";
-          if (colIndex === 7 && academicRisk === "Да") return "BadAbsence";
-          return "Default";
-        }
-      ));
-    });
     const svodSheet = workbook.worksheet("СВОД", svodRows);
 
     const sheetRef = (sheetName) => `'${sheetName.replace(/'/g, "''")}'`;
