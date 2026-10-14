@@ -732,7 +732,7 @@
     const finalGradeRanges = await getFinalGradeRanges();
 
     const HEADER = [
-      "№", "ФИО", "Оценки", "Средний балл", "Уроков проведено",
+      "№", "ФИО", "Оценки", "Средний балл", "Количество оценок", "Уроков проведено",
       "Н по факту", "Н % по факту", "Расчётный итог",
       "Риск академической задолженности", "ДЗ отсутствие", "Учитель"
     ];
@@ -759,6 +759,7 @@
             student.name,
             gradesTextForStudent(marks, student.id),
             count ? avg : "",
+            count,
             heldLessons,
             absences,
             `${percent}%`,
