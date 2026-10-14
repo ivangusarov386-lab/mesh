@@ -807,7 +807,7 @@
     ];
     if (problems.length) {
       problems.forEach((p, index) => {
-        svodRows.push(workbook.row([index + 1, p.student, p.classLabel, p.subject, p.label, p.value, p.count, "Да", p.teacher], () => "BadAbsence"));
+        svodRows.push(workbook.row([index + 1, p.student, p.classLabel, p.subject, p.label, p.value, p.count, "Да", p.teacher], () => "Default"));
       });
     } else {
       svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", "", "", "", "", ""], () => "Default"));
