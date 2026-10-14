@@ -389,17 +389,58 @@
     return /^[1-5]$/.test(value);
   }
 
+  // ---- Вес оценки (контрольная/самостоятельная и т.п. считаются как ----
+  // ---- несколько одинаковых оценок при подсчёте среднего и количества) ----
+  // ---- — явное числовое поле веса, если есть, иначе эвристика по ----
+  // ---- названию формы контроля. ----
+  function numericOrNull(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function getMarkWeight(mark) {
+    const explicit = numericOrNull(
+      mark?.weight ?? mark?.coefficient ?? mark?.mark_weight ?? mark?.markWeight ??
+      mark?.weight_value ?? mark?.weightValue ??
+      mark?.control_form_weight ?? mark?.controlFormWeight ??
+      mark?.control_form?.weight ?? mark?.control_form?.coefficient ??
+      mark?.controlForm?.weight ?? mark?.controlForm?.coefficient
+    );
+    if (explicit && explicit > 1) return Math.max(1, Math.min(5, Math.round(explicit)));
+
+    const label = String(
+      mark?.control_form_name || mark?.controlFormName ||
+      mark?.control_form?.name || mark?.control_form?.short_name ||
+      mark?.controlForm?.name || mark?.controlForm?.short_name || ""
+    ).trim().toLowerCase();
+    if (/\bкр\b|контрольн|диагност/.test(label)) return 3;
+    if (/самостоятельн|тест|практическ|лабораторн|диктант|изложен|сочинен|проект/.test(label)) return 2;
+    return 1;
+  }
+
+  function expandGradeValues(marks, studentId) {
+    const grades = [];
+    const display = [];
+    marks
+      .filter((mark) => getStudentIdFromMark(mark) === studentId)
+      .forEach((mark) => {
+        const value = getMarkValue(mark);
+        if (!isGrade(value)) return;
+        const grade = Number(value);
+        const weight = getMarkWeight(mark);
+        for (let i = 0; i < weight; i += 1) grades.push(grade);
+        display.push(weight > 1 ? `${grade}×${weight}` : String(grade));
+      });
+    return { grades, display };
+  }
+
   function getStudentIdFromAttendance(record) {
     const id = record?.student_profile_id ?? record?.studentProfileId;
     return id !== undefined && id !== null ? String(id) : null;
   }
 
   function averageForStudent(marks, studentId) {
-    const grades = marks
-      .filter((mark) => getStudentIdFromMark(mark) === studentId)
-      .map(getMarkValue)
-      .filter(isGrade)
-      .map(Number);
+    const { grades } = expandGradeValues(marks, studentId);
     if (!grades.length) return { count: 0, avg: null };
     const avg = Math.round((grades.reduce((sum, grade) => sum + grade, 0) / grades.length) * 100) / 100;
     return { count: grades.length, avg };
@@ -511,11 +552,7 @@
   }
 
   function gradesTextForStudent(marks, studentId) {
-    return marks
-      .filter((mark) => getStudentIdFromMark(mark) === studentId)
-      .map(getMarkValue)
-      .filter(isGrade)
-      .join(", ");
+    return expandGradeValues(marks, studentId).display.join(", ");
   }
 
   async function exportWorkbook() {
