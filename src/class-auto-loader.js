@@ -446,11 +446,17 @@
     return { count: grades.length, avg };
   }
 
+  function isIllnessAbsence(record) {
+    return Number(record?.absence_reason_id) === 2;
+  }
+
   function attendanceForStudent(attendances, studentId, heldLessons) {
-    const absences = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId).length;
+    const own = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId);
+    const absences = own.length;
+    const illnessAbsences = own.filter(isIllnessAbsence).length;
     const total = heldLessons || 0;
     const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
-    return { absences, total, percent };
+    return { absences, illnessAbsences, total, percent };
   }
 
   function csvValue(value) {
@@ -575,7 +581,7 @@
     }
 
     const subjects = batch.queue.map((item) => ({ id: item.id, text: item.text }));
-    const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Н% (служ.)", "Риск академической задолженности"];
+    const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Н% (служ.)", "Риск академической задолженности", "Н по болезни"];
     const problemAvgThreshold = await getProblemAvgThreshold();
     const absencePercentThreshold = await getAbsencePercentThreshold();
     const finalGradeRanges = await getFinalGradeRanges();
@@ -587,12 +593,12 @@
       const rows = [workbook.row(SUBJECT_HEADER, () => "Header")];
       students.forEach((student, index) => {
         const { count, avg } = averageForStudent(marks, student.id);
-        const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        const { absences, illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
         const avgRisk = count > 0 && avg <= problemAvgThreshold;
         const absenceRisk = heldLessons > 0 && percent >= absencePercentThreshold;
         const academicRisk = avgRisk || absenceRisk ? "Да" : "Нет";
         rows.push(workbook.row(
-          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", percent, academicRisk],
+          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", percent, academicRisk, illnessAbsences],
           () => (academicRisk === "Да" ? "BadAbsence" : "Default")
         ));
       });

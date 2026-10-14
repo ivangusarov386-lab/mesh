@@ -485,11 +485,17 @@
     return { count: grades.length, avg };
   }
 
+  function isIllnessAbsence(record) {
+    return Number(record?.absence_reason_id) === 2;
+  }
+
   function attendanceForStudent(attendances, studentId, heldLessons) {
-    const absences = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId).length;
+    const own = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId);
+    const absences = own.length;
+    const illnessAbsences = own.filter(isIllnessAbsence).length;
     const total = heldLessons || 0;
     const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
-    return { absences, total, percent };
+    return { absences, illnessAbsences, total, percent };
   }
 
   function gradesTextForStudent(marks, studentId) {
@@ -734,7 +740,7 @@
     const HEADER = [
       "№", "ФИО", "Оценки", "Средний балл", "Уроков проведено",
       "Н по факту", "Н % по факту", "Расчётный итог",
-      "Риск академической задолженности", "ДЗ отсутствие", "Учитель"
+      "Риск академической задолженности", "ДЗ отсутствие", "Н по болезни", "Учитель"
     ];
 
     rows.sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ru") || a.subject.localeCompare(b.subject, "ru"));
@@ -749,7 +755,7 @@
       const sheetRows = [workbook.row(HEADER, () => "Header")];
       students.forEach((student, index) => {
         const { count, avg } = averageForStudent(marks, student.id);
-        const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        const { absences, illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
         const avgRisk = count > 0 && avg <= problemAvgThreshold;
         const absenceRisk = heldLessons > 0 && percent >= absencePercentThreshold;
         const academicRisk = avgRisk || absenceRisk ? "Да" : "Нет";
@@ -765,6 +771,7 @@
             count ? possibleFinal(avg, finalGradeRanges) : "",
             academicRisk,
             missingText,
+            illnessAbsences,
             journal.teacher || ""
           ],
           () => (academicRisk === "Да" ? "BadAbsence" : "Default")
