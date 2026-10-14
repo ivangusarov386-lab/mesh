@@ -90,23 +90,56 @@
     return `<c r="${ref}" s="${style}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
   }
 
-  function colsXml(maxCols, hiddenCols) {
+  // ---- Ширина столбцов по факту содержимого (а не фиксированные цифры) — ----
+  // ---- берём самый частый "размер строки" в листе (обычная строка с ----
+  // ---- данными/заголовком) и меряем по нему, игнорируя короткие строки- ----
+  // ---- баннеры (типа заголовка СВОДа на всю ширину в одной ячейке), ----
+  // ---- иначе они раздули бы первый же столбец до своей длины. ----
+  function textLength(value) {
+    if (isFormulaValue(value)) return 10;
+    if (typeof value === "number" && Number.isFinite(value)) return String(value).length;
+    return String(value ?? "").length;
+  }
+
+  function mostCommonRowLength(rows) {
+    const counts = new Map();
+    (rows || []).forEach((rowData) => {
+      const len = (rowData.values || []).length;
+      if (!len) return;
+      counts.set(len, (counts.get(len) || 0) + 1);
+    });
+    let best = 0;
+    let bestCount = 0;
+    counts.forEach((count, len) => {
+      if (count > bestCount) {
+        bestCount = count;
+        best = len;
+      }
+    });
+    return best;
+  }
+
+  function computeColumnWidths(rows, maxCols) {
+    const typicalLength = mostCommonRowLength(rows) || maxCols;
+    const widths = new Array(maxCols).fill(0);
+    (rows || []).forEach((rowData) => {
+      const values = rowData.values || [];
+      if (values.length !== typicalLength) return;
+      values.forEach((cell, colIndex) => {
+        if (colIndex >= maxCols) return;
+        const len = textLength(cell.value);
+        if (len > widths[colIndex]) widths[colIndex] = len;
+      });
+    });
+    return widths.map((len) => Math.max(6, Math.min(50, len + 3)));
+  }
+
+  function colsXml(rows, maxCols, hiddenCols) {
     const hiddenSet = new Set(hiddenCols || []);
-    const total = Math.max(maxCols, 12);
-
-    if (!hiddenSet.size) {
-      return `<cols>
-<col min="1" max="1" width="6" customWidth="1"/>
-<col min="2" max="2" width="28" customWidth="1"/>
-<col min="3" max="3" width="40" customWidth="1"/>
-<col min="4" max="${total}" width="16" customWidth="1"/>
-</cols>`;
-    }
-
-    const baseWidths = { 1: 6, 2: 28, 3: 40 };
+    const widths = computeColumnWidths(rows, maxCols);
     const parts = [];
-    for (let col = 1; col <= total; col += 1) {
-      const width = baseWidths[col] ?? 16;
+    for (let col = 1; col <= maxCols; col += 1) {
+      const width = widths[col - 1] || 10;
       const hidden = hiddenSet.has(col) ? ' hidden="1"' : "";
       parts.push(`<col min="${col}" max="${col}" width="${width}" customWidth="1"${hidden}/>`);
     }
@@ -150,7 +183,7 @@
 </sheetView>
 </sheetViews>
 <sheetFormatPr defaultRowHeight="15"/>
-${colsXml(maxCols, sheet.hiddenCols)}
+${colsXml(sheet.rows, maxCols, sheet.hiddenCols)}
 <sheetData>${rowsXml}</sheetData>
 <autoFilter ref="${range}"/>
 ${conditionalFormattingXml(sheet.conditionalFormats)}
