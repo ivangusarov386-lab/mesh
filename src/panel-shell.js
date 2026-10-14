@@ -11,10 +11,39 @@
   const PANEL_ID = "mesh-helper-panel";
   const MINI_MIN_ID = "mh-mini-min";
   const CHECKS_OPEN_KEY = "meshHelperChecksOpen";
+  const PENDING_PER_STUDENT_ZIP_KEY = "meshHelperPendingPerStudentZip";
   let panelAttempts = 0;
   let minSaveTimer = null;
   const thresholdSaveTimers = {};
   let batchStorageListenerReady = false;
+
+  function getPendingPerStudentZip() {
+    return new Promise((resolve) => chrome.storage.local.get(PENDING_PER_STUDENT_ZIP_KEY, (data) => resolve(!!data?.[PENDING_PER_STUDENT_ZIP_KEY])));
+  }
+
+  function setPendingPerStudentZip(value) {
+    return new Promise((resolve) => {
+      if (value) chrome.storage.local.set({ [PENDING_PER_STUDENT_ZIP_KEY]: true }, resolve);
+      else chrome.storage.local.remove(PENDING_PER_STUDENT_ZIP_KEY, resolve);
+    });
+  }
+
+  async function runPendingPerStudentZipIfReady(panel) {
+    const pending = await getPendingPerStudentZip();
+    if (!pending) return;
+    const loader = window.__MESH_HELPER_CLASS_AUTO_LOADER__;
+    if (!loader) return;
+    const batch = await loader.getResults();
+    if (!batch || batch.exportKind === "subject") return;
+    if (batch.status !== "done") return;
+    await setPendingPerStudentZip(false);
+    const result = await loader.exportPerStudentZip();
+    if (!result?.ok) {
+      setClassStatus(panel, "Не удалось собрать файлы по ученикам.", "warn");
+    } else {
+      setClassStatus(panel, `Готово: ${result.students} файлов по ученикам в архиве.`, "ok");
+    }
+  }
 
   function setupBatchStorageListener() {
     if (batchStorageListenerReady) return;
@@ -26,6 +55,7 @@
       if (changes.meshHelperClassBatch) {
         refreshClassExportLabel(panel);
         refreshAllClassesExportLabel(panel);
+        runPendingPerStudentZipIfReady(panel);
       }
       if (changes.meshHelperAdminBatch) refreshAdminExportLabel(panel);
     });
@@ -410,21 +440,41 @@
           return;
         }
         const batch = await loader.getResults();
-        if (!batch || batch.status !== "done" || batch.exportKind === "subject") {
-          setClassStatus(panel, "Сначала соберите данные («Собрать все предметы»), потом можно скачать по ученикам.", "warn");
+        if (batch?.status === "done" && batch.exportKind !== "subject") {
+          perStudentBtn.disabled = true;
+          const result = await loader.exportPerStudentZip();
+          perStudentBtn.disabled = false;
+          if (!result?.ok) {
+            setClassStatus(panel, "Не удалось собрать файлы по ученикам.", "warn");
+          } else {
+            setClassStatus(panel, `Готово: ${result.students} файлов по ученикам в архиве.`, "ok");
+          }
           return;
         }
-        perStudentBtn.disabled = true;
-        const result = await loader.exportPerStudentZip();
-        perStudentBtn.disabled = false;
-        if (!result?.ok) {
-          setClassStatus(panel, "Не удалось собрать файлы по ученикам.", "warn");
+        if (batch?.status === "running") {
+          if (batch.exportKind === "subject") {
+            setClassStatus(panel, "Сейчас уже идёт другой сбор («Все классы») — дождитесь завершения.", "warn");
+            return;
+          }
+          await setPendingPerStudentZip(true);
+          setClassStatus(panel, "Сбор ещё не завершён — архив по ученикам скачается автоматически, как только он закончится.", "muted");
+          return;
+        }
+        await setPendingPerStudentZip(true);
+        const result = await loader.requestClassFromAnyPage();
+        if (result.navigating) {
+          setClassStatus(panel, "Открываем страницу «Журналы класса»... Архив по ученикам скачается автоматически после сбора данных.", "muted");
+        } else if (!result.ok) {
+          await setPendingPerStudentZip(false);
+          setClassStatus(panel, "Список журналов не найден. Разверните нужную параллель и нажмите ещё раз.", "warn");
         } else {
-          setClassStatus(panel, `Готово: ${result.students} файлов по ученикам в архиве.`, "ok");
+          setClassStatus(panel, "Сбор запущен в фоновой вкладке — архив по ученикам скачается автоматически по завершении.", "muted");
+          refreshClassExportLabel(panel);
         }
       });
     }
     refreshClassExportLabel(panel);
+    runPendingPerStudentZipIfReady(panel);
   }
 
   function setAllClassesProgress(panel, percent) {
