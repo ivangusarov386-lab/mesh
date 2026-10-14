@@ -612,22 +612,22 @@
         const attendances = batch.results[subject.id]?.attendances || [];
         const heldLessons = batch.results[subject.id]?.heldLessons;
         const { count, avg } = averageForStudent(marks, student.id);
-        const { illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
-        if (count && avg <= problemAvgThreshold) problems.push({ student: student.name, subject: subject.text, label: "Низкий средний балл", value: avg, illnessAbsences });
-        if (heldLessons && percent >= absencePercentThreshold) problems.push({ student: student.name, subject: subject.text, label: "Много пропусков", value: `${percent}%`, illnessAbsences });
+        const { percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        if (count && avg <= problemAvgThreshold) problems.push({ student: student.name, subject: subject.text, label: "Низкий средний балл", value: avg });
+        if (heldLessons && percent >= absencePercentThreshold) problems.push({ student: student.name, subject: subject.text, label: "Много пропусков", value: `${percent}%` });
       });
     });
 
     const svodRows = [
       workbook.row([`Проблемы по предметам (средний балл ≤ ${problemAvgThreshold} или пропуски ≥ ${absencePercentThreshold}%)`], () => "Header"),
-      workbook.row(["№", "ФИО", "Предмет", "Проблема", "Значение", "Н по болезни"], () => "Header")
+      workbook.row(["№", "ФИО", "Предмет", "Проблема", "Значение"], () => "Header")
     ];
     if (problems.length) {
       problems.forEach((problem, index) => {
-        svodRows.push(workbook.row([index + 1, problem.student, problem.subject, problem.label, problem.value, problem.illnessAbsences], () => "Default"));
+        svodRows.push(workbook.row([index + 1, problem.student, problem.subject, problem.label, problem.value], () => "Default"));
       });
     } else {
-      svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", "", ""], () => "Default"));
+      svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", ""], () => "Default"));
     }
 
     const svodSheet = workbook.worksheet("СВОД", svodRows);

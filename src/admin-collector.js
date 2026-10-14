@@ -794,15 +794,15 @@
       const heldLessons = journal.heldLessons || 0;
       students.forEach((student) => {
         const { count, avg } = averageForStudent(marks, student.id);
-        const { illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        const { percent } = attendanceForStudent(attendances, student.id, heldLessons);
         if (count && avg <= problemAvgThreshold) {
-          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Низкий средний балл", value: avg, count, illnessAbsences, teacher: journal.teacher || "" });
+          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Низкий средний балл", value: avg, count, teacher: journal.teacher || "" });
         }
         if (heldLessons && percent >= absencePercentThreshold) {
-          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Много пропусков", value: `${percent}%`, count, illnessAbsences, teacher: journal.teacher || "" });
+          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Много пропусков", value: `${percent}%`, count, teacher: journal.teacher || "" });
         }
         if (count < minGradesThreshold) {
-          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Мало оценок", value: count, count, illnessAbsences, teacher: journal.teacher || "" });
+          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Мало оценок", value: count, count, teacher: journal.teacher || "" });
         }
       });
     });
@@ -810,14 +810,14 @@
 
     const svodRows = [
       workbook.row([`Проблемы по предметам (средний балл ≤ ${problemAvgThreshold}, пропуски ≥ ${absencePercentThreshold}% или оценок < ${minGradesThreshold})`], () => "Header"),
-      workbook.row(["№", "ФИО", "Класс", "Предмет", "Проблема", "Значение", "Количество оценок", "Риск академической задолженности", "Н по болезни", "Учитель"], () => "Header")
+      workbook.row(["№", "ФИО", "Класс", "Предмет", "Проблема", "Значение", "Количество оценок", "Риск академической задолженности", "Учитель"], () => "Header")
     ];
     if (problems.length) {
       problems.forEach((p, index) => {
-        svodRows.push(workbook.row([index + 1, p.student, p.classLabel, p.subject, p.label, p.value, p.count, "Да", p.illnessAbsences, p.teacher], () => "Default"));
+        svodRows.push(workbook.row([index + 1, p.student, p.classLabel, p.subject, p.label, p.value, p.count, "Да", p.teacher], () => "Default"));
       });
     } else {
-      svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", "", "", "", "", "", ""], () => "Default"));
+      svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", "", "", "", "", ""], () => "Default"));
     }
 
     const svodSheet = workbook.worksheet("СВОД", svodRows);
