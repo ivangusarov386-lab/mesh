@@ -81,12 +81,12 @@
 
 .mh-checks-toggle:hover { background: #f8fafc; border-color: #94a3b8; }
 
-/* Спокойные, но разные оттенки у каждой раскрывающейся плашки — чтобы визуально отличались друг от друга */
-#mh-checks-toggle { background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%); border-color: #bfdbfe; }
-#mh-checks-toggle:hover { background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%); border-color: #93c5fd; }
+/* Спокойные, но разные оттенки у каждой карточки-секции (а не у самой кнопки-заголовка) —
+   чтобы весь блок под раскрывающейся плашкой визуально отличался от соседних.
+   Сама кнопка-заголовок (.mh-checks-toggle) остаётся белой — см. правило выше. */
+.mh-checks { background: linear-gradient(180deg, #f5f9ff 0%, #eaf2ff 100%); border-color: #dbeafe; }
+.mh-results { background: linear-gradient(180deg, #f5fcf7 0%, #e9f9ee 100%); border-color: #bbf7d0; }
 
-#mh-results-toggle { background: linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%); border-color: #bbf7d0; }
-#mh-results-toggle:hover { background: linear-gradient(180deg, #dcfce7 0%, #bbf7d0 100%); border-color: #86efac; }
 .mh-checks-actions { display: flex; align-items: center; gap: 8px; }
 .mh-checks-arrow { font-size: 12px; line-height: 1; color: #0f172a; }
 
