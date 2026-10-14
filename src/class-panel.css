@@ -32,6 +32,16 @@
   border-color: #94a3b8;
 }
 
+/* Спокойные, но разные оттенки у каждой раскрывающейся плашки — чтобы визуально отличались друг от друга */
+#mh-class-toggle { background: linear-gradient(180deg, #eef2ff 0%, #e0e7ff 100%); border-color: #c7d2fe; }
+#mh-class-toggle:hover { background: linear-gradient(180deg, #e0e7ff 0%, #c7d2fe 100%); border-color: #a5b4fc; }
+
+#mh-allclasses-toggle { background: linear-gradient(180deg, #ecfeff 0%, #cffafe 100%); border-color: #a5f3fc; }
+#mh-allclasses-toggle:hover { background: linear-gradient(180deg, #cffafe 0%, #a5f3fc 100%); border-color: #67e8f9; }
+
+#mh-admin-toggle { background: linear-gradient(180deg, #fdf2f8 0%, #fce7f3 100%); border-color: #fbcfe8; }
+#mh-admin-toggle:hover { background: linear-gradient(180deg, #fce7f3 0%, #fbcfe8 100%); border-color: #f9a8d4; }
+
 .mh-class-menu {
   display: none;
   margin-top: 10px;
