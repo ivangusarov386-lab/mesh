@@ -22,7 +22,6 @@
   --mh-black-rgb: 0, 0, 0;
   --mh-accent-rgb: 37, 99, 235;    /* основа #2563eb */
   --mh-teal-rgb: 15, 118, 110;     /* основа #0f766e */
-  --mh-amber-ring-rgb: 217, 119, 6; /* тень у плашки «Заметки к классу» */
 
   /* ---- Текст ---- */
   --mh-text: #0f172a;
@@ -70,7 +69,6 @@
   /* ---- «Заметки к классу» (янтарная плашка) ---- */
   --mh-amber-strong: #fbbf24;
   --mh-amber-hover: #f59e0b;
-  --mh-amber-bg-from: #fffbeb;
   --mh-amber-bg-to: #fef3c7;
   --mh-amber-bg-hover-to: #fde68a;
   --mh-amber-text: #92400e;
@@ -80,25 +78,20 @@
   --mh-teal: #0f766e;
   --mh-teal-dark: #0d5f59;
 
-  /* ---- Пастельные фоны карточек-секций ---- */
+  /* ---- Пастельные фоны карточек-секций (плоские, без градиента) ---- */
   --mh-section-checks-from: #f5f9ff;
-  --mh-section-checks-to: #eaf2ff;
   --mh-section-checks-border: #dbeafe;
 
   --mh-section-results-from: #f5fcf7;
-  --mh-section-results-to: #e9f9ee;
   --mh-section-results-border: #bbf7d0;
 
   --mh-section-class-from: #f6f7ff;
-  --mh-section-class-to: #ecefff;
   --mh-section-class-border: #c7d2fe;
 
   --mh-section-allclasses-from: #f3fdff;
-  --mh-section-allclasses-to: #e4fbff;
   --mh-section-allclasses-border: #a5f3fc;
 
   --mh-section-admin-from: #fef6fa;
-  --mh-section-admin-to: #fceef5;
   --mh-section-admin-border: #fbcfe8;
 
   /* ---- Свёрнутая «таблетка» ---- */

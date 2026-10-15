@@ -1,11 +1,10 @@
 .mh-notes-toggle {
   border: 1px solid var(--mh-amber-strong) !important;
-  background: linear-gradient(180deg, var(--mh-amber-bg-from) 0%, var(--mh-amber-bg-to) 100%) !important;
-  box-shadow: 0 1px 3px rgba(var(--mh-amber-ring-rgb), .18) !important;
+  background: var(--mh-amber-bg-to) !important;
 }
 
 .mh-notes-toggle:hover {
-  background: linear-gradient(180deg, var(--mh-amber-bg-to) 0%, var(--mh-amber-bg-hover-to) 100%) !important;
+  background: var(--mh-amber-bg-hover-to) !important;
   border-color: var(--mh-amber-hover) !important;
 }
 

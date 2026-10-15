@@ -4,9 +4,8 @@
   margin-top: 12px;
   padding: 12px;
   border: 1px solid var(--mh-border);
-  border-radius: 14px;
-  background: linear-gradient(180deg, var(--mh-surface) 0%, var(--mh-surface-muted) 100%);
-  box-shadow: 0 1px 2px rgba(var(--mh-ink-rgb), .05);
+  border-radius: 12px;
+  background: var(--mh-surface-muted);
 }
 
 .mh-class-toggle {
@@ -16,14 +15,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border: 1px solid var(--mh-border-strong);
-  border-radius: 12px;
+  border: 1px solid var(--mh-border);
+  border-radius: 10px;
   background: var(--mh-surface);
   color: var(--mh-text);
   font-size: 13px;
   font-weight: 900;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(var(--mh-ink-rgb), .06);
   box-sizing: border-box;
 }
 
@@ -33,11 +31,12 @@
 }
 
 /* Спокойные, но разные оттенки у каждой карточки-секции (а не у самой кнопки-заголовка) —
-   чтобы весь блок под раскрывающейся плашкой визуально отличался от соседних.
-   Сама кнопка-заголовок (.mh-class-toggle) остаётся белой — см. правило выше. */
-.mh-class-export { background: linear-gradient(180deg, var(--mh-section-class-from) 0%, var(--mh-section-class-to) 100%); border-color: var(--mh-section-class-border); }
-.mh-allclasses-export { background: linear-gradient(180deg, var(--mh-section-allclasses-from) 0%, var(--mh-section-allclasses-to) 100%); border-color: var(--mh-section-allclasses-border); }
-.mh-admin-export { background: linear-gradient(180deg, var(--mh-section-admin-from) 0%, var(--mh-section-admin-to) 100%); border-color: var(--mh-section-admin-border); }
+   плоский однотонный фон, без теней и градиентов, чтобы секции читались
+   как единый лист, а не стопка приподнятых карточек. Сама кнопка-заголовок
+   (.mh-class-toggle) остаётся белой — см. правило выше. */
+.mh-class-export { background: var(--mh-section-class-from); border-color: var(--mh-section-class-border); }
+.mh-allclasses-export { background: var(--mh-section-allclasses-from); border-color: var(--mh-section-allclasses-border); }
+.mh-admin-export { background: var(--mh-section-admin-from); border-color: var(--mh-section-admin-border); }
 
 .mh-class-menu {
   display: none;
