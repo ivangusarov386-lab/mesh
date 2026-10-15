@@ -502,22 +502,27 @@
     return d.getTime() <= today.getTime();
   }
 
-  function illnessDatesForStudent(medicalRecommendations, studentId) {
+  function illnessDatesForStudent(medicalRecommendations, studentId, lessonDates) {
+    const lessonDateSet = lessonDates instanceof Set ? lessonDates : new Set(lessonDates || []);
     const dates = new Set();
     (medicalRecommendations || []).forEach((rec) => {
       if (String(rec?.student_profile_id) !== studentId) return;
       if (!isSickRecommendation(rec)) return;
-      if (rec?.date && isPastOrTodayIso(String(rec.date))) dates.add(String(rec.date));
+      const date = rec?.date && String(rec.date);
+      if (!date || !isPastOrTodayIso(date)) return;
+      if (lessonDateSet.size && !lessonDateSet.has(date)) return;
+      dates.add(date);
     });
     return dates;
   }
 
-  function attendanceForStudent(attendances, studentId, heldLessons, medicalRecommendations) {
+  function attendanceForStudent(attendances, studentId, heldLessons, medicalRecommendations, lessonDates) {
     const own = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId);
     const absences = own.length;
-    // «Н по болезни» — все прошедшие даты с мед.отметкой SICK, не только те, где
-    // учитель заодно поставил «Н»: в журнале «б» иногда стоит сама по себе, без «Н».
-    const illnessAbsences = illnessDatesForStudent(medicalRecommendations, studentId).size;
+    // «Н по болезни» — все прошедшие даты с мед.отметкой SICK, когда по ЭТОМУ предмету
+    // реально был урок (иначе в журнале физически нет клетки под эту дату) — не только
+    // те, где учитель заодно поставил «Н»: «б» иногда стоит сама по себе, без «Н».
+    const illnessAbsences = illnessDatesForStudent(medicalRecommendations, studentId, lessonDates).size;
     const total = heldLessons || 0;
     const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
     return { absences, illnessAbsences, total, percent };
@@ -553,6 +558,28 @@
     const api = window.__MESH_HELPER_API__ || {};
     const schedule = Array.isArray(api.schedule) ? api.schedule : [];
     return schedule.filter((item) => String(item.group_id) === String(journalId) && isLessonHeld(item)).length;
+  }
+
+  function scheduleRecordDateToIso(record) {
+    const parts = Array.isArray(record?.date) ? record.date : null;
+    if (!parts || parts.length < 3) return null;
+    const [y, m, d] = parts;
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
+  // ---- Даты, когда у ЭТОГО журнала реально был урок — «Б» в журнале физически ----
+  // ---- стоит только в клетках с уроком, поэтому мед.отметки SICK на дни без ----
+  // ---- урока по этому предмету в «Н по болезни» попадать не должны. ----
+  function captureLessonDatesForJournal(journalId) {
+    const api = window.__MESH_HELPER_API__ || {};
+    const schedule = Array.isArray(api.schedule) ? api.schedule : [];
+    const dates = new Set();
+    schedule.forEach((item) => {
+      if (String(item.group_id) !== String(journalId) || !isLessonHeld(item)) return;
+      const iso = scheduleRecordDateToIso(item);
+      if (iso) dates.add(iso);
+    });
+    return [...dates];
   }
 
   function teacherNameForJournal(journalId) {
@@ -775,13 +802,14 @@
       const marks = journal.marks || [];
       const attendances = journal.attendances || [];
       const medicalRecommendations = journal.medicalRecommendations || [];
+      const lessonDates = journal.lessonDates || [];
       const heldLessons = journal.heldLessons || 0;
       const missingText = journal.missingHomeworkDates?.length ? journal.missingHomeworkDates.join(", ") : "";
 
       const sheetRows = [workbook.row(HEADER, () => "Header")];
       students.forEach((student, index) => {
         const { count, avg } = averageForStudent(marks, student.id);
-        const { absences, illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons, medicalRecommendations);
+        const { absences, illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons, medicalRecommendations, lessonDates);
         const avgRisk = count > 0 && avg <= problemAvgThreshold;
         const absenceRisk = heldLessons > 0 && percent >= absencePercentThreshold;
         const academicRisk = avgRisk || absenceRisk ? "Да" : "Нет";
@@ -819,10 +847,11 @@
       const marks = journal.marks || [];
       const attendances = journal.attendances || [];
       const medicalRecommendations = journal.medicalRecommendations || [];
+      const lessonDates = journal.lessonDates || [];
       const heldLessons = journal.heldLessons || 0;
       students.forEach((student) => {
         const { count, avg } = averageForStudent(marks, student.id);
-        const { illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons, medicalRecommendations);
+        const { illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons, medicalRecommendations, lessonDates);
         if (count && avg <= problemAvgThreshold) {
           problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Низкий средний балл", value: avg, count, illnessAbsences, teacher: journal.teacher || "" });
         }
@@ -890,6 +919,7 @@
     const marks = found ? captureMarksForJournal(journalId) : [];
     const attendances = window.__MESH_HELPER_API__?.attendances || [];
     const medicalRecommendations = window.__MESH_HELPER_API__?.medicalRecommendations || [];
+    const lessonDates = captureLessonDatesForJournal(journalId);
     const heldLessons = countHeldLessonsForJournal(journalId);
     const students = captureStudentsForJournal();
     const teacher = teacherNameForJournal(journalId);
@@ -904,6 +934,7 @@
       marks,
       attendances,
       medicalRecommendations,
+      lessonDates,
       heldLessons,
       students,
       teacher,
