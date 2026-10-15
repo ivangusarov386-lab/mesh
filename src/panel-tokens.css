@@ -1,0 +1,108 @@
+/* ==========================================================
+   МЭШ — Помощник учителя: единые дизайн-токены панели.
+
+   До этого файла цвета были захардкожены по отдельности в
+   panel.css/class-panel.css/notes-panel.css — одно и то же синее
+   #2563eb, например, встречалось в четырёх местах. Теперь это
+   единственный источник правды: меняем значение здесь — меняется
+   везде.
+
+   :root — сознательный выбор, не shadow DOM: панель и ящик заметок
+   (#mesh-helper-panel, #mesh-helper-notes-drawer) — два независимых
+   элемента, добавленных прямо в document.body чужой страницы, а не
+   общий контейнер, поэтому переменные нужны на самом верхнем уровне.
+   Имена все с префиксом --mh-, чтобы не пересекались со стилями
+   самого school.mos.ru.
+   ========================================================== */
+
+:root {
+  /* ---- Базовые RGB-триплеты — для rgba() с разной прозрачностью ---- */
+  --mh-ink-rgb: 15, 23, 42;        /* тон текста/теней, основа #0f172a */
+  --mh-white-rgb: 255, 255, 255;
+  --mh-black-rgb: 0, 0, 0;
+  --mh-accent-rgb: 37, 99, 235;    /* основа #2563eb */
+  --mh-teal-rgb: 15, 118, 110;     /* основа #0f766e */
+  --mh-amber-ring-rgb: 217, 119, 6; /* тень у плашки «Заметки к классу» */
+
+  /* ---- Текст ---- */
+  --mh-text: #0f172a;
+  --mh-text-strong: #111827;
+  --mh-text-secondary: #334155;
+  --mh-text-subtle: #475569;
+  --mh-text-muted: #64748b;
+  --mh-text-faint: #94a3b8;
+
+  /* ---- Границы ---- */
+  --mh-border: #e2e8f0;
+  --mh-border-strong: #cbd5e1;
+  --mh-border-hover: #94a3b8;
+
+  /* ---- Поверхности ---- */
+  --mh-surface: #ffffff;
+  --mh-surface-muted: #f8fafc;
+  --mh-surface-alt: #f1f5f9;
+
+  /* ---- Акцент (синий) — главное действие в интерфейсе ---- */
+  --mh-accent: #2563eb;
+  --mh-accent-dark: #1d4ed8;
+
+  /* ---- Успех / зелёный ---- */
+  --mh-success: #166534;
+  --mh-success-bg: #ecfdf5;
+  --mh-success-border: #bbf7d0;
+  --mh-success-ring: rgba(34, 197, 94, .92);
+
+  /* ---- Предупреждение / оранжевый (статус-боксы) ---- */
+  --mh-warning-text: #9a3412;
+  --mh-warning-bg: #fff7ed;
+  --mh-warning-border: #fed7aa;
+  --mh-warning-ring: rgba(250, 204, 21, .96);
+
+  /* ---- Опасность / красный ---- */
+  --mh-danger: #ef4444;
+  --mh-danger-text: #b91c1c;
+  --mh-danger-bg: #fff1f2;
+  --mh-danger-bg-hover: #ffe4e6;
+  --mh-danger-border: #fecaca;
+  --mh-danger-strong: #dc2626;
+  --mh-danger-soft-bg: rgba(248, 113, 113, .22);
+
+  /* ---- «Заметки к классу» (янтарная плашка) ---- */
+  --mh-amber-strong: #fbbf24;
+  --mh-amber-hover: #f59e0b;
+  --mh-amber-bg-from: #fffbeb;
+  --mh-amber-bg-to: #fef3c7;
+  --mh-amber-bg-hover-to: #fde68a;
+  --mh-amber-text: #92400e;
+  --mh-amber-text-strong: #b45309;
+
+  /* ---- Служебная записка (бирюзовая кнопка) ---- */
+  --mh-teal: #0f766e;
+  --mh-teal-dark: #0d5f59;
+
+  /* ---- Пастельные фоны карточек-секций ---- */
+  --mh-section-checks-from: #f5f9ff;
+  --mh-section-checks-to: #eaf2ff;
+  --mh-section-checks-border: #dbeafe;
+
+  --mh-section-results-from: #f5fcf7;
+  --mh-section-results-to: #e9f9ee;
+  --mh-section-results-border: #bbf7d0;
+
+  --mh-section-class-from: #f6f7ff;
+  --mh-section-class-to: #ecefff;
+  --mh-section-class-border: #c7d2fe;
+
+  --mh-section-allclasses-from: #f3fdff;
+  --mh-section-allclasses-to: #e4fbff;
+  --mh-section-allclasses-border: #a5f3fc;
+
+  --mh-section-admin-from: #fef6fa;
+  --mh-section-admin-to: #fceef5;
+  --mh-section-admin-border: #fbcfe8;
+
+  /* ---- Свёрнутая «таблетка» ---- */
+  --mh-collapsed-from: #ff4a4a;
+  --mh-collapsed-mid: #df0000;
+  --mh-collapsed-to: #ad0000;
+}

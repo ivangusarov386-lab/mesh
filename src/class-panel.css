@@ -3,10 +3,10 @@
 .mh-admin-export {
   margin-top: 12px;
   padding: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--mh-border);
   border-radius: 14px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, .05);
+  background: linear-gradient(180deg, var(--mh-surface) 0%, var(--mh-surface-muted) 100%);
+  box-shadow: 0 1px 2px rgba(var(--mh-ink-rgb), .05);
 }
 
 .mh-class-toggle {
@@ -16,28 +16,28 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--mh-border-strong);
   border-radius: 12px;
-  background: #ffffff;
-  color: #0f172a;
+  background: var(--mh-surface);
+  color: var(--mh-text);
   font-size: 13px;
   font-weight: 900;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(15,23,42,.06);
+  box-shadow: 0 1px 2px rgba(var(--mh-ink-rgb), .06);
   box-sizing: border-box;
 }
 
 .mh-class-toggle:hover {
-  background: #f8fafc;
-  border-color: #94a3b8;
+  background: var(--mh-surface-muted);
+  border-color: var(--mh-border-hover);
 }
 
 /* Спокойные, но разные оттенки у каждой карточки-секции (а не у самой кнопки-заголовка) —
    чтобы весь блок под раскрывающейся плашкой визуально отличался от соседних.
    Сама кнопка-заголовок (.mh-class-toggle) остаётся белой — см. правило выше. */
-.mh-class-export { background: linear-gradient(180deg, #f6f7ff 0%, #ecefff 100%); border-color: #c7d2fe; }
-.mh-allclasses-export { background: linear-gradient(180deg, #f3fdff 0%, #e4fbff 100%); border-color: #a5f3fc; }
-.mh-admin-export { background: linear-gradient(180deg, #fef6fa 0%, #fceef5 100%); border-color: #fbcfe8; }
+.mh-class-export { background: linear-gradient(180deg, var(--mh-section-class-from) 0%, var(--mh-section-class-to) 100%); border-color: var(--mh-section-class-border); }
+.mh-allclasses-export { background: linear-gradient(180deg, var(--mh-section-allclasses-from) 0%, var(--mh-section-allclasses-to) 100%); border-color: var(--mh-section-allclasses-border); }
+.mh-admin-export { background: linear-gradient(180deg, var(--mh-section-admin-from) 0%, var(--mh-section-admin-to) 100%); border-color: var(--mh-section-admin-border); }
 
 .mh-class-menu {
   display: none;
@@ -77,9 +77,9 @@
   gap: 4px;
   margin-bottom: 8px;
   padding: 6px 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--mh-border);
   border-radius: 10px;
-  background: rgba(255,255,255,.78);
+  background: rgba(var(--mh-white-rgb), .78);
 }
 
 .mh-allclasses-picker-row {
@@ -89,7 +89,7 @@
   padding-left: 22px;
   font-size: 12px;
   font-weight: 650;
-  color: #334155;
+  color: var(--mh-text-secondary);
   cursor: pointer;
 }
 
@@ -103,7 +103,7 @@
   gap: 8px;
   font-size: 12px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--mh-text);
   padding: 3px 0;
   cursor: pointer;
 }
@@ -127,18 +127,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--mh-border-strong);
   border-radius: 6px;
-  background: #ffffff;
-  color: #334155;
+  background: var(--mh-surface);
+  color: var(--mh-text-secondary);
   font-size: 11px;
   cursor: pointer;
   padding: 0;
 }
 
 .mh-admin-group-arrow:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
+  background: var(--mh-surface-alt);
+  border-color: var(--mh-border-hover);
 }
 
 .mh-admin-group-rows {
@@ -153,12 +153,12 @@
   display: block;
   border: none;
   border-radius: 11px;
-  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
-  color: #ffffff;
+  background: linear-gradient(180deg, var(--mh-accent) 0%, var(--mh-accent-dark) 100%);
+  color: var(--mh-surface);
   font-size: 12px;
   font-weight: 900;
   cursor: pointer;
-  box-shadow: 0 2px 5px rgba(37, 99, 235, .22);
+  box-shadow: 0 2px 5px rgba(var(--mh-accent-rgb), .22);
 }
 
 .mh-class-export-btn + .mh-class-export-btn {
@@ -167,8 +167,8 @@
 
 .mh-memo-btn {
   margin-top: 8px;
-  background: linear-gradient(180deg, #0f766e 0%, #0d5f59 100%);
-  box-shadow: 0 2px 5px rgba(15, 118, 110, .25);
+  background: linear-gradient(180deg, var(--mh-teal) 0%, var(--mh-teal-dark) 100%);
+  box-shadow: 0 2px 5px rgba(var(--mh-teal-rgb), .25);
 }
 
 .mh-class-stop-btn {
@@ -177,26 +177,26 @@
   margin-top: 6px;
   padding: 5px 10px;
   display: block;
-  border: 1px solid #fecaca;
+  border: 1px solid var(--mh-danger-border);
   border-radius: 10px;
-  background: #fff1f2;
-  color: #b91c1c;
+  background: var(--mh-danger-bg);
+  color: var(--mh-danger-text);
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
 }
 
 .mh-class-stop-btn:hover {
-  background: #ffe4e6;
+  background: var(--mh-danger-bg-hover);
 }
 
 .mh-class-status {
   margin-top: 8px;
   padding: 9px 10px;
   border-radius: 11px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  color: #475569;
+  background: var(--mh-surface-muted);
+  border: 1px solid var(--mh-border);
+  color: var(--mh-text-subtle);
   font-size: 12px;
   font-weight: 650;
   line-height: 1.32;
@@ -204,15 +204,15 @@
 }
 
 .mh-class-status[data-tone="ok"] {
-  background: #ecfdf5;
-  border-color: #bbf7d0;
-  color: #166534;
+  background: var(--mh-success-bg);
+  border-color: var(--mh-success-border);
+  color: var(--mh-success);
 }
 
 .mh-class-status[data-tone="warn"] {
-  background: #fff7ed;
-  border-color: #fed7aa;
-  color: #9a3412;
+  background: var(--mh-warning-bg);
+  border-color: var(--mh-warning-border);
+  color: var(--mh-warning-text);
 }
 
 .mh-class-list {
@@ -224,16 +224,16 @@
 .mh-class-subject,
 .mh-class-empty {
   padding: 8px 9px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--mh-border);
   border-radius: 10px;
-  background: rgba(255,255,255,.78);
+  background: rgba(var(--mh-white-rgb), .78);
   font-size: 12px;
   line-height: 1.28;
 }
 
 .mh-class-meta {
   margin-top: 3px;
-  color: #64748b;
+  color: var(--mh-text-muted);
   font-size: 11px;
 }
 
@@ -246,14 +246,14 @@
   margin-top: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #e2e8f0;
+  background: var(--mh-border);
   overflow: hidden;
 }
 
 .mh-class-progress-fill {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, #2563eb, #1d4ed8);
+  background: linear-gradient(90deg, var(--mh-accent), var(--mh-accent-dark));
   border-radius: 999px;
   transition: width .3s ease;
 }
@@ -262,7 +262,7 @@
   margin-top: 4px;
   font-size: 11px;
   font-weight: 700;
-  color: #64748b;
+  color: var(--mh-text-muted);
   text-align: right;
 }
 
@@ -274,13 +274,13 @@
   margin-bottom: 8px;
   font-size: 12px;
   font-weight: 700;
-  color: #334155;
+  color: var(--mh-text-secondary);
 }
 
 .mh-class-threshold-row input {
   width: 52px;
   padding: 4px 6px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--mh-border-strong);
   border-radius: 8px;
   font-size: 12px;
   text-align: center;

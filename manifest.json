@@ -49,6 +49,7 @@
         "src/admin-collector.js"
       ],
       "css": [
+        "src/panel-tokens.css",
         "src/panel.css",
         "src/class-panel.css",
         "src/notes-panel.css"
