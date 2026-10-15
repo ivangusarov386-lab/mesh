@@ -329,6 +329,11 @@
     return Array.isArray(api.attendances) ? api.attendances : [];
   }
 
+  function captureMedicalRecommendations() {
+    const api = window.__MESH_HELPER_API__ || {};
+    return Array.isArray(api.medicalRecommendations) ? api.medicalRecommendations : [];
+  }
+
   function isLessonHeld(record) {
     if (record?.cancelled) return false;
     const parts = Array.isArray(record?.date) ? record.date : null;
@@ -446,11 +451,39 @@
     return { count: grades.length, avg };
   }
 
-  function attendanceForStudent(attendances, studentId, heldLessons) {
-    const absences = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId).length;
+  // ---- «Н по болезни» — подтверждено живыми данными: /emias_medical_recommendations ----
+  // ---- отдаёт по каждому ученику даты с type "SICK"/"SICK_WITH_INFECTION" (это и есть ----
+  // ---- буква «б» под «Н» в журнале, подтянутая автоматически из поликлиники — не путать ----
+  // ---- с полем absence_reason_id у attendances, которое с этим никак не связано). ----
+  function isSickRecommendation(rec) {
+    return rec?.type === "SICK" || rec?.type === "SICK_WITH_INFECTION";
+  }
+
+  function normalizeDateToIso(value) {
+    const m = String(value || "").match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (!m) return String(value || "");
+    const [, d, mo, y] = m;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  function illnessDatesForStudent(medicalRecommendations, studentId) {
+    const dates = new Set();
+    (medicalRecommendations || []).forEach((rec) => {
+      if (String(rec?.student_profile_id) !== studentId) return;
+      if (!isSickRecommendation(rec)) return;
+      if (rec?.date) dates.add(String(rec.date));
+    });
+    return dates;
+  }
+
+  function attendanceForStudent(attendances, studentId, heldLessons, medicalRecommendations) {
+    const own = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId);
+    const absences = own.length;
+    const illnessDates = illnessDatesForStudent(medicalRecommendations, studentId);
+    const illnessAbsences = own.filter((record) => illnessDates.has(normalizeDateToIso(record?.date))).length;
     const total = heldLessons || 0;
     const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
-    return { absences, total, percent };
+    return { absences, illnessAbsences, total, percent };
   }
 
   function csvValue(value) {
@@ -575,7 +608,7 @@
     }
 
     const subjects = batch.queue.map((item) => ({ id: item.id, text: item.text }));
-    const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Н% (служ.)", "Риск академической задолженности", "Количество оценок"];
+    const SUBJECT_HEADER = ["№", "ФИО", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н по болезни", "Н % по факту", "Расчётный итог", "Н% (служ.)", "Риск академической задолженности", "Количество оценок"];
     const problemAvgThreshold = await getProblemAvgThreshold();
     const absencePercentThreshold = await getAbsencePercentThreshold();
     const finalGradeRanges = await getFinalGradeRanges();
@@ -583,20 +616,21 @@
     const subjectSheets = subjects.map((subject) => {
       const marks = batch.results[subject.id]?.marks || [];
       const attendances = batch.results[subject.id]?.attendances || [];
+      const medicalRecommendations = batch.results[subject.id]?.medicalRecommendations || [];
       const heldLessons = batch.results[subject.id]?.heldLessons;
       const rows = [workbook.row(SUBJECT_HEADER, () => "Header")];
       students.forEach((student, index) => {
         const { count, avg } = averageForStudent(marks, student.id);
-        const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        const { absences, illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons, medicalRecommendations);
         const avgRisk = count > 0 && avg <= problemAvgThreshold;
         const absenceRisk = heldLessons > 0 && percent >= absencePercentThreshold;
         const academicRisk = avgRisk || absenceRisk ? "Да" : "Нет";
         rows.push(workbook.row(
-          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", percent, academicRisk, count],
+          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, illnessAbsences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", percent, academicRisk, count],
           () => (academicRisk === "Да" ? "BadAbsence" : "Default")
         ));
       });
-      return workbook.worksheet(subject.text, rows, { hiddenCols: [9] });
+      return workbook.worksheet(subject.text, rows, { hiddenCols: [10] });
     });
 
     const problems = [];
@@ -604,24 +638,25 @@
       subjects.forEach((subject) => {
         const marks = batch.results[subject.id]?.marks || [];
         const attendances = batch.results[subject.id]?.attendances || [];
+        const medicalRecommendations = batch.results[subject.id]?.medicalRecommendations || [];
         const heldLessons = batch.results[subject.id]?.heldLessons;
         const { count, avg } = averageForStudent(marks, student.id);
-        const { percent } = attendanceForStudent(attendances, student.id, heldLessons);
-        if (count && avg <= problemAvgThreshold) problems.push({ student: student.name, subject: subject.text, label: "Низкий средний балл", value: avg });
-        if (heldLessons && percent >= absencePercentThreshold) problems.push({ student: student.name, subject: subject.text, label: "Много пропусков", value: `${percent}%` });
+        const { illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons, medicalRecommendations);
+        if (count && avg <= problemAvgThreshold) problems.push({ student: student.name, subject: subject.text, label: "Низкий средний балл", value: avg, illnessAbsences });
+        if (heldLessons && percent >= absencePercentThreshold) problems.push({ student: student.name, subject: subject.text, label: "Много пропусков", value: `${percent}%`, illnessAbsences });
       });
     });
 
     const svodRows = [
       workbook.row([`Проблемы по предметам (средний балл ≤ ${problemAvgThreshold} или пропуски ≥ ${absencePercentThreshold}%)`], () => "Header"),
-      workbook.row(["№", "ФИО", "Предмет", "Проблема", "Значение"], () => "Header")
+      workbook.row(["№", "ФИО", "Предмет", "Проблема", "Значение", "Н по болезни"], () => "Header")
     ];
     if (problems.length) {
       problems.forEach((problem, index) => {
-        svodRows.push(workbook.row([index + 1, problem.student, problem.subject, problem.label, problem.value], () => "Default"));
+        svodRows.push(workbook.row([index + 1, problem.student, problem.subject, problem.label, problem.value, problem.illnessAbsences], () => "Default"));
       });
     } else {
-      svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", ""], () => "Default"));
+      svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", "", ""], () => "Default"));
     }
 
     const svodSheet = workbook.worksheet("СВОД", svodRows);
@@ -632,11 +667,11 @@
     const studentRows = [
       workbook.row(["Ученик:", students[0]?.name || ""], (value, colIndex) => (colIndex === 0 ? "Header" : "Default")),
       workbook.row([]),
-      workbook.row(["Предмет", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Риск академической задолженности", ""], () => "Header")
+      workbook.row(["Предмет", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н по болезни", "Н % по факту", "Расчётный итог", "Риск академической задолженности", ""], () => "Header")
     ];
 
     subjectSheets.forEach((sheet, index) => {
-      const range = `${sheetRef(sheet.name)}!$B:$J`;
+      const range = `${sheetRef(sheet.name)}!$B:$K`;
       const lookup = (col, fallback) => workbook.formula(`IFERROR(VLOOKUP($B$1,${range},${col},FALSE),${fallback})`);
       studentRows.push(workbook.row([
         subjects[index].text,
@@ -646,20 +681,21 @@
         lookup(5, '""'),
         lookup(6, '""'),
         lookup(7, '""'),
-        lookup(9, '"Нет"'),
-        lookup(8, "0")
+        lookup(8, '""'),
+        lookup(10, '"Нет"'),
+        lookup(9, "0")
       ], () => "Default"));
     });
 
     const firstDataRow = 4;
     const lastDataRow = 3 + subjectSheets.length;
     const studentSheet = workbook.worksheet("Ученик", studentRows, {
-      hiddenCols: [9],
+      hiddenCols: [10],
       dataValidations: [{ sqref: "B1", formula1: "MESH_STUDENTS" }],
       conditionalFormats: [
         { sqref: `C${firstDataRow}:C${lastDataRow}`, formula: `AND(C${firstDataRow}<>"",C${firstDataRow}<=${problemAvgThreshold})`, dxfId: 0 },
-        { sqref: `F${firstDataRow}:F${lastDataRow}`, formula: `$I${firstDataRow}>=${absencePercentThreshold}`, dxfId: 1 },
-        { sqref: `H${firstDataRow}:H${lastDataRow}`, formula: `H${firstDataRow}="Да"`, dxfId: 1 }
+        { sqref: `G${firstDataRow}:G${lastDataRow}`, formula: `$J${firstDataRow}>=${absencePercentThreshold}`, dxfId: 1 },
+        { sqref: `I${firstDataRow}:I${lastDataRow}`, formula: `I${firstDataRow}="Да"`, dxfId: 1 }
       ]
     });
 
@@ -905,7 +941,7 @@
     item.status = "loading";
     await setStorage(STORAGE_KEY, batch);
 
-    const [found] = await Promise.all([waitForMarks(), waitForApiKind("studentProfiles"), waitForApiKind("attendances"), waitForApiKind("schedule", 12000)]);
+    const [found] = await Promise.all([waitForMarks(), waitForApiKind("studentProfiles"), waitForApiKind("attendances"), waitForApiKind("schedule", 12000), waitForApiKind("medicalRecommendations")]);
 
     const freshCheck = await getStorage(STORAGE_KEY);
     if (!freshCheck || freshCheck.status !== "running") {
@@ -915,13 +951,14 @@
 
     const marks = found ? captureMarksForJournal(journalId) : [];
     const attendances = captureAttendances();
+    const medicalRecommendations = captureMedicalRecommendations();
     const heldLessons = countHeldLessons();
     const profiles = captureStudentProfiles();
     mergeStudentProfiles(batch, profiles);
     const students = profiles.map((profile) => ({ id: getProfileId(profile), name: getProfileName(profile) })).filter((student) => student.id);
 
     item.status = found ? "done" : "empty";
-    batch.results[journalId] = { text: item.text, classLabel: item.classLabel, count: marks.length, marks, attendances, heldLessons, students, capturedAt: Date.now() };
+    batch.results[journalId] = { text: item.text, classLabel: item.classLabel, count: marks.length, marks, attendances, medicalRecommendations, heldLessons, students, capturedAt: Date.now() };
     log(`${item.text}: ${found ? `поймано записей: ${marks.length}` : "таймаут, оценок не поймано"}`);
 
     const nextIndex = batch.currentIndex + 1;

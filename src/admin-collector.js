@@ -485,11 +485,39 @@
     return { count: grades.length, avg };
   }
 
-  function attendanceForStudent(attendances, studentId, heldLessons) {
-    const absences = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId).length;
+  // ---- «Н по болезни» — подтверждено живыми данными: /emias_medical_recommendations ----
+  // ---- отдаёт по каждому ученику даты с type "SICK"/"SICK_WITH_INFECTION" (это и есть ----
+  // ---- буква «б» под «Н» в журнале, подтянутая автоматически из поликлиники — не путать ----
+  // ---- с полем absence_reason_id у attendances, которое с этим никак не связано). ----
+  function isSickRecommendation(rec) {
+    return rec?.type === "SICK" || rec?.type === "SICK_WITH_INFECTION";
+  }
+
+  function normalizeDateToIso(value) {
+    const m = String(value || "").match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (!m) return String(value || "");
+    const [, d, mo, y] = m;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  function illnessDatesForStudent(medicalRecommendations, studentId) {
+    const dates = new Set();
+    (medicalRecommendations || []).forEach((rec) => {
+      if (String(rec?.student_profile_id) !== studentId) return;
+      if (!isSickRecommendation(rec)) return;
+      if (rec?.date) dates.add(String(rec.date));
+    });
+    return dates;
+  }
+
+  function attendanceForStudent(attendances, studentId, heldLessons, medicalRecommendations) {
+    const own = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId);
+    const absences = own.length;
+    const illnessDates = illnessDatesForStudent(medicalRecommendations, studentId);
+    const illnessAbsences = own.filter((record) => illnessDates.has(normalizeDateToIso(record?.date))).length;
     const total = heldLessons || 0;
     const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
-    return { absences, total, percent };
+    return { absences, illnessAbsences, total, percent };
   }
 
   function gradesTextForStudent(marks, studentId) {
@@ -733,7 +761,7 @@
 
     const HEADER = [
       "№", "ФИО", "Оценки", "Средний балл", "Количество оценок", "Уроков проведено",
-      "Н по факту", "Н % по факту", "Расчётный итог",
+      "Н по факту", "Н по болезни", "Н % по факту", "Расчётный итог",
       "Риск академической задолженности", "ДЗ отсутствие", "Учитель"
     ];
 
@@ -743,13 +771,14 @@
       const students = journal.students || [];
       const marks = journal.marks || [];
       const attendances = journal.attendances || [];
+      const medicalRecommendations = journal.medicalRecommendations || [];
       const heldLessons = journal.heldLessons || 0;
       const missingText = journal.missingHomeworkDates?.length ? journal.missingHomeworkDates.join(", ") : "";
 
       const sheetRows = [workbook.row(HEADER, () => "Header")];
       students.forEach((student, index) => {
         const { count, avg } = averageForStudent(marks, student.id);
-        const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        const { absences, illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons, medicalRecommendations);
         const avgRisk = count > 0 && avg <= problemAvgThreshold;
         const absenceRisk = heldLessons > 0 && percent >= absencePercentThreshold;
         const academicRisk = avgRisk || absenceRisk ? "Да" : "Нет";
@@ -762,6 +791,7 @@
             count,
             heldLessons,
             absences,
+            illnessAbsences,
             `${percent}%`,
             count ? possibleFinal(avg, finalGradeRanges) : "",
             academicRisk,
@@ -785,18 +815,19 @@
       const students = journal.students || [];
       const marks = journal.marks || [];
       const attendances = journal.attendances || [];
+      const medicalRecommendations = journal.medicalRecommendations || [];
       const heldLessons = journal.heldLessons || 0;
       students.forEach((student) => {
         const { count, avg } = averageForStudent(marks, student.id);
-        const { percent } = attendanceForStudent(attendances, student.id, heldLessons);
+        const { illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons, medicalRecommendations);
         if (count && avg <= problemAvgThreshold) {
-          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Низкий средний балл", value: avg, count, teacher: journal.teacher || "" });
+          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Низкий средний балл", value: avg, count, illnessAbsences, teacher: journal.teacher || "" });
         }
         if (heldLessons && percent >= absencePercentThreshold) {
-          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Много пропусков", value: `${percent}%`, count, teacher: journal.teacher || "" });
+          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Много пропусков", value: `${percent}%`, count, illnessAbsences, teacher: journal.teacher || "" });
         }
         if (count < minGradesThreshold) {
-          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Мало оценок", value: count, count, teacher: journal.teacher || "" });
+          problems.push({ classLabel: journal.classLabel, student: student.name, subject: journal.subject, label: "Мало оценок", value: count, count, illnessAbsences, teacher: journal.teacher || "" });
         }
       });
     });
@@ -804,14 +835,14 @@
 
     const svodRows = [
       workbook.row([`Проблемы по предметам (средний балл ≤ ${problemAvgThreshold}, пропуски ≥ ${absencePercentThreshold}% или оценок < ${minGradesThreshold})`], () => "Header"),
-      workbook.row(["№", "ФИО", "Класс", "Предмет", "Проблема", "Значение", "Количество оценок", "Риск академической задолженности", "Учитель"], () => "Header")
+      workbook.row(["№", "ФИО", "Класс", "Предмет", "Проблема", "Значение", "Количество оценок", "Риск академической задолженности", "Н по болезни", "Учитель"], () => "Header")
     ];
     if (problems.length) {
       problems.forEach((p, index) => {
-        svodRows.push(workbook.row([index + 1, p.student, p.classLabel, p.subject, p.label, p.value, p.count, "Да", p.teacher], () => "Default"));
+        svodRows.push(workbook.row([index + 1, p.student, p.classLabel, p.subject, p.label, p.value, p.count, "Да", p.illnessAbsences, p.teacher], () => "Default"));
       });
     } else {
-      svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", "", "", "", "", ""], () => "Default"));
+      svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", "", "", "", "", "", ""], () => "Default"));
     }
 
     const svodSheet = workbook.worksheet("СВОД", svodRows);
@@ -842,7 +873,8 @@
       waitForAdminApiKind("schedule"),
       waitForAdminApiKind("homeworkAbsences"),
       waitForAdminApiKind("studentProfiles"),
-      waitForAdminApiKind("attendances")
+      waitForAdminApiKind("attendances"),
+      waitForAdminApiKind("medicalRecommendations")
     ]);
 
     const freshCheck = await getStorage(ADMIN_STORAGE_KEY);
@@ -854,6 +886,7 @@
     const missingHomeworkDates = getMissingHomeworkDatesForCurrentJournal();
     const marks = found ? captureMarksForJournal(journalId) : [];
     const attendances = window.__MESH_HELPER_API__?.attendances || [];
+    const medicalRecommendations = window.__MESH_HELPER_API__?.medicalRecommendations || [];
     const heldLessons = countHeldLessonsForJournal(journalId);
     const students = captureStudentsForJournal();
     const teacher = teacherNameForJournal(journalId);
@@ -867,6 +900,7 @@
       missingHomeworkDates,
       marks,
       attendances,
+      medicalRecommendations,
       heldLessons,
       students,
       teacher,

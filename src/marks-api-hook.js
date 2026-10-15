@@ -13,7 +13,8 @@
     "/attendances",
     "/schedule_items",
     "/homeworks",
-    "/homework_absences"
+    "/homework_absences",
+    "/emias_medical_recommendations"
   ];
 
   if (window.__meshHelperMarksHookInstalled) return;
