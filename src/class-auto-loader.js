@@ -459,11 +459,13 @@
     return rec?.type === "SICK" || rec?.type === "SICK_WITH_INFECTION";
   }
 
-  function normalizeDateToIso(value) {
-    const m = String(value || "").match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-    if (!m) return String(value || "");
-    const [, d, mo, y] = m;
-    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  function isPastOrTodayIso(isoDate) {
+    const d = new Date(`${isoDate}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime() <= today.getTime();
   }
 
   function illnessDatesForStudent(medicalRecommendations, studentId) {
@@ -471,7 +473,7 @@
     (medicalRecommendations || []).forEach((rec) => {
       if (String(rec?.student_profile_id) !== studentId) return;
       if (!isSickRecommendation(rec)) return;
-      if (rec?.date) dates.add(String(rec.date));
+      if (rec?.date && isPastOrTodayIso(String(rec.date))) dates.add(String(rec.date));
     });
     return dates;
   }
@@ -479,8 +481,9 @@
   function attendanceForStudent(attendances, studentId, heldLessons, medicalRecommendations) {
     const own = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId);
     const absences = own.length;
-    const illnessDates = illnessDatesForStudent(medicalRecommendations, studentId);
-    const illnessAbsences = own.filter((record) => illnessDates.has(normalizeDateToIso(record?.date))).length;
+    // «Н по болезни» — все прошедшие даты с мед.отметкой SICK, не только те, где
+    // учитель заодно поставил «Н»: в журнале «б» иногда стоит сама по себе, без «Н».
+    const illnessAbsences = illnessDatesForStudent(medicalRecommendations, studentId).size;
     const total = heldLessons || 0;
     const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
     return { absences, illnessAbsences, total, percent };
