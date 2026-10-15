@@ -516,13 +516,25 @@
     return dates;
   }
 
+  function attendanceDateToIso(value) {
+    const m = String(value || "").match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (!m) return null;
+    const [, d, mo, y] = m;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
   function attendanceForStudent(attendances, studentId, heldLessons, medicalRecommendations, lessonDates) {
     const own = attendances.filter((record) => getStudentIdFromAttendance(record) === studentId);
-    const absences = own.length;
     // «Н по болезни» — все прошедшие даты с мед.отметкой SICK, когда по ЭТОМУ предмету
     // реально был урок (иначе в журнале физически нет клетки под эту дату) — не только
     // те, где учитель заодно поставил «Н»: «б» иногда стоит сама по себе, без «Н».
-    const illnessAbsences = illnessDatesForStudent(medicalRecommendations, studentId, lessonDates).size;
+    const illnessDates = illnessDatesForStudent(medicalRecommendations, studentId, lessonDates);
+    const illnessAbsences = illnessDates.size;
+    // «Б» без «Н» всё равно означает, что ученика не было в школе — считаем такой день
+    // и в «Н по факту» тоже, не только в «Н по болезни».
+    const ownDates = new Set(own.map((record) => attendanceDateToIso(record?.date)).filter(Boolean));
+    const standaloneIllnessCount = [...illnessDates].filter((date) => !ownDates.has(date)).length;
+    const absences = own.length + standaloneIllnessCount;
     const total = heldLessons || 0;
     const percent = total ? Math.round((absences / total) * 1000) / 10 : 0;
     return { absences, illnessAbsences, total, percent };
