@@ -818,14 +818,20 @@
       const heldLessons = journal.heldLessons || 0;
       const missingText = journal.missingHomeworkDates?.length ? journal.missingHomeworkDates.join(", ") : "";
 
-      const sheetRows = [workbook.row(HEADER, () => "Header")];
+      const studentRows = [];
+      const overallAvgGrades = [];
+      let overallGradeCount = 0;
+      let overallRiskCount = 0;
       students.forEach((student, index) => {
         const { count, avg } = averageForStudent(marks, student.id);
         const { absences, illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons, medicalRecommendations, lessonDates);
         const avgRisk = count > 0 && avg <= problemAvgThreshold;
         const absenceRisk = heldLessons > 0 && percent >= absencePercentThreshold;
         const academicRisk = avgRisk || absenceRisk ? "Да" : "Нет";
-        sheetRows.push(workbook.row(
+        if (count) overallAvgGrades.push(avg);
+        overallGradeCount += count;
+        if (academicRisk === "Да") overallRiskCount += 1;
+        studentRows.push(workbook.row(
           [
             index + 1,
             student.name,
@@ -845,7 +851,29 @@
         ));
       });
 
-      return workbook.worksheet(`${journal.classLabel} ${journal.subject}`, sheetRows);
+      // ---- Сводная шапка над таблицей: общий средний балл, общее кол-во ----
+      // ---- оценок и общее кол-во АЗ по классу — каждое значение стоит ровно ----
+      // ---- над своим столбцом (Средний балл / Количество оценок / Риск). ----
+      const overallAvg = overallAvgGrades.length
+        ? Math.round((overallAvgGrades.reduce((sum, value) => sum + value, 0) / overallAvgGrades.length) * 100) / 100
+        : "";
+      const summaryLabelRow = new Array(HEADER.length).fill("");
+      summaryLabelRow[3] = "общий средний балл";
+      summaryLabelRow[4] = "общее кол-во оценок";
+      summaryLabelRow[10] = "Общее кол-во АЗ";
+      const summaryValueRow = new Array(HEADER.length).fill("");
+      summaryValueRow[3] = overallAvg;
+      summaryValueRow[4] = overallGradeCount;
+      summaryValueRow[10] = overallRiskCount;
+
+      const sheetRows = [
+        workbook.row(summaryLabelRow, () => "Default"),
+        workbook.row(summaryValueRow, () => "Default"),
+        workbook.row(HEADER, () => "Header"),
+        ...studentRows
+      ];
+
+      return workbook.worksheet(`${journal.classLabel} ${journal.subject}`, sheetRows, { freezeRows: 3, filterStartRow: 3 });
     });
 
     // ---- СВОД: проблемные ученики по всем собранным журналам, с учителем ----
@@ -889,7 +917,7 @@
       svodRows.push(workbook.row(["", "Проблемных учеников не найдено.", "", "", "", "", "", "", "", ""], () => "Default"));
     }
 
-    const svodSheet = workbook.worksheet("СВОД", svodRows);
+    const svodSheet = workbook.worksheet("СВОД", svodRows, { filterStartRow: 2 });
 
     const date = new Date().toISOString().slice(0, 10);
     const partialSuffix = stored.partial ? `_partial_${stored.processedCount}of${stored.totalCount}` : "";

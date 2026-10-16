@@ -71,7 +71,12 @@
       rows: Array.isArray(rows) ? rows : [],
       hiddenCols: Array.isArray(options.hiddenCols) ? options.hiddenCols : [],
       dataValidations: Array.isArray(options.dataValidations) ? options.dataValidations : [],
-      conditionalFormats: Array.isArray(options.conditionalFormats) ? options.conditionalFormats : []
+      conditionalFormats: Array.isArray(options.conditionalFormats) ? options.conditionalFormats : [],
+      // Строка, с которой начинаются заголовки-фильтры и заморозка — по умолчанию 1-я,
+      // но если сверху есть строка-заголовок/сводка (например, в СВОДе или над шапкой
+      // листа предмета), реальная шапка таблицы может быть ниже.
+      freezeRows: Number.isFinite(options.freezeRows) ? options.freezeRows : 1,
+      filterStartRow: Number.isFinite(options.filterStartRow) ? options.filterStartRow : 1
     };
   }
 
@@ -173,19 +178,22 @@
     const maxCols = Math.max(10, ...(sheet.rows || []).map((rowData) => (rowData.values || []).length));
     const maxRows = Math.max(1, (sheet.rows || []).length);
     const range = `A1:${colName(maxCols - 1)}${maxRows}`;
+    const freezeRows = Math.max(0, sheet.freezeRows ?? 1);
+    const filterStartRow = Math.max(1, Math.min(sheet.filterStartRow ?? 1, maxRows));
+    const filterRange = `A${filterStartRow}:${colName(maxCols - 1)}${maxRows}`;
 
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <dimension ref="${range}"/>
 <sheetViews>
 <sheetView workbookViewId="0">
-<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>
+<pane ySplit="${freezeRows}" topLeftCell="A${freezeRows + 1}" activePane="bottomLeft" state="frozen"/>
 </sheetView>
 </sheetViews>
 <sheetFormatPr defaultRowHeight="15"/>
 ${colsXml(sheet.rows, maxCols, sheet.hiddenCols)}
 <sheetData>${rowsXml}</sheetData>
-<autoFilter ref="${range}"/>
+<autoFilter ref="${filterRange}"/>
 ${conditionalFormattingXml(sheet.conditionalFormats)}
 ${dataValidationsXml(sheet.dataValidations)}
 </worksheet>`;
