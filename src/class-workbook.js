@@ -6,7 +6,8 @@
     Default: 0,
     Header: 1,
     BadFinal: 2,
-    BadAbsence: 3
+    BadAbsence: 3,
+    Highlight: 4
   };
 
   function sanitize(value) {
@@ -242,22 +243,24 @@ ${list}
 <font><sz val="10"/><name val="Arial"/></font>
 <font><b/><sz val="10"/><name val="Arial"/></font>
 </fonts>
-<fills count="5">
+<fills count="6">
 <fill><patternFill patternType="none"/></fill>
 <fill><patternFill patternType="gray125"/></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFEAF2FF"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFFFE08A"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFFFD6D6"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill>
 </fills>
 <borders count="1">
 <border><left/><right/><top/><bottom/></border>
 </borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="4">
+<cellXfs count="5">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
 <xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
 <xf numFmtId="0" fontId="1" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+<xf numFmtId="0" fontId="1" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
 </cellXfs>
 <dxfs count="2">
 <dxf><fill><patternFill><bgColor rgb="FFFFE08A"/></patternFill></fill></dxf>

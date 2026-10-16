@@ -866,8 +866,9 @@
       summaryValueRow[4] = overallGradeCount;
       summaryValueRow[10] = overallRiskCount;
 
+      const summaryHighlightCols = new Set([3, 4, 10]);
       const sheetRows = [
-        workbook.row(summaryLabelRow, () => "Default"),
+        workbook.row(summaryLabelRow, (value, colIndex) => (summaryHighlightCols.has(colIndex) ? "Highlight" : "Default")),
         workbook.row(summaryValueRow, () => "Default"),
         workbook.row(HEADER, () => "Header"),
         ...studentRows
