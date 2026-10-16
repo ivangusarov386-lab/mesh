@@ -920,13 +920,86 @@
 
     const svodSheet = workbook.worksheet("СВОД", svodRows, { filterStartRow: 2 });
 
+    // ---- Лист «Аналитика»: сводная таблица класс × предмет — в строках ----
+    // ---- только реально собранные в этом запуске классы, в столбцах — по ----
+    // ---- 3 метрики на каждый собранный предмет (общий средний балл / общее ----
+    // ---- кол-во оценок / общее кол-во АЗ — те же цифры, что в шапке листа ----
+    // ---- этого предмета). Название предмета объединено над своими 3 столбцами. ----
+    function colName(index) {
+      let n = index + 1;
+      let name = "";
+      while (n > 0) {
+        const rem = (n - 1) % 26;
+        name = String.fromCharCode(65 + rem) + name;
+        n = Math.floor((n - 1) / 26);
+      }
+      return name;
+    }
+
+    const analyticsClassLabels = [...new Set(rows.map((journal) => journal.classLabel))].sort((a, b) => a.localeCompare(b, "ru"));
+    const analyticsSubjects = [...new Set(rows.map((journal) => journal.subject))].sort((a, b) => a.localeCompare(b, "ru"));
+
+    const analyticsHeaderLabelRow = [""];
+    const analyticsHeaderSubRow = [""];
+    analyticsSubjects.forEach((subject) => {
+      analyticsHeaderLabelRow.push(subject, "", "");
+      analyticsHeaderSubRow.push("средний балл", "кол-во оценок", "кол-во Аз");
+    });
+
+    const analyticsMerges = analyticsSubjects.map((subject, index) => {
+      const start = 1 + index * 3;
+      return `${colName(start)}1:${colName(start + 2)}1`;
+    });
+
+    const analyticsRows = [
+      workbook.row(analyticsHeaderLabelRow, () => "Header"),
+      workbook.row(analyticsHeaderSubRow, () => "Header")
+    ];
+
+    analyticsClassLabels.forEach((classLabel) => {
+      const rowValues = [classLabel];
+      analyticsSubjects.forEach((subject) => {
+        const journal = rows.find((item) => item.classLabel === classLabel && item.subject === subject);
+        if (!journal) {
+          rowValues.push("", "", "");
+          return;
+        }
+        const students = journal.students || [];
+        const marks = journal.marks || [];
+        const heldLessons = journal.heldLessons || 0;
+        const avgGrades = [];
+        let gradeCount = 0;
+        let riskCount = 0;
+        students.forEach((student) => {
+          const { count, avg } = averageForStudent(marks, student.id);
+          const { percent } = attendanceForStudent(journal.attendances || [], student.id, heldLessons, journal.medicalRecommendations || [], journal.lessonDates || []);
+          const avgRisk = count > 0 && avg <= problemAvgThreshold;
+          const absenceRisk = heldLessons > 0 && percent >= absencePercentThreshold;
+          if (count) avgGrades.push(avg);
+          gradeCount += count;
+          if (avgRisk || absenceRisk) riskCount += 1;
+        });
+        const overallAvg = avgGrades.length
+          ? Math.round((avgGrades.reduce((sum, value) => sum + value, 0) / avgGrades.length) * 100) / 100
+          : "";
+        rowValues.push(overallAvg, gradeCount, riskCount);
+      });
+      analyticsRows.push(workbook.row(rowValues, () => "Default"));
+    });
+
+    const analyticsSheet = workbook.worksheet("Аналитика", analyticsRows, {
+      freezeRows: 2,
+      filterStartRow: 2,
+      mergeCells: analyticsMerges
+    });
+
     const date = new Date().toISOString().slice(0, 10);
     const partialSuffix = stored.partial ? `_partial_${stored.processedCount}of${stored.totalCount}` : "";
     const filename = `mesh_admin_parallel${partialSuffix}_${date}.xlsx`;
 
-    const allSheets = [svodSheet, ...sheets];
+    const allSheets = [analyticsSheet, svodSheet, ...sheets];
     workbook.downloadWorkbook(filename, allSheets);
-    log(`Экспортировано: ${sheets.length} журналов + СВОД → ${filename}`);
+    log(`Экспортировано: ${sheets.length} журналов + Аналитика + СВОД → ${filename}`);
     return { ok: true, sheets: allSheets.length, filename };
   }
 

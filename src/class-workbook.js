@@ -73,6 +73,9 @@
       hiddenCols: Array.isArray(options.hiddenCols) ? options.hiddenCols : [],
       dataValidations: Array.isArray(options.dataValidations) ? options.dataValidations : [],
       conditionalFormats: Array.isArray(options.conditionalFormats) ? options.conditionalFormats : [],
+      // Список объединений вида "B1:D1" — например, название предмета над тремя
+      // столбцами его метрик на листе «Аналитика».
+      mergeCells: Array.isArray(options.mergeCells) ? options.mergeCells : [],
       // Строка, с которой начинаются заголовки-фильтры и заморозка — по умолчанию 1-я,
       // но если сверху есть строка-заголовок/сводка (например, в СВОДе или над шапкой
       // листа предмета), реальная шапка таблицы может быть ниже.
@@ -167,6 +170,12 @@
     }).join("");
   }
 
+  function mergeCellsXml(list) {
+    if (!list || !list.length) return "";
+    const items = list.map((ref) => `<mergeCell ref="${ref}"/>`).join("");
+    return `<mergeCells count="${list.length}">${items}</mergeCells>`;
+  }
+
   function sheetXml(sheet) {
     const rowsXml = (sheet.rows || []).map((rowData, rowIndex) => {
       const cells = (rowData.values || []).map((cell, colIndex) => {
@@ -195,6 +204,7 @@
 ${colsXml(sheet.rows, maxCols, sheet.hiddenCols)}
 <sheetData>${rowsXml}</sheetData>
 <autoFilter ref="${filterRange}"/>
+${mergeCellsXml(sheet.mergeCells)}
 ${conditionalFormattingXml(sheet.conditionalFormats)}
 ${dataValidationsXml(sheet.dataValidations)}
 </worksheet>`;
