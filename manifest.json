@@ -7,7 +7,8 @@
     "https://school.mos.ru/*"
   ],
   "permissions": [
-    "storage"
+    "storage",
+    "unlimitedStorage"
   ],
   "background": {
     "service_worker": "src/background.js"

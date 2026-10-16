@@ -344,8 +344,10 @@
       chrome.storage.local.set({ [key]: value }, () => {
         if (chrome.runtime.lastError) {
           console.error("[МЭШ помощник][admin-collector] ОШИБКА ЗАПИСИ в storage:", chrome.runtime.lastError.message);
+          resolve(false);
+          return;
         }
-        resolve();
+        resolve(true);
       });
     });
   }
@@ -715,14 +717,18 @@
       if (batch.mode === "background") {
         chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "stop", storageKey: ADMIN_STORAGE_KEY });
       }
-      await setStorage(ADMIN_LAST_RESULTS_KEY, {
+      const saved = await setStorage(ADMIN_LAST_RESULTS_KEY, {
         results: batch.results,
         finishedAt: Date.now(),
         partial: true,
         processedCount: Object.keys(batch.results).length,
         totalCount: batch.queue.length
       });
-      log(`Остановлено. Успело собраться: ${Object.keys(batch.results).length} из ${batch.queue.length}. Результат — getLastMissingHomeworkResults().`);
+      if (!saved) {
+        log("ОШИБКА: не удалось сохранить результаты (не хватило места в storage). Попробуйте собрать меньше классов за раз.");
+      } else {
+        log(`Остановлено. Успело собраться: ${Object.keys(batch.results).length} из ${batch.queue.length}. Результат — getLastMissingHomeworkResults().`);
+      }
     }
     await clearAdminBatch();
   }
@@ -1063,13 +1069,23 @@
     if (nextIndex >= batch.queue.length) {
       batch.status = "done";
       await setStorage(ADMIN_STORAGE_KEY, batch);
-      await setStorage(ADMIN_LAST_RESULTS_KEY, {
+      const saved = await setStorage(ADMIN_LAST_RESULTS_KEY, {
         results: batch.results,
         finishedAt: Date.now(),
         partial: false,
         processedCount: Object.keys(batch.results).length,
         totalCount: batch.queue.length
       });
+      if (!saved) {
+        batch.status = "error";
+        batch.errorMessage = "Не хватило места в storage для сохранения результатов. Попробуйте собрать меньше классов за раз.";
+        await setStorage(ADMIN_STORAGE_KEY, batch);
+        log("ОШИБКА: не удалось сохранить результаты (не хватило места в storage). Попробуйте собрать меньше классов за раз.");
+        if (batch.mode === "background") {
+          chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance", storageKey: ADMIN_STORAGE_KEY });
+        }
+        return;
+      }
       log(`Готово. Журналов обработано: ${batch.queue.length}. Результат — getLastMissingHomeworkResults().`);
       if (batch.mode === "background") {
         chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance", storageKey: ADMIN_STORAGE_KEY });

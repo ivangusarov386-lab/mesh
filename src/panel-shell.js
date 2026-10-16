@@ -1047,6 +1047,9 @@
       } else if (batch.status === "done") {
         setAdminProgress(panel, 100);
         setAdminStatus(panel, `Готово: собрано ${batch.queue.length} журналов. Можно скачивать.`, "ok");
+      } else if (batch.status === "error") {
+        setAdminProgress(panel, 100);
+        setAdminStatus(panel, batch.errorMessage || "Произошла ошибка сбора.", "warn");
       }
     });
   }
