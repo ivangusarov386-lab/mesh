@@ -741,8 +741,14 @@
     return (await getStorage(ADMIN_LAST_RESULTS_KEY)) || null;
   }
 
+  // CSV-инъекция формул (OWASP CSV Injection): если значение начинается с
+  // =, +, -, @ или табуляции, Excel/Sheets при открытии файла трактует его
+  // как формулу. Экранируем ведущим апострофом — Excel покажет его как
+  // обычный текст, апостроф в самой ячейке не отображается.
   function csvValue(value) {
-    return `"${String(value ?? "").replace(/"/g, '""')}"`;
+    let str = String(value ?? "");
+    if (/^[=+\-@\t\r]/.test(str)) str = "'" + str;
+    return `"${str.replace(/"/g, '""')}"`;
   }
 
   async function downloadMissingHomeworkResultsCsv() {
