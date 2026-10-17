@@ -11,7 +11,7 @@
 .mh-notes-label-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--mh-space-3);
 }
 
 .mh-notes-icon {
@@ -54,7 +54,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: var(--mh-space-2);
 }
 
 .mhn-title {
@@ -78,11 +78,11 @@
 .mhn-subtitle {
   font-size: 12px;
   color: var(--mh-text-muted);
-  margin-bottom: 10px;
+  margin-bottom: var(--mh-space-4);
 }
 
 .mhn-add {
-  margin-bottom: 12px;
+  margin-bottom: var(--mh-space-5);
 }
 
 .mhn-input {
@@ -94,12 +94,12 @@
   font-family: inherit;
   font-size: 13px;
   resize: vertical;
-  margin-bottom: 6px;
+  margin-bottom: var(--mh-space-2);
 }
 
 .mhn-add-row {
   display: flex;
-  gap: 8px;
+  gap: var(--mh-space-3);
 }
 
 .mhn-add-btn {
@@ -131,7 +131,7 @@
 
 .mhn-list {
   display: grid;
-  gap: 8px;
+  gap: var(--mh-space-3);
 }
 
 .mhn-empty {
@@ -165,7 +165,7 @@
   top: 6px;
   right: 6px;
   display: flex;
-  gap: 4px;
+  gap: var(--mh-space-1);
 }
 
 .mhn-item-edit,

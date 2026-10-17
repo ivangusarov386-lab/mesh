@@ -98,4 +98,14 @@
   --mh-collapsed-from: #ff4a4a;
   --mh-collapsed-mid: #df0000;
   --mh-collapsed-to: #ad0000;
+
+  /* ---- Шкала отступов — ритм МЕЖДУ элементами (margin/gap). ----
+     Внутренние padding компонентов в неё намеренно не входят: они
+     подобраны вместе с размером конкретной кнопки/поля (min-height,
+     line-height) и унификация по этой шкале сдвинула бы их размеры. */
+  --mh-space-1: 4px;
+  --mh-space-2: 6px;
+  --mh-space-3: 8px;
+  --mh-space-4: 10px;
+  --mh-space-5: 12px;
 }

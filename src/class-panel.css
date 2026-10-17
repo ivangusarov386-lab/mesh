@@ -1,7 +1,7 @@
 .mh-class-export,
 .mh-allclasses-export,
 .mh-admin-export {
-  margin-top: 12px;
+  margin-top: var(--mh-space-5);
   padding: 12px;
   border: 1px solid var(--mh-border);
   border-radius: 12px;
@@ -40,7 +40,7 @@
 
 .mh-class-menu {
   display: none;
-  margin-top: 10px;
+  margin-top: var(--mh-space-4);
 }
 
 #mesh-helper-panel.mh-class-open .mh-class-menu {
@@ -49,7 +49,7 @@
 
 .mh-allclasses-menu {
   display: none;
-  margin-top: 10px;
+  margin-top: var(--mh-space-4);
 }
 
 #mesh-helper-panel.mh-allclasses-open .mh-allclasses-menu {
@@ -58,7 +58,7 @@
 
 .mh-admin-menu {
   display: none;
-  margin-top: 10px;
+  margin-top: var(--mh-space-4);
 }
 
 #mesh-helper-panel.mh-admin-open .mh-admin-menu {
@@ -66,15 +66,15 @@
 }
 
 .mh-allclasses-picker {
-  margin-top: 8px;
+  margin-top: var(--mh-space-3);
 }
 
 .mh-allclasses-picker-list {
   max-height: 180px;
   overflow-y: auto;
   display: grid;
-  gap: 4px;
-  margin-bottom: 8px;
+  gap: var(--mh-space-1);
+  margin-bottom: var(--mh-space-3);
   padding: 6px 8px;
   border: 1px solid var(--mh-border);
   border-radius: 10px;
@@ -84,7 +84,7 @@
 .mh-allclasses-picker-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--mh-space-3);
   padding-left: 22px;
   font-size: 12px;
   font-weight: 500;
@@ -93,13 +93,13 @@
 }
 
 .mh-allclasses-picker-group {
-  margin-bottom: 6px;
+  margin-bottom: var(--mh-space-2);
 }
 
 .mh-allclasses-picker-group-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--mh-space-3);
   font-size: 12px;
   font-weight: 700;
   color: var(--mh-text);
@@ -111,7 +111,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: var(--mh-space-2);
 }
 
 .mh-admin-group-header-row .mh-allclasses-picker-group-header {
@@ -142,7 +142,7 @@
 
 .mh-admin-group-rows {
   display: grid;
-  gap: 4px;
+  gap: var(--mh-space-1);
 }
 
 .mh-class-export-btn {
@@ -161,11 +161,11 @@
 }
 
 .mh-class-export-btn + .mh-class-export-btn {
-  margin-top: 8px;
+  margin-top: var(--mh-space-3);
 }
 
 .mh-memo-btn {
-  margin-top: 8px;
+  margin-top: var(--mh-space-3);
   background: linear-gradient(180deg, var(--mh-teal) 0%, var(--mh-teal-dark) 100%);
   box-shadow: 0 2px 5px rgba(var(--mh-teal-rgb), .25);
 }
@@ -187,7 +187,7 @@
 .mh-class-stop-btn {
   width: 100%;
   min-height: 30px;
-  margin-top: 6px;
+  margin-top: var(--mh-space-3);
   padding: 5px 10px;
   display: block;
   border: 1px solid var(--mh-danger-border);
@@ -204,7 +204,7 @@
 }
 
 .mh-class-status {
-  margin-top: 8px;
+  margin-top: var(--mh-space-3);
   padding: 9px 10px;
   border-radius: 11px;
   background: var(--mh-surface-muted);
@@ -229,9 +229,9 @@
 }
 
 .mh-class-list {
-  margin-top: 8px;
+  margin-top: var(--mh-space-3);
   display: grid;
-  gap: 6px;
+  gap: var(--mh-space-2);
 }
 
 .mh-class-subject,
@@ -256,7 +256,7 @@
 }
 
 .mh-class-progress-track {
-  margin-top: 8px;
+  margin-top: var(--mh-space-3);
   height: 8px;
   border-radius: 999px;
   background: var(--mh-border);
@@ -272,7 +272,7 @@
 }
 
 .mh-class-progress-text {
-  margin-top: 4px;
+  margin-top: var(--mh-space-1);
   font-size: 11px;
   font-weight: 600;
   color: var(--mh-text-muted);
@@ -283,8 +283,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--mh-space-3);
+  margin-bottom: var(--mh-space-3);
   font-size: 12px;
   font-weight: 600;
   color: var(--mh-text-secondary);
