@@ -934,9 +934,13 @@
 
     // ---- Лист «Аналитика»: сводная таблица класс × предмет — в строках ----
     // ---- только реально собранные в этом запуске классы, в столбцах — по ----
-    // ---- 3 метрики на каждый собранный предмет (общий средний балл / общее ----
-    // ---- кол-во оценок / общее кол-во АЗ — те же цифры, что в шапке листа ----
-    // ---- этого предмета). Название предмета объединено над своими 3 столбцами. ----
+    // ---- 4 метрики на каждый собранный предмет (общий средний балл / общее ----
+    // ---- кол-во оценок / общее кол-во АЗ / кол-во дней без ДЗ — те же цифры, ----
+    // ---- что в шапке листа этого предмета). «Дней без ДЗ» считается по ----
+    // ---- уникальным датам урока (missingHomeworkDates уже дедуплицирован по ----
+    // ---- дате), а не по числу учеников в классе — так и должно быть, это ----
+    // ---- свойство урока/расписания, а не отдельного ученика. Название ----
+    // ---- предмета объединено над своими 4 столбцами. ----
     function colName(index) {
       let n = index + 1;
       let name = "";
@@ -954,13 +958,13 @@
     const analyticsHeaderLabelRow = [""];
     const analyticsHeaderSubRow = [""];
     analyticsSubjects.forEach((subject) => {
-      analyticsHeaderLabelRow.push(subject, "", "");
-      analyticsHeaderSubRow.push("средний балл", "кол-во оценок", "кол-во Аз");
+      analyticsHeaderLabelRow.push(subject, "", "", "");
+      analyticsHeaderSubRow.push("средний балл", "кол-во оценок", "кол-во Аз", "дней без ДЗ");
     });
 
     const analyticsMerges = analyticsSubjects.map((subject, index) => {
-      const start = 1 + index * 3;
-      return `${colName(start)}1:${colName(start + 2)}1`;
+      const start = 1 + index * 4;
+      return `${colName(start)}1:${colName(start + 3)}1`;
     });
 
     const analyticsRows = [
@@ -973,7 +977,7 @@
       analyticsSubjects.forEach((subject) => {
         const journal = rows.find((item) => item.classLabel === classLabel && item.subject === subject);
         if (!journal) {
-          rowValues.push("", "", "");
+          rowValues.push("", "", "", "");
           return;
         }
         const students = journal.students || [];
@@ -994,7 +998,8 @@
         const overallAvg = avgGrades.length
           ? Math.round((avgGrades.reduce((sum, value) => sum + value, 0) / avgGrades.length) * 100) / 100
           : "";
-        rowValues.push(overallAvg, gradeCount, riskCount);
+        const missingHomeworkDays = journal.missingHomeworkDates?.length || 0;
+        rowValues.push(overallAvg, gradeCount, riskCount, missingHomeworkDays);
       });
       analyticsRows.push(workbook.row(rowValues, () => "Default"));
     });
