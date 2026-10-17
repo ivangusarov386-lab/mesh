@@ -21,7 +21,7 @@
 
 .mh-notes-label {
   color: var(--mh-amber-text);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .mh-notes-arrow {
@@ -59,7 +59,7 @@
 
 .mhn-title {
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .mhn-close {
@@ -110,7 +110,7 @@
   background: linear-gradient(180deg, var(--mh-accent) 0%, var(--mh-accent-dark) 100%);
   color: var(--mh-surface);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -121,7 +121,7 @@
   background: var(--mh-surface);
   color: var(--mh-text-subtle);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 

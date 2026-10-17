@@ -20,7 +20,7 @@
   background: var(--mh-surface);
   color: var(--mh-text);
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 700;
   cursor: pointer;
   box-sizing: border-box;
 }
@@ -87,7 +87,7 @@
   gap: 8px;
   padding-left: 22px;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 500;
   color: var(--mh-text-secondary);
   cursor: pointer;
 }
@@ -101,7 +101,7 @@
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--mh-text);
   padding: 3px 0;
   cursor: pointer;
@@ -155,7 +155,7 @@
   background: linear-gradient(180deg, var(--mh-accent) 0%, var(--mh-accent-dark) 100%);
   color: var(--mh-surface);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
   cursor: pointer;
   box-shadow: 0 2px 5px rgba(var(--mh-accent-rgb), .22);
 }
@@ -181,7 +181,7 @@
   background: var(--mh-danger-bg);
   color: var(--mh-danger-text);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -197,7 +197,7 @@
   border: 1px solid var(--mh-border);
   color: var(--mh-text-subtle);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.32;
   white-space: normal;
 }
@@ -260,7 +260,7 @@
 .mh-class-progress-text {
   margin-top: 4px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--mh-text-muted);
   text-align: right;
 }
@@ -272,7 +272,7 @@
   gap: 8px;
   margin-bottom: 8px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--mh-text-secondary);
 }
 
