@@ -35,31 +35,19 @@
    карточки нейтральные, а секции различает иконка в заголовке
    (см. 📘/📚/🛠️ в тексте кнопок-переключателей в panel-shell.js). */
 
-.mh-class-menu {
-  display: none;
-  margin-top: var(--mh-space-4);
-}
-
-#mesh-helper-panel.mh-class-open .mh-class-menu {
-  display: block;
-}
-
-.mh-allclasses-menu {
-  display: none;
-  margin-top: var(--mh-space-4);
-}
-
-#mesh-helper-panel.mh-allclasses-open .mh-allclasses-menu {
-  display: block;
-}
-
+.mh-class-menu,
+.mh-allclasses-menu,
 .mh-admin-menu {
-  display: none;
-  margin-top: var(--mh-space-4);
+  max-height: 0;
+  overflow: hidden;
+  margin-top: 0;
+  transition: max-height .22s ease, margin-top .22s ease;
 }
 
+#mesh-helper-panel.mh-class-open .mh-class-menu,
+#mesh-helper-panel.mh-allclasses-open .mh-allclasses-menu,
 #mesh-helper-panel.mh-admin-open .mh-admin-menu {
-  display: block;
+  margin-top: var(--mh-space-4);
 }
 
 .mh-allclasses-picker {

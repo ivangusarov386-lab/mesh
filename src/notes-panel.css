@@ -14,11 +14,6 @@
   gap: var(--mh-space-3);
 }
 
-.mh-notes-icon {
-  font-size: 15px;
-  line-height: 1;
-}
-
 .mh-notes-label {
   color: var(--mh-amber-text);
   font-weight: 700;

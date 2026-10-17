@@ -145,6 +145,45 @@
     });
   }
 
+  // ---- Плавное раскрытие/закрытие аккордеон-секций через max-height. ----
+  // ---- Готовое "auto" значение не анимируется, а фиксированная цифра ----
+  // ---- "на глаз" обрезала бы длинные списки (например, список учеников ----
+  // ---- с проблемами) — поэтому высота меряется в моменте (scrollHeight), ----
+  // ---- а после открытия снимается ограничение (max-height: none), чтобы ----
+  // ---- контент мог дальше меняться (догружаться/перестраиваться) без ----
+  // ---- обрезки уже открытой секции. ----
+  function setMenuExpanded(menu, open, animate = true) {
+    if (!menu) return;
+    if (!animate) {
+      menu.style.transition = "none";
+      menu.style.maxHeight = open ? "none" : "0px";
+      void menu.offsetHeight;
+      menu.style.transition = "";
+      menu.dataset.mhWantOpen = open ? "1" : "0";
+      return;
+    }
+    menu.dataset.mhWantOpen = open ? "1" : "0";
+    if (open) {
+      menu.style.maxHeight = `${menu.scrollHeight}px`;
+      // Несколько свойств (max-height/margin-top/padding) анимируются
+      // одновременно и каждое шлёт свой transitionend — с {once:true}
+      // слушатель мог бы снять себя на ПЕРВОМ из них (например margin-top)
+      // и max-height так и остался бы зажат числом вместо "none". Поэтому
+      // снимаем слушатель сами и только после события именно max-height.
+      menu.addEventListener("transitionend", function onEnd(e) {
+        if (e.propertyName !== "max-height") return;
+        menu.removeEventListener("transitionend", onEnd);
+        if (menu.dataset.mhWantOpen === "1") menu.style.maxHeight = "none";
+      });
+    } else {
+      menu.style.maxHeight = `${menu.scrollHeight}px`;
+      void menu.offsetHeight;
+      requestAnimationFrame(() => {
+        if (menu.dataset.mhWantOpen === "0") menu.style.maxHeight = "0px";
+      });
+    }
+  }
+
   function setupChecksMenu(panel) {
     const toggle = panel.querySelector("#mh-checks-toggle");
     const menu = panel.querySelector(".mh-checks-menu");
@@ -153,18 +192,19 @@
     if (!toggle || !menu || toggle.dataset.ready === "1") return;
     toggle.dataset.ready = "1";
     let open = localStorage.getItem(CHECKS_OPEN_KEY) === "1";
-    const apply = () => {
+    const apply = (animate) => {
       panel.classList.toggle("mh-checks-open", open);
       toggle.setAttribute("aria-expanded", open ? "true" : "false");
       if (arrow) arrow.textContent = open ? "▲" : "▼";
+      setMenuExpanded(menu, open, animate);
     };
-    apply();
+    apply(false);
     toggle.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       open = !open;
       localStorage.setItem(CHECKS_OPEN_KEY, open ? "1" : "0");
-      apply();
+      apply(true);
     });
     if (help) {
       ["click", "mousedown", "mouseup", "pointerdown", "pointerup"].forEach((eventName) => {
@@ -182,18 +222,19 @@
     if (!toggle || !menu || toggle.dataset.ready === "1") return;
     toggle.dataset.ready = "1";
     let open = localStorage.getItem(RESULTS_OPEN_KEY) === "1";
-    const apply = () => {
+    const apply = (animate) => {
       panel.classList.toggle("mh-results-open", open);
       toggle.setAttribute("aria-expanded", open ? "true" : "false");
       if (arrow) arrow.textContent = open ? "▲" : "▼";
+      setMenuExpanded(menu, open, animate);
     };
-    apply();
+    apply(false);
     toggle.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       open = !open;
       localStorage.setItem(RESULTS_OPEN_KEY, open ? "1" : "0");
-      apply();
+      apply(true);
     });
   }
 
@@ -263,22 +304,24 @@
 
   function setupClassToggle(panel) {
     const toggle = panel.querySelector("#mh-class-toggle");
-    const arrow = panel.querySelector(".mh-class-arrow");
-    if (!toggle || toggle.dataset.ready === "1") return;
+    const arrow = toggle?.querySelector(".mh-class-arrow");
+    const menu = panel.querySelector(".mh-class-menu");
+    if (!toggle || !menu || toggle.dataset.ready === "1") return;
     toggle.dataset.ready = "1";
     let open = localStorage.getItem("meshHelperClassOpen") === "1";
-    const apply = () => {
+    const apply = (animate) => {
       panel.classList.toggle("mh-class-open", open);
       toggle.setAttribute("aria-expanded", open ? "true" : "false");
       if (arrow) arrow.textContent = open ? "▲" : "▼";
+      setMenuExpanded(menu, open, animate);
     };
-    apply();
+    apply(false);
     toggle.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       open = !open;
       localStorage.setItem("meshHelperClassOpen", open ? "1" : "0");
-      apply();
+      apply(true);
     });
   }
 
@@ -614,21 +657,23 @@
   function setupAllClassesToggle(panel) {
     const toggle = panel.querySelector("#mh-allclasses-toggle");
     const arrow = toggle?.querySelector(".mh-class-arrow");
-    if (!toggle || toggle.dataset.ready === "1") return;
+    const menu = panel.querySelector(".mh-allclasses-menu");
+    if (!toggle || !menu || toggle.dataset.ready === "1") return;
     toggle.dataset.ready = "1";
     let open = localStorage.getItem("meshHelperAllClassesOpen") === "1";
-    const apply = () => {
+    const apply = (animate) => {
       panel.classList.toggle("mh-allclasses-open", open);
       toggle.setAttribute("aria-expanded", open ? "true" : "false");
       if (arrow) arrow.textContent = open ? "▲" : "▼";
+      setMenuExpanded(menu, open, animate);
     };
-    apply();
+    apply(false);
     toggle.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       open = !open;
       localStorage.setItem("meshHelperAllClassesOpen", open ? "1" : "0");
-      apply();
+      apply(true);
     });
   }
 
@@ -797,21 +842,23 @@
   function setupAdminToggle(panel) {
     const toggle = panel.querySelector("#mh-admin-toggle");
     const arrow = toggle?.querySelector(".mh-class-arrow");
-    if (!toggle || toggle.dataset.ready === "1") return;
+    const menu = panel.querySelector(".mh-admin-menu");
+    if (!toggle || !menu || toggle.dataset.ready === "1") return;
     toggle.dataset.ready = "1";
     let open = localStorage.getItem("meshHelperAdminOpen") === "1";
-    const apply = () => {
+    const apply = (animate) => {
       panel.classList.toggle("mh-admin-open", open);
       toggle.setAttribute("aria-expanded", open ? "true" : "false");
       if (arrow) arrow.textContent = open ? "▲" : "▼";
+      setMenuExpanded(menu, open, animate);
     };
-    apply();
+    apply(false);
     toggle.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       open = !open;
       localStorage.setItem("meshHelperAdminOpen", open ? "1" : "0");
-      apply();
+      apply(true);
     });
   }
 
@@ -1112,9 +1159,9 @@
       panel.innerHTML = `
         <div class="mh-header"><div class="mh-title">Помощник учителя</div></div>
         <div class="mh-section mh-settings"><label class="mh-label" for="mh-min">Минимум оценок</label><div class="mh-settings-row"><input id="mh-min" type="number" min="1"><button id="mh-save" type="button">Сохранить</button></div></div>
-        <div class="mh-section mh-notes-row"><button id="mh-notes-open" class="mh-class-toggle mh-notes-toggle" type="button"><span class="mh-notes-label-wrap"><span class="mh-notes-icon">📝</span><span class="mh-notes-label">Заметки к классу</span></span><span class="mh-notes-arrow">▸</span></button></div>
+        <div class="mh-section mh-notes-row"><button id="mh-notes-open" class="mh-class-toggle mh-notes-toggle" type="button"><span class="mh-notes-label-wrap"><svg class="mh-icon mh-notes-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg><span class="mh-notes-label">Заметки к классу</span></span><span class="mh-notes-arrow">▸</span></button></div>
         <div class="mh-section mh-checks">
-          <div id="mh-checks-toggle" class="mh-checks-toggle" role="button" aria-expanded="false"><span>🔍 Проверка оценок</span><span class="mh-checks-actions"><button id="mh-checks-help" class="mh-help" type="button" aria-label="Справка">?</button><span class="mh-checks-arrow">▼</span></span><div class="mh-help-popover"><b>Подсветка недобора</b> — красная подсветка учеников, у которых меньше оценок, чем указано в минимуме.<br><br><b>Контроль итогов</b> — синяя рамка, если итоговая оценка или «Г» не выставлены.<br><br><b>Проверка итогов</b> — жёлтая подсветка, если итог выставлен не по расчёту, по правилу из «Порог округления итоговых» ниже.</div></div>
+          <div id="mh-checks-toggle" class="mh-checks-toggle" role="button" aria-expanded="false"><span><svg class="mh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Проверка оценок</span><span class="mh-checks-actions"><button id="mh-checks-help" class="mh-help" type="button" aria-label="Справка">?</button><span class="mh-checks-arrow">▼</span></span><div class="mh-help-popover"><b>Подсветка недобора</b> — красная подсветка учеников, у которых меньше оценок, чем указано в минимуме.<br><br><b>Контроль итогов</b> — синяя рамка, если итоговая оценка или «Г» не выставлены.<br><br><b>Проверка итогов</b> — жёлтая подсветка, если итог выставлен не по расчёту, по правилу из «Порог округления итоговых» ниже.</div></div>
           <div class="mh-checks-menu">
             <label class="mh-toggle-row" for="mh-highlight-low"><input id="mh-highlight-low" type="checkbox"><span>Подсветка недобора</span></label>
             <label class="mh-toggle-row" for="mh-check-finals"><input id="mh-check-finals" type="checkbox"><span>Контроль итогов</span></label>
@@ -1132,7 +1179,7 @@
           </div>
         </div>
         <div class="mh-section mh-results">
-          <div id="mh-results-toggle" class="mh-checks-toggle" role="button" aria-expanded="false"><span>📊 Текущий урок</span><span class="mh-checks-arrow">▼</span></div>
+          <div id="mh-results-toggle" class="mh-checks-toggle" role="button" aria-expanded="false"><span><svg class="mh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg> Текущий урок</span><span class="mh-checks-arrow">▼</span></div>
           <div class="mh-results-menu">
             <div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div>
             <div class="mh-export-wrap"><button id="mh-export-toggle" class="mh-export-toggle" type="button" aria-expanded="false">Экспорт ▼</button><div class="mh-export-menu"><button id="mh-export-problems" class="mh-export" type="button">Выгрузить проблемных</button><button id="mh-export-all" class="mh-export" type="button">Выгрузить весь класс</button></div></div>
@@ -1140,7 +1187,7 @@
           </div>
         </div>
         <div class="mh-section mh-class-export">
-          <div id="mh-class-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>📘 Мой класс</span><span class="mh-class-arrow">▼</span></div>
+          <div id="mh-class-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span><svg class="mh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg> Мой класс</span><span class="mh-class-arrow">▼</span></div>
           <div class="mh-class-menu">
             <div class="mh-class-threshold-row"><label for="mh-class-min-avg">Проблема при среднем ≤</label><input id="mh-class-min-avg" type="number" min="1" max="5" step="0.1"></div>
             <div class="mh-class-threshold-row"><label for="mh-class-min-absence">Проблема при пропусках ≥ (%)</label><input id="mh-class-min-absence" type="number" min="1" max="100" step="1"></div>
@@ -1153,7 +1200,7 @@
           </div>
         </div>
         <div class="mh-section mh-allclasses-export">
-          <div id="mh-allclasses-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>📚 Все классы (по предмету)</span><span class="mh-class-arrow">▼</span></div>
+          <div id="mh-allclasses-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span><svg class="mh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg> Все классы (по предмету)</span><span class="mh-class-arrow">▼</span></div>
           <div class="mh-allclasses-menu">
             <div class="mh-class-threshold-row"><label for="mh-allclasses-min-avg">Проблема при среднем ≤</label><input id="mh-allclasses-min-avg" type="number" min="1" max="5" step="0.1"></div>
             <div class="mh-class-threshold-row"><label for="mh-allclasses-min-absence">Проблема при пропусках ≥ (%)</label><input id="mh-allclasses-min-absence" type="number" min="1" max="100" step="1"></div>
@@ -1171,7 +1218,7 @@
           </div>
         </div>
         <div class="mh-section mh-admin-export" id="mh-admin-export" style="display:none;">
-          <div id="mh-admin-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>🛠️ Режим администратора</span><span class="mh-class-arrow">▼</span></div>
+          <div id="mh-admin-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span><svg class="mh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg> Режим администратора</span><span class="mh-class-arrow">▼</span></div>
           <div class="mh-admin-menu">
             <div class="mh-class-threshold-row"><label for="mh-admin-min-avg">Проблема при среднем ≤</label><input id="mh-admin-min-avg" type="number" min="1" max="5" step="0.1"></div>
             <div class="mh-class-threshold-row"><label for="mh-admin-min-absence">Проблема при пропусках ≥ (%)</label><input id="mh-admin-min-absence" type="number" min="1" max="100" step="1"></div>
