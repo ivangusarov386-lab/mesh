@@ -203,6 +203,10 @@
   background: var(--mh-danger-bg-hover);
 }
 
+.mh-class-status:empty {
+  display: none;
+}
+
 .mh-class-status {
   margin-top: var(--mh-space-3);
   padding: 9px 10px;
@@ -214,6 +218,19 @@
   font-weight: 500;
   line-height: 1.32;
   white-space: normal;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mh-space-2);
+}
+
+/* Иконка дублирует тон цветом+формой, а не только фоном карточки —
+   так состояние видно даже тем, кто не различает оттенки фона. */
+.mh-class-status::before {
+  content: "ℹ";
+  flex: 0 0 auto;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--mh-text-muted);
 }
 
 .mh-class-status[data-tone="ok"] {
@@ -222,9 +239,19 @@
   color: var(--mh-success);
 }
 
+.mh-class-status[data-tone="ok"]::before {
+  content: "✓";
+  color: var(--mh-success);
+}
+
 .mh-class-status[data-tone="warn"] {
   background: var(--mh-warning-bg);
   border-color: var(--mh-warning-border);
+  color: var(--mh-warning-text);
+}
+
+.mh-class-status[data-tone="warn"]::before {
+  content: "⚠";
   color: var(--mh-warning-text);
 }
 
