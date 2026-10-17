@@ -1114,7 +1114,7 @@
         <div class="mh-section mh-settings"><label class="mh-label" for="mh-min">Минимум оценок</label><div class="mh-settings-row"><input id="mh-min" type="number" min="1"><button id="mh-save" type="button">Сохранить</button></div></div>
         <div class="mh-section mh-notes-row"><button id="mh-notes-open" class="mh-class-toggle mh-notes-toggle" type="button"><span class="mh-notes-label-wrap"><span class="mh-notes-icon">📝</span><span class="mh-notes-label">Заметки к классу</span></span><span class="mh-notes-arrow">▸</span></button></div>
         <div class="mh-section mh-checks">
-          <div id="mh-checks-toggle" class="mh-checks-toggle" role="button" aria-expanded="false"><span>Проверка оценок</span><span class="mh-checks-actions"><button id="mh-checks-help" class="mh-help" type="button" aria-label="Справка">?</button><span class="mh-checks-arrow">▼</span></span><div class="mh-help-popover"><b>Подсветка недобора</b> — красная подсветка учеников, у которых меньше оценок, чем указано в минимуме.<br><br><b>Контроль итогов</b> — синяя рамка, если итоговая оценка или «Г» не выставлены.<br><br><b>Проверка итогов</b> — жёлтая подсветка, если итог выставлен не по расчёту, по правилу из «Порог округления итоговых» ниже.</div></div>
+          <div id="mh-checks-toggle" class="mh-checks-toggle" role="button" aria-expanded="false"><span>🔍 Проверка оценок</span><span class="mh-checks-actions"><button id="mh-checks-help" class="mh-help" type="button" aria-label="Справка">?</button><span class="mh-checks-arrow">▼</span></span><div class="mh-help-popover"><b>Подсветка недобора</b> — красная подсветка учеников, у которых меньше оценок, чем указано в минимуме.<br><br><b>Контроль итогов</b> — синяя рамка, если итоговая оценка или «Г» не выставлены.<br><br><b>Проверка итогов</b> — жёлтая подсветка, если итог выставлен не по расчёту, по правилу из «Порог округления итоговых» ниже.</div></div>
           <div class="mh-checks-menu">
             <label class="mh-toggle-row" for="mh-highlight-low"><input id="mh-highlight-low" type="checkbox"><span>Подсветка недобора</span></label>
             <label class="mh-toggle-row" for="mh-check-finals"><input id="mh-check-finals" type="checkbox"><span>Контроль итогов</span></label>
@@ -1132,7 +1132,7 @@
           </div>
         </div>
         <div class="mh-section mh-results">
-          <div id="mh-results-toggle" class="mh-checks-toggle" role="button" aria-expanded="false"><span>Текущий урок</span><span class="mh-checks-arrow">▼</span></div>
+          <div id="mh-results-toggle" class="mh-checks-toggle" role="button" aria-expanded="false"><span>📊 Текущий урок</span><span class="mh-checks-arrow">▼</span></div>
           <div class="mh-results-menu">
             <div id="mh-summary" class="mh-subtitle">Ученики ниже нормы по оценкам: 0</div>
             <div class="mh-export-wrap"><button id="mh-export-toggle" class="mh-export-toggle" type="button" aria-expanded="false">Экспорт ▼</button><div class="mh-export-menu"><button id="mh-export-problems" class="mh-export" type="button">Выгрузить проблемных</button><button id="mh-export-all" class="mh-export" type="button">Выгрузить весь класс</button></div></div>
@@ -1140,7 +1140,7 @@
           </div>
         </div>
         <div class="mh-section mh-class-export">
-          <div id="mh-class-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>Мой класс</span><span class="mh-class-arrow">▼</span></div>
+          <div id="mh-class-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>📘 Мой класс</span><span class="mh-class-arrow">▼</span></div>
           <div class="mh-class-menu">
             <div class="mh-class-threshold-row"><label for="mh-class-min-avg">Проблема при среднем ≤</label><input id="mh-class-min-avg" type="number" min="1" max="5" step="0.1"></div>
             <div class="mh-class-threshold-row"><label for="mh-class-min-absence">Проблема при пропусках ≥ (%)</label><input id="mh-class-min-absence" type="number" min="1" max="100" step="1"></div>
@@ -1153,7 +1153,7 @@
           </div>
         </div>
         <div class="mh-section mh-allclasses-export">
-          <div id="mh-allclasses-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>Все классы (по предмету)</span><span class="mh-class-arrow">▼</span></div>
+          <div id="mh-allclasses-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>📚 Все классы (по предмету)</span><span class="mh-class-arrow">▼</span></div>
           <div class="mh-allclasses-menu">
             <div class="mh-class-threshold-row"><label for="mh-allclasses-min-avg">Проблема при среднем ≤</label><input id="mh-allclasses-min-avg" type="number" min="1" max="5" step="0.1"></div>
             <div class="mh-class-threshold-row"><label for="mh-allclasses-min-absence">Проблема при пропусках ≥ (%)</label><input id="mh-allclasses-min-absence" type="number" min="1" max="100" step="1"></div>
@@ -1171,7 +1171,7 @@
           </div>
         </div>
         <div class="mh-section mh-admin-export" id="mh-admin-export" style="display:none;">
-          <div id="mh-admin-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>Режим администратора</span><span class="mh-class-arrow">▼</span></div>
+          <div id="mh-admin-toggle" class="mh-class-toggle" role="button" aria-expanded="false"><span>🛠️ Режим администратора</span><span class="mh-class-arrow">▼</span></div>
           <div class="mh-admin-menu">
             <div class="mh-class-threshold-row"><label for="mh-admin-min-avg">Проблема при среднем ≤</label><input id="mh-admin-min-avg" type="number" min="1" max="5" step="0.1"></div>
             <div class="mh-class-threshold-row"><label for="mh-admin-min-absence">Проблема при пропусках ≥ (%)</label><input id="mh-admin-min-absence" type="number" min="1" max="100" step="1"></div>

@@ -78,22 +78,6 @@
   --mh-teal: #0f766e;
   --mh-teal-dark: #0d5f59;
 
-  /* ---- Пастельные фоны карточек-секций (плоские, без градиента) ---- */
-  --mh-section-checks-from: #f5f9ff;
-  --mh-section-checks-border: #dbeafe;
-
-  --mh-section-results-from: #f5fcf7;
-  --mh-section-results-border: #bbf7d0;
-
-  --mh-section-class-from: #f6f7ff;
-  --mh-section-class-border: #c7d2fe;
-
-  --mh-section-allclasses-from: #f3fdff;
-  --mh-section-allclasses-border: #a5f3fc;
-
-  --mh-section-admin-from: #fef6fa;
-  --mh-section-admin-border: #fbcfe8;
-
   /* ---- Свёрнутая «таблетка» ---- */
   /* Раньше ярко-красная (как тревожная кнопка/сирена) — для состояния
      «просто свёрнуто, ничего не случилось» это было чрезмерно. Берём

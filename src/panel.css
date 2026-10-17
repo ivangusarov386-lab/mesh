@@ -79,14 +79,12 @@
 
 .mh-checks-toggle:hover { background: var(--mh-surface-muted); border-color: var(--mh-border-hover); }
 
-/* Спокойные, но разные оттенки у каждой карточки-секции (а не у самой кнопки-заголовка) —
-   плоский однотонный фон, без теней и градиентов, чтобы секции читались
-   как единый лист, а не стопка приподнятых карточек. Сама кнопка-заголовок
-   (.mh-checks-toggle) остаётся белой — см. правило выше. */
-.mh-checks { background: var(--mh-section-checks-from); border-color: var(--mh-section-checks-border); }
-.mh-results { background: var(--mh-section-results-from); border-color: var(--mh-section-results-border); }
+/* Раньше у каждой карточки-секции был свой пастельный оттенок фона
+   (голубой/зелёный/сиреневый/розовый) — «радуга» без единой логики.
+   Теперь один акцент на всю панель: карточки нейтральные (как
+   .mh-settings), а секции различает иконка в заголовке-переключателе. */
 
-.mh-checks-actions { display: flex; align-items: center; gap: 8px; }
+.mh-checks-actions { display: flex; align-items: center; gap: var(--mh-space-3); }
 .mh-checks-arrow { font-size: 12px; line-height: 1; color: var(--mh-text); }
 
 .mh-checks-menu {

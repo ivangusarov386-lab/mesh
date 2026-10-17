@@ -30,13 +30,10 @@
   border-color: var(--mh-border-hover);
 }
 
-/* Спокойные, но разные оттенки у каждой карточки-секции (а не у самой кнопки-заголовка) —
-   плоский однотонный фон, без теней и градиентов, чтобы секции читались
-   как единый лист, а не стопка приподнятых карточек. Сама кнопка-заголовок
-   (.mh-class-toggle) остаётся белой — см. правило выше. */
-.mh-class-export { background: var(--mh-section-class-from); border-color: var(--mh-section-class-border); }
-.mh-allclasses-export { background: var(--mh-section-allclasses-from); border-color: var(--mh-section-allclasses-border); }
-.mh-admin-export { background: var(--mh-section-admin-from); border-color: var(--mh-section-admin-border); }
+/* Раньше у каждой карточки-секции был свой пастельный оттенок фона —
+   «радуга» без единой логики. Теперь один акцент на всю панель:
+   карточки нейтральные, а секции различает иконка в заголовке
+   (см. 📘/📚/🛠️ в тексте кнопок-переключателей в panel-shell.js). */
 
 .mh-class-menu {
   display: none;
