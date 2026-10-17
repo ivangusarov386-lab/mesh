@@ -955,6 +955,17 @@
     const analyticsClassLabels = [...new Set(rows.map((journal) => journal.classLabel))].sort((a, b) => a.localeCompare(b, "ru"));
     const analyticsSubjects = [...new Set(rows.map((journal) => journal.subject))].sort((a, b) => a.localeCompare(b, "ru"));
 
+    // Колонка A («Класс») остаётся нейтральной, а дальше — блоки по 4
+    // столбца на предмет, подкрашенные по кругу в один из 6 пастельных
+    // цветов (SUBJECT_PALETTE_SIZE), чтобы соседние предметы не сливались.
+    const paletteSize = workbook.SUBJECT_PALETTE_SIZE || 6;
+    const analyticsColumnStyle = (colIndex, isHeader) => {
+      if (colIndex === 0) return isHeader ? "Header" : "Default";
+      const subjectIndex = Math.floor((colIndex - 1) / 4);
+      const paletteIndex = (subjectIndex % paletteSize) + 1;
+      return isHeader ? `Subj${paletteIndex}Header` : `Subj${paletteIndex}`;
+    };
+
     const analyticsHeaderLabelRow = [""];
     const analyticsHeaderSubRow = [""];
     analyticsSubjects.forEach((subject) => {
@@ -968,8 +979,8 @@
     });
 
     const analyticsRows = [
-      workbook.row(analyticsHeaderLabelRow, () => "Header"),
-      workbook.row(analyticsHeaderSubRow, () => "Header")
+      workbook.row(analyticsHeaderLabelRow, (value, colIndex) => analyticsColumnStyle(colIndex, true)),
+      workbook.row(analyticsHeaderSubRow, (value, colIndex) => analyticsColumnStyle(colIndex, true))
     ];
 
     analyticsClassLabels.forEach((classLabel) => {
@@ -1001,7 +1012,7 @@
         const missingHomeworkDays = journal.missingHomeworkDates?.length || 0;
         rowValues.push(overallAvg, gradeCount, riskCount, missingHomeworkDays);
       });
-      analyticsRows.push(workbook.row(rowValues, () => "Default"));
+      analyticsRows.push(workbook.row(rowValues, (value, colIndex) => analyticsColumnStyle(colIndex, false)));
     });
 
     const analyticsSheet = workbook.worksheet("Аналитика", analyticsRows, {

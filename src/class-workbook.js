@@ -7,8 +7,29 @@
     Header: 1,
     BadFinal: 2,
     BadAbsence: 3,
-    Highlight: 4
+    Highlight: 4,
+    // Чередующиеся пастельные цвета для блоков столбцов по предметам
+    // (например, на листе «Аналитика») — чтобы соседние предметы не
+    // сливались друг с другом. Header-вариант — тот же цвет, но жирным
+    // шрифтом, для строк заголовка.
+    Subj1: 5,
+    Subj2: 6,
+    Subj3: 7,
+    Subj4: 8,
+    Subj5: 9,
+    Subj6: 10,
+    Subj1Header: 11,
+    Subj2Header: 12,
+    Subj3Header: 13,
+    Subj4Header: 14,
+    Subj5Header: 15,
+    Subj6Header: 16
   };
+
+  // Сколько цветов в чередующейся палитре предметов — используется вызывающим
+  // кодом (например, admin-collector.js), чтобы брать "SubjN"/"SubjNHeader"
+  // по номеру блока столбцов через (index % SUBJECT_PALETTE_SIZE) + 1.
+  const SUBJECT_PALETTE_SIZE = 6;
 
   function sanitize(value) {
     return String(value ?? "")
@@ -253,24 +274,42 @@ ${list}
 <font><sz val="10"/><name val="Arial"/></font>
 <font><b/><sz val="10"/><name val="Arial"/></font>
 </fonts>
-<fills count="6">
+<fills count="12">
 <fill><patternFill patternType="none"/></fill>
 <fill><patternFill patternType="gray125"/></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFEAF2FF"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFFFE08A"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFFFD6D6"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFE2EFDA"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFCE4D6"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFE8DAEF"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFCE4EC"/></patternFill></fill>
 </fills>
 <borders count="1">
 <border><left/><right/><top/><bottom/></border>
 </borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="5">
+<cellXfs count="17">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="6" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="7" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="8" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="9" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="10" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="11" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="6" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="7" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="8" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="9" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="10" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="1" fillId="11" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 </cellXfs>
 <dxfs count="2">
 <dxf><fill><patternFill><bgColor rgb="FFFFE08A"/></patternFill></fill></dxf>
@@ -441,6 +480,7 @@ ${overrides}
     worksheet,
     formula,
     downloadWorkbook,
-    buildWorkbookBlob
+    buildWorkbookBlob,
+    SUBJECT_PALETTE_SIZE
   };
 })();
