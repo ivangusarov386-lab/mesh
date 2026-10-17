@@ -385,8 +385,8 @@
   padding: 0 !important;
   border-radius: 999px !important;
   overflow: hidden !important;
-  background: linear-gradient(180deg, var(--mh-collapsed-from) 0%, var(--mh-collapsed-mid) 55%, var(--mh-collapsed-to) 100%) !important;
-  box-shadow: 0 6px 14px rgba(var(--mh-black-rgb), .3), inset 0 1px 0 rgba(var(--mh-white-rgb), .42), inset 0 -2px 0 rgba(var(--mh-black-rgb), .25) !important;
+  background: linear-gradient(180deg, var(--mh-collapsed-from) 0%, var(--mh-collapsed-to) 100%) !important;
+  box-shadow: 0 4px 12px rgba(var(--mh-accent-rgb), .35) !important;
 }
 
 #mesh-helper-panel.mh-collapsed-top .mh-header {
