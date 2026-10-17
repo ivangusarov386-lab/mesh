@@ -1126,7 +1126,7 @@
               <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 3</span><input class="mh-final-from" data-grade="3" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="3" type="number" step="0.01" min="1" max="5"></div>
               <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 4</span><input class="mh-final-from" data-grade="4" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="4" type="number" step="0.01" min="1" max="5"></div>
               <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 5</span><input class="mh-final-from" data-grade="5" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="5" type="number" step="0.01" min="1" max="5"></div>
-              <button id="mh-final-criteria-save" class="mh-class-export-btn" type="button">Сохранить критерии</button>
+              <button id="mh-final-criteria-save" class="mh-class-export-btn mh-btn-secondary" type="button">Сохранить критерии</button>
               <div id="mh-final-criteria-status" class="mh-class-status" data-tone="muted"></div>
             </div>
           </div>
@@ -1149,7 +1149,7 @@
             <div class="mh-class-progress-track"><div id="mh-class-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>
             <div id="mh-class-progress-text" class="mh-class-progress-text">0%</div>
             <div id="mh-class-export-status" class="mh-class-status" data-tone="muted">Соберите оценки, пропуски и итоги по всем предметам класса в один Excel-файл.</div>
-            <button id="mh-export-class-per-student" class="mh-class-export-btn" type="button">Скачать по ученикам (.zip)</button>
+            <button id="mh-export-class-per-student" class="mh-class-export-btn mh-btn-secondary" type="button">Скачать по ученикам (.zip)</button>
           </div>
         </div>
         <div class="mh-section mh-allclasses-export">
@@ -1185,8 +1185,8 @@
             <div class="mh-class-progress-track"><div id="mh-admin-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>
             <div id="mh-admin-progress-text" class="mh-class-progress-text">0%</div>
             <div id="mh-admin-export-status" class="mh-class-status" data-tone="muted">Нажми «Загрузить список классов», отметь нужные и запусти сбор.</div>
-            <button id="mh-admin-download-csv" class="mh-class-export-btn" type="button">Скачать CSV (Отсутствует ДЗ)</button>
-            <button id="mh-admin-download-xlsx" class="mh-class-export-btn" type="button">Скачать Excel</button>
+            <button id="mh-admin-download-csv" class="mh-class-export-btn mh-btn-secondary" type="button">Скачать CSV (Отсутствует ДЗ)</button>
+            <button id="mh-admin-download-xlsx" class="mh-class-export-btn mh-btn-secondary" type="button">Скачать Excel</button>
           </div>
         </div>`;
       document.body.appendChild(panel);

@@ -170,6 +170,20 @@
   box-shadow: 0 2px 5px rgba(var(--mh-teal-rgb), .25);
 }
 
+/* Второстепенное действие (результат/альтернативный формат уже после
+   главного шага «собрать») — не должно конкурировать по весу с основной
+   залитой кнопкой, поэтому плоская, с акцентной обводкой вместо заливки. */
+.mh-btn-secondary {
+  background: var(--mh-surface);
+  color: var(--mh-accent-dark);
+  border: 1px solid var(--mh-accent);
+  box-shadow: none;
+}
+
+.mh-btn-secondary:hover {
+  background: rgba(var(--mh-accent-rgb), .08);
+}
+
 .mh-class-stop-btn {
   width: 100%;
   min-height: 30px;
