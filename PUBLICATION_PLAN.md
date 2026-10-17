@@ -14,12 +14,13 @@
   реально проверен на живых данных.
 - Перед релизом:
   1. Поднять версию в `manifest.json` (например, `1.4.0`).
-  2. Удалить неиспользуемые файлы из `src/`: `class-average-override.js`,
-     `class-data.js`, `class-export.js`, `class-subject-sheet.js`,
-     `class-summary-sheet.js`, `class-workbook-export.js`, `content.js`,
-     `highlight-default-on.js`, `highlight-guard.js`, `marks-api-test.js`,
-     `period-counts.js`, `selection-export.js`.
-     (`class-workbook.js` и `class-panel.css` — оставить, используются.)
+  2. ✅ Сделано (при аудите безопасности): удалены неиспользуемые файлы из
+     `src/`: `class-average-override.js`, `class-data.js`, `class-export.js`,
+     `class-subject-sheet.js`, `class-summary-sheet.js`,
+     `class-workbook-export.js`, `content.js`, `highlight-default-on.js`,
+     `highlight-guard.js`, `marks-api-test.js`, `period-counts.js`,
+     `selection-export.js`.
+     (`class-workbook.js` и `class-panel.css` — оставлены, используются.)
   3. Смержить рабочую ветку в `master` как новую релизную точку.
   4. Финальный regression-тест на реальном классе: подсветка, контроль/проверка
      итогов, CSV текущего журнала, «Мой класс» (оценки, Н%, часы, итоги).
