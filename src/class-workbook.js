@@ -7,29 +7,54 @@
     Header: 1,
     BadFinal: 2,
     BadAbsence: 3,
-    Highlight: 4,
-    // Чередующиеся пастельные цвета для блоков столбцов по предметам
-    // (например, на листе «Аналитика») — чтобы соседние предметы не
-    // сливались друг с другом. Header-вариант — тот же цвет, но жирным
-    // шрифтом, для строк заголовка.
-    Subj1: 5,
-    Subj2: 6,
-    Subj3: 7,
-    Subj4: 8,
-    Subj5: 9,
-    Subj6: 10,
-    Subj1Header: 11,
-    Subj2Header: 12,
-    Subj3Header: 13,
-    Subj4Header: 14,
-    Subj5Header: 15,
-    Subj6Header: 16
+    Highlight: 4
   };
 
-  // Сколько цветов в чередующейся палитре предметов — используется вызывающим
-  // кодом (например, admin-collector.js), чтобы брать "SubjN"/"SubjNHeader"
-  // по номеру блока столбцов через (index % SUBJECT_PALETTE_SIZE) + 1.
-  const SUBJECT_PALETTE_SIZE = 6;
+  // ---- Динамическая палитра цветов по предметам (лист «Аналитика») ----
+  // ---- Предметов может быть сколько угодно (не только текущие 6-8) — ----
+  // ---- подсветить нужно КАЖДЫЙ своим цветом, а не крутить по кругу ----
+  // ---- маленький фиксированный набор (иначе 7-й предмет повторил бы ----
+  // ---- цвет 1-го). Поэтому цвет не захардкожен списком, а вычисляется ----
+  // ---- по формуле HSL — равномерно по кругу оттенков на основании ----
+  // ---- общего количества предметов в ЭТОЙ выгрузке, так что любое их ----
+  // ---- число получает настолько разные цвета, насколько это возможно. ----
+  const FIXED_CELLXFS_COUNT = 5;
+  const FIXED_FILLS_COUNT = 6;
+
+  function hslToHex(h, s, l) {
+    s /= 100;
+    l /= 100;
+    const k = (n) => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const toHex = (x) => Math.round(255 * x).toString(16).padStart(2, "0").toUpperCase();
+    return `${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
+  }
+
+  // Пастельный, но при этом хорошо различимый тон (в меру светлый, не
+  // блёклый) — подобрано так, чтобы чёрный текст поверх оставался читаем.
+  function paletteColorHex(index, total) {
+    const hue = Math.round((index * 360) / Math.max(total, 1));
+    return hslToHex(hue, 55, 86);
+  }
+
+  // Имя стиля для блока столбцов предмета №index (из total предметов) —
+  // используется вызывающим кодом (admin-collector.js) вместо того, чтобы
+  // самому придумывать схему именования.
+  function paletteStyleId(index, isHeader) {
+    return `Pal${index}${isHeader ? "Header" : ""}`;
+  }
+
+  function resolveStyleIndex(styleId) {
+    if (Object.prototype.hasOwnProperty.call(STYLE, styleId)) return STYLE[styleId];
+    const match = /^Pal(\d+)(Header)?$/.exec(String(styleId || ""));
+    if (match) {
+      const index = Number(match[1]);
+      const isHeader = Boolean(match[2]);
+      return FIXED_CELLXFS_COUNT + index * 2 + (isHeader ? 1 : 0);
+    }
+    return STYLE.Default;
+  }
 
   function sanitize(value) {
     return String(value ?? "")
@@ -107,7 +132,7 @@
 
   function cellXml(value, styleId, rowIndex, colIndex) {
     const ref = `${colName(colIndex)}${rowIndex + 1}`;
-    const style = STYLE[styleId] ?? STYLE.Default;
+    const style = resolveStyleIndex(styleId);
 
     if (isFormulaValue(value)) {
       return `<c r="${ref}" s="${style}"><f>${escapeXml(value.__formula)}</f></c>`;
@@ -267,49 +292,44 @@ ${list}
 </Relationships>`;
   }
 
-  function stylesXml() {
+  function stylesXml(paletteCount = 0) {
+    const safePaletteCount = Math.max(0, paletteCount);
+    let paletteFillsXml = "";
+    let paletteXfsXml = "";
+    for (let i = 0; i < safePaletteCount; i += 1) {
+      const hex = paletteColorHex(i, safePaletteCount);
+      paletteFillsXml += `<fill><patternFill patternType="solid"><fgColor rgb="FF${hex}"/></patternFill></fill>`;
+      const fillId = FIXED_FILLS_COUNT + i;
+      paletteXfsXml += `<xf numFmtId="0" fontId="0" fillId="${fillId}" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>`;
+      paletteXfsXml += `<xf numFmtId="0" fontId="1" fillId="${fillId}" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>`;
+    }
+
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <fonts count="2">
 <font><sz val="10"/><name val="Arial"/></font>
 <font><b/><sz val="10"/><name val="Arial"/></font>
 </fonts>
-<fills count="12">
+<fills count="${FIXED_FILLS_COUNT + safePaletteCount}">
 <fill><patternFill patternType="none"/></fill>
 <fill><patternFill patternType="gray125"/></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFEAF2FF"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFFFE08A"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFFFD6D6"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"/></patternFill></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FFE2EFDA"/></patternFill></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/></patternFill></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FFFCE4D6"/></patternFill></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FFE8DAEF"/></patternFill></fill>
-<fill><patternFill patternType="solid"><fgColor rgb="FFFCE4EC"/></patternFill></fill>
+${paletteFillsXml}
 </fills>
 <borders count="1">
 <border><left/><right/><top/><bottom/></border>
 </borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="17">
+<cellXfs count="${FIXED_CELLXFS_COUNT + safePaletteCount * 2}">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="6" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="7" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="8" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="9" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="10" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="11" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="1" fillId="6" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="1" fillId="7" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="1" fillId="8" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="1" fillId="9" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="1" fillId="10" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
-<xf numFmtId="0" fontId="1" fillId="11" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+${paletteXfsXml}
 </cellXfs>
 <dxfs count="2">
 <dxf><fill><patternFill><bgColor rgb="FFFFE08A"/></patternFill></fill></dxf>
@@ -449,7 +469,7 @@ ${overrides}
       },
       {
         name: "xl/styles.xml",
-        content: stylesXml()
+        content: stylesXml(options.paletteCount || 0)
       },
       ...safeSheets.map((sheet, index) => ({
         name: `xl/worksheets/sheet${index + 1}.xml`,
@@ -481,6 +501,6 @@ ${overrides}
     formula,
     downloadWorkbook,
     buildWorkbookBlob,
-    SUBJECT_PALETTE_SIZE
+    paletteStyleId
   };
 })();
