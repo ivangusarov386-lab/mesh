@@ -52,7 +52,8 @@
         "src/notes-panel.js",
         "src/admin-collector.js",
         "src/admin-drawer.js",
-        "src/finals-check-drawer.js"
+        "src/finals-check-drawer.js",
+        "src/homework-check-drawer.js"
       ],
       "css": [
         "src/panel-tokens.css",

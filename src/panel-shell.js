@@ -943,6 +943,9 @@
         </div>
         <div class="mh-section mh-finals-export" id="mh-finals-export" style="display:none;">
           <button id="mh-finals-open" class="mh-class-toggle" type="button"><span><svg class="mh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg> Проверка итогов</span><span class="mh-class-arrow">▸</span></button>
+        </div>
+        <div class="mh-section mh-homework-export" id="mh-homework-export" style="display:none;">
+          <button id="mh-homework-open" class="mh-class-toggle" type="button"><span><svg class="mh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9.5 12.5 5 5"></path><path d="m14.5 12.5-5 5"></path></svg> Отсутствует ДЗ</span><span class="mh-class-arrow">▸</span></button>
         </div>`;
       document.body.appendChild(panel);
     }

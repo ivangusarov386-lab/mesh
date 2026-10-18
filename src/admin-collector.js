@@ -258,6 +258,13 @@
     return startAdminBatchInBackground(journals, ADMIN_FINALS_STORAGE_KEY, "Проверка итогов");
   }
 
+  // Третий независимый сбор — только «Отсутствует ДЗ», свой storageKey
+  // (ADMIN_HOMEWORK_STORAGE_KEY), самый лёгкий из трёх (ждёт меньше всего).
+  async function collectMissingHomeworkOnlyForSelectedClasses(selection) {
+    const journals = await collectSelectedClasses(selection);
+    return startAdminBatchInBackground(journals, ADMIN_HOMEWORK_STORAGE_KEY, "Отсутствует ДЗ");
+  }
+
   // ---- «Отсутствует ДЗ»: дата урока считается «без ДЗ», если к ней ----
   // ---- не привязано ни одной записи homeworks_to_verify (см. выше), И ----
   // ---- при этом учитель явно НЕ нажимал «Без домашнего задания» — это ----
@@ -343,6 +350,11 @@
   // ---- ради полного набора данных, если нужны только оценки+итоги. ----
   const ADMIN_FINALS_STORAGE_KEY = "meshHelperAdminFinalsBatch";
   const ADMIN_FINALS_LAST_RESULTS_KEY = "meshHelperAdminFinalsLastResults";
+  // ---- Ещё один отдельный, лёгкий батч — только «Отсутствует ДЗ». ----
+  // ---- Не ждёт марки/учеников/посещаемость/итоги — только расписание и ----
+  // ---- homework_absences, которые реально нужны для этой проверки. ----
+  const ADMIN_HOMEWORK_STORAGE_KEY = "meshHelperAdminHomeworkBatch";
+  const ADMIN_HOMEWORK_LAST_RESULTS_KEY = "meshHelperAdminHomeworkLastResults";
   const ADMIN_MARKS_WAIT_TIMEOUT_MS = 15000;
 
   function currentAdminJournalIdFromQuery() {
@@ -829,11 +841,13 @@
     return `"${str.replace(/"/g, '""')}"`;
   }
 
-  async function downloadMissingHomeworkResultsCsv() {
-    const stored = await getLastMissingHomeworkResults();
+  // Общая сборка CSV «Отсутствует ДЗ» — используется и основным сбором
+  // (результат содержит это поле попутно), и отдельным лёгким сбором
+  // только под ДЗ (resumeAdminHomeworkBatchIfRunning).
+  function buildMissingHomeworkCsvAndDownload(stored, filenamePrefix) {
     const rows = Object.values(stored?.results || {});
     if (!rows.length) {
-      log("Нечего выгружать — сначала запустите сбор (collectMissingHomeworkForParallel).");
+      log("Нечего выгружать — сначала запустите сбор.");
       return { ok: false, reason: "no-results" };
     }
 
@@ -850,7 +864,7 @@
     const csv = "﻿" + [headers, ...csvRows].map((row) => row.map(csvValue).join(";")).join("\n");
     const date = new Date().toISOString().slice(0, 10);
     const partialSuffix = stored.partial ? `_partial_${stored.processedCount}of${stored.totalCount}` : "";
-    const filename = `mesh_admin_otsutstvuet_dz${partialSuffix}_${date}.csv`;
+    const filename = `${filenamePrefix}${partialSuffix}_${date}.csv`;
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -864,6 +878,16 @@
 
     log(`Экспортировано: ${rows.length} журналов → ${filename}`);
     return { ok: true, rows: rows.length, filename };
+  }
+
+  async function downloadMissingHomeworkResultsCsv() {
+    const stored = await getLastMissingHomeworkResults();
+    return buildMissingHomeworkCsvAndDownload(stored, "mesh_admin_otsutstvuet_dz");
+  }
+
+  async function downloadMissingHomeworkOnlyResultsCsv() {
+    const stored = await getLastMissingHomeworkOnlyResults();
+    return buildMissingHomeworkCsvAndDownload(stored, "mesh_admin_otsutstvuet_dz_only");
   }
 
   // ---- «Проверка итогов»: отдельная плоская CSV-выгрузка (как «Отсутствует ----
@@ -1425,6 +1449,117 @@
     }
   }
 
+  function clearAdminHomeworkBatch() {
+    return new Promise((resolve) => chrome.storage.local.remove(ADMIN_HOMEWORK_STORAGE_KEY, resolve));
+  }
+
+  async function stopAdminHomeworkBatch() {
+    const batch = await getStorage(ADMIN_HOMEWORK_STORAGE_KEY);
+    if (batch) {
+      batch.status = "stopped";
+      await setStorage(ADMIN_HOMEWORK_STORAGE_KEY, batch);
+      if (batch.mode === "background") {
+        chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "stop", storageKey: ADMIN_HOMEWORK_STORAGE_KEY });
+      }
+      const saved = await setStorage(ADMIN_HOMEWORK_LAST_RESULTS_KEY, {
+        results: batch.results,
+        finishedAt: Date.now(),
+        partial: true,
+        processedCount: Object.keys(batch.results).length,
+        totalCount: batch.queue.length
+      });
+      if (!saved) {
+        log("ОШИБКА: не удалось сохранить результаты «Отсутствует ДЗ» (не хватило места в storage).");
+      } else {
+        log(`[Отсутствует ДЗ] Остановлено. Успело собраться: ${Object.keys(batch.results).length} из ${batch.queue.length}.`);
+      }
+    }
+    await clearAdminHomeworkBatch();
+  }
+
+  async function getAdminHomeworkBatchState() {
+    return (await getStorage(ADMIN_HOMEWORK_STORAGE_KEY)) || null;
+  }
+
+  async function getLastMissingHomeworkOnlyResults() {
+    return (await getStorage(ADMIN_HOMEWORK_LAST_RESULTS_KEY)) || null;
+  }
+
+  // ---- Самый лёгкий resume из трёх: для «Отсутствует ДЗ» нужны только ----
+  // ---- расписание и homework_absences (см. findMissingHomeworkDates) — ----
+  // ---- не ждём ни марки, ни учеников, ни посещаемость, ни итоги. ----
+  async function resumeAdminHomeworkBatchIfRunning() {
+    const batch = await getStorage(ADMIN_HOMEWORK_STORAGE_KEY);
+    if (!batch || batch.status !== "running") return;
+
+    const journalId = currentAdminJournalIdFromQuery();
+    const item = batch.queue[batch.currentIndex];
+    if (!item || !journalId || String(item.id) !== String(journalId)) return;
+
+    item.status = "loading";
+    await setStorage(ADMIN_HOMEWORK_STORAGE_KEY, batch);
+
+    await Promise.all([
+      waitForAdminApiKind("schedule"),
+      waitForAdminApiKind("homeworkAbsences")
+    ]);
+
+    const freshCheck = await getStorage(ADMIN_HOMEWORK_STORAGE_KEY);
+    if (!freshCheck || freshCheck.status !== "running") {
+      log("[Отсутствует ДЗ] Сбор остановлен пользователем — не продолжаю.");
+      return;
+    }
+
+    const missingHomeworkDates = getMissingHomeworkDatesForCurrentJournal();
+
+    item.status = "done";
+    batch.results[journalId] = {
+      id: item.id,
+      subject: item.subject,
+      classLabel: item.classLabel,
+      classId: item.classId,
+      missingHomeworkDates,
+      capturedAt: Date.now()
+    };
+    log(`[Отсутствует ДЗ] ${item.classLabel} / ${item.subject}: ${missingHomeworkDates.length ? "отсутствует ДЗ — " + missingHomeworkDates.join(", ") : "ДЗ без пропусков"}`);
+
+    const nextIndex = batch.currentIndex + 1;
+    batch.currentIndex = nextIndex;
+    await setStorage(ADMIN_HOMEWORK_STORAGE_KEY, batch);
+
+    if (nextIndex >= batch.queue.length) {
+      batch.status = "done";
+      await setStorage(ADMIN_HOMEWORK_STORAGE_KEY, batch);
+      const saved = await setStorage(ADMIN_HOMEWORK_LAST_RESULTS_KEY, {
+        results: batch.results,
+        finishedAt: Date.now(),
+        partial: false,
+        processedCount: Object.keys(batch.results).length,
+        totalCount: batch.queue.length
+      });
+      if (!saved) {
+        batch.status = "error";
+        batch.errorMessage = "Не хватило места в storage для сохранения результатов. Попробуйте собрать меньше классов за раз.";
+        await setStorage(ADMIN_HOMEWORK_STORAGE_KEY, batch);
+        log("[Отсутствует ДЗ] ОШИБКА: не удалось сохранить результаты (не хватило места в storage).");
+        if (batch.mode === "background") {
+          chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance", storageKey: ADMIN_HOMEWORK_STORAGE_KEY });
+        }
+        return;
+      }
+      log(`[Отсутствует ДЗ] Готово. Журналов обработано: ${batch.queue.length}.`);
+      if (batch.mode === "background") {
+        chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance", storageKey: ADMIN_HOMEWORK_STORAGE_KEY });
+        await clearAdminHomeworkBatch();
+      }
+      return;
+    }
+
+    if (batch.mode === "background") {
+      chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance", storageKey: ADMIN_HOMEWORK_STORAGE_KEY });
+    }
+  }
+
   window.__MESH_HELPER_ADMIN_COLLECTOR__ = {
     isAdminJournalsPage,
     selectParallel,
@@ -1443,13 +1578,18 @@
     collectSelectedClasses,
     collectMissingHomeworkForSelectedClasses,
     collectFinalGradesForSelectedClasses,
+    collectMissingHomeworkOnlyForSelectedClasses,
     stopAdminBatch,
     stopAdminFinalsBatch,
+    stopAdminHomeworkBatch,
     getAdminBatchState,
     getAdminFinalsBatchState,
+    getAdminHomeworkBatchState,
     getLastMissingHomeworkResults,
     getLastFinalGradesResults,
+    getLastMissingHomeworkOnlyResults,
     downloadMissingHomeworkResultsCsv,
+    downloadMissingHomeworkOnlyResultsCsv,
     downloadFinalGradesWorkbook,
     downloadAdminParallelWorkbook
   };
@@ -1460,4 +1600,5 @@
 
   resumeAdminBatchIfRunning();
   resumeAdminFinalsBatchIfRunning();
+  resumeAdminHomeworkBatchIfRunning();
 })();
