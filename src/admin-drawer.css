@@ -1,0 +1,53 @@
+/* Общие стили для выезжающих панелей «Режим администратора» и
+   «Проверка итогов» — два разных drawer'а (разные #id), но один и тот
+   же визуальный язык, тот же, что и у «Заметки к классу» (notes-panel.css).
+   Контентные элементы внутри (пороги, пикер, кнопки, прогресс, статус)
+   переиспользуют уже существующие глобальные классы из class-panel.css —
+   здесь только сам контейнер drawer'а и его шапка. */
+
+.mhad-drawer {
+  position: fixed;
+  width: 360px;
+  display: none;
+  flex-direction: column;
+  background: var(--mh-surface);
+  border: 1px solid var(--mh-border);
+  border-radius: 14px;
+  box-shadow: -2px 0 14px rgba(var(--mh-ink-rgb), .18);
+  z-index: 1000000;
+  padding: 14px;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  color: var(--mh-text);
+  overflow-y: auto;
+}
+
+.mhad-drawer.mhad-open {
+  display: flex;
+}
+
+.mhad-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--mh-space-3);
+}
+
+.mhad-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.mhad-close {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--mh-text-muted);
+}
+
+.mhad-close:hover {
+  color: var(--mh-text);
+}

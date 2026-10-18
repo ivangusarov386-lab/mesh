@@ -50,13 +50,16 @@
         "src/class-workbook.js",
         "src/class-auto-loader.js",
         "src/notes-panel.js",
-        "src/admin-collector.js"
+        "src/admin-collector.js",
+        "src/admin-drawer.js",
+        "src/finals-check-drawer.js"
       ],
       "css": [
         "src/panel-tokens.css",
         "src/panel.css",
         "src/class-panel.css",
-        "src/notes-panel.css"
+        "src/notes-panel.css",
+        "src/admin-drawer.css"
       ],
       "run_at": "document_idle"
     }
