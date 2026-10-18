@@ -40,7 +40,7 @@
       <div class="mh-class-progress-track"><div id="mhfd-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>
       <div id="mhfd-progress-text" class="mh-class-progress-text">0%</div>
       <div id="mhfd-status" class="mh-class-status" data-tone="muted">Нажми «Загрузить список классов», отметь нужные и запусти сбор.</div>
-      <button id="mhfd-download" class="mh-class-export-btn mh-btn-secondary" type="button">Скачать (Проверка итогов)</button>
+      <button id="mhfd-download" class="mh-class-export-btn mh-btn-secondary" type="button">Скачать Excel (Проверка итогов)</button>
     `;
     document.body.appendChild(drawer);
 
@@ -251,7 +251,7 @@
       e.stopPropagation();
       const collector = window.__MESH_HELPER_ADMIN_COLLECTOR__;
       if (!collector) return;
-      const result = await collector.downloadFinalGradesCsv();
+      const result = await collector.downloadFinalGradesWorkbook();
       if (!result?.ok) setStatus(drawer, "Нечего выгружать — сначала запустите сбор.", "warn");
     });
   }

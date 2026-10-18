@@ -872,7 +872,21 @@
   // ---- «Период N» подстраивается под максимум, реально встреченный в этой ----
   // ---- выгрузке (гибко под четверти/триместры/что угодно), а не зашито ----
   // ---- заранее — у кого периодов меньше, там просто пустые ячейки справа. ----
-  async function downloadFinalGradesCsv() {
+  // ---- «Проверка итогов»: .xlsx, один лист на КАЖДЫЙ ПРЕДМЕТ (не на ----
+  // ---- класс+предмет — все классы, где ведётся этот предмет, собраны в ----
+  // ---- одном листе, класс указан отдельной колонкой). Плюс лист СВОД — ----
+  // ---- список проблем за ТЕКУЩИЙ период (последний реально захваченный ----
+  // ---- столбец «Период N» у конкретного журнала): итог отсутствует ИЛИ ----
+  // ---- не совпадает с тем, что даёт расчёт по среднему баллу и текущим ----
+  // ---- «Критериям округления итоговой» (тот же chrome.storage.sync ключ, ----
+  // ---- что в «Проверка итогов» на самой странице журнала). ----
+  async function downloadFinalGradesWorkbook() {
+    const workbook = window.__MESH_HELPER_CLASS_WORKBOOK__;
+    if (!workbook) {
+      log("Модуль class-workbook.js не загружен — обновите страницу.");
+      return { ok: false, reason: "no-workbook-module" };
+    }
+
     const stored = await getLastFinalGradesResults();
     const rows = Object.values(stored?.results || {});
     if (!rows.length) {
@@ -880,61 +894,81 @@
       return { ok: false, reason: "no-results" };
     }
 
-    let maxPeriods = 0;
+    const finalGradeRanges = await getFinalGradeRanges();
+
+    const bySubject = new Map();
     rows.forEach((journal) => {
-      (journal.finalGrades || []).forEach((entry) => {
-        maxPeriods = Math.max(maxPeriods, entry.periods?.length || 0);
+      if (!bySubject.has(journal.subject)) bySubject.set(journal.subject, []);
+      bySubject.get(journal.subject).push(journal);
+    });
+    const subjectNames = [...bySubject.keys()].sort((a, b) => a.localeCompare(b, "ru"));
+
+    const svodRows = [];
+    const subjectSheets = subjectNames.map((subject) => {
+      const journals = bySubject.get(subject).slice().sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ru"));
+
+      let maxPeriods = 0;
+      journals.forEach((journal) => {
+        (journal.finalGrades || []).forEach((entry) => {
+          maxPeriods = Math.max(maxPeriods, entry.periods?.length || 0);
+        });
       });
+      const periodHeaders = Array.from({ length: maxPeriods }, (unused, i) => `Период ${i + 1}`);
+      const HEADER = ["Класс", "ФИО", "Оценки", "Средний балл", ...periodHeaders, "Итог года"];
+
+      const sheetRows = [workbook.row(HEADER, () => "Header")];
+
+      journals.forEach((journal) => {
+        const students = journal.students || [];
+        const marks = journal.marks || [];
+        const byStudent = new Map((journal.finalGrades || []).map((entry) => [entry.studentId, entry]));
+
+        students.forEach((student) => {
+          const { count, avg } = averageForStudent(marks, student.id);
+          const entry = byStudent.get(student.id);
+          const periods = entry?.periods || [];
+          const periodCells = periodHeaders.map((label, i) => periods[i] || "");
+          sheetRows.push(workbook.row(
+            [journal.classLabel, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", ...periodCells, entry?.yearFinal || ""],
+            () => "Default"
+          ));
+
+          // «Текущий период» для СВОДа — последний столбец, реально
+          // захваченный у ЭТОГО журнала (periods.length ученика может
+          // отличаться от maxPeriods листа, если он короче остальных).
+          const currentPeriodValue = periods.length ? periods[periods.length - 1] : "";
+          const expected = count ? possibleFinal(avg, finalGradeRanges) : "";
+          const missing = !currentPeriodValue;
+          const incorrect = !missing && expected !== "" && String(currentPeriodValue) !== String(expected);
+          if (missing || incorrect) {
+            svodRows.push(workbook.row([
+              journal.classLabel,
+              subject,
+              student.name,
+              missing ? "Итог за текущий период не выставлен" : "Итог не совпадает с расчётным",
+              currentPeriodValue,
+              expected
+            ], () => "BadAbsence"));
+          }
+        });
+      });
+
+      return workbook.worksheet(subject, sheetRows);
     });
 
-    const periodHeaders = Array.from({ length: maxPeriods }, (unused, i) => `Период ${i + 1}`);
-    const headers = ["Класс", "Предмет", "Учитель", "ФИО", "Оценки", "Средний балл", ...periodHeaders, "Итог года"];
+    const svodHeader = ["Класс", "Предмет", "ФИО", "Проблема", "Выставлено", "Расчётный итог"];
+    const svodSheetRows = [workbook.row(svodHeader, () => "Header"), ...svodRows];
+    if (!svodRows.length) svodSheetRows.push(workbook.row(["", "", "Проблем не найдено.", "", "", ""], () => "Default"));
+    const svodSheet = workbook.worksheet("СВОД", svodSheetRows, { filterStartRow: 1 });
 
-    const sortedRows = rows
-      .slice()
-      .sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ru") || a.subject.localeCompare(b.subject, "ru"));
-
-    const csvRows = [];
-    sortedRows.forEach((journal) => {
-      const students = journal.students || [];
-      const marks = journal.marks || [];
-      const byStudent = new Map((journal.finalGrades || []).map((entry) => [entry.studentId, entry]));
-
-      students.forEach((student) => {
-        const { count, avg } = averageForStudent(marks, student.id);
-        const entry = byStudent.get(student.id);
-        const periods = entry?.periods || [];
-        const periodCells = periodHeaders.map((label, i) => periods[i] || "");
-        csvRows.push([
-          journal.classLabel,
-          journal.subject,
-          journal.teacher || "",
-          student.name,
-          gradesTextForStudent(marks, student.id),
-          count ? String(avg).replace(".", ",") : "",
-          ...periodCells,
-          entry?.yearFinal || ""
-        ]);
-      });
-    });
-
-    const csv = "﻿" + [headers, ...csvRows].map((row) => row.map(csvValue).join(";")).join("\n");
+    const allSheets = [svodSheet, ...subjectSheets];
     const date = new Date().toISOString().slice(0, 10);
     const partialSuffix = stored.partial ? `_partial_${stored.processedCount}of${stored.totalCount}` : "";
-    const filename = `mesh_admin_proverka_itogov${partialSuffix}_${date}.csv`;
+    const filename = `mesh_admin_proverka_itogov${partialSuffix}_${date}.xlsx`;
+    workbook.downloadWorkbook(filename, allSheets);
 
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-
-    log(`Экспортировано: ${csvRows.length} строк (${sortedRows.length} журналов) → ${filename}`);
-    return { ok: true, rows: csvRows.length, filename };
+    log(`Экспортировано: ${subjectSheets.length} предметов, проблем в СВОДе — ${svodRows.length} → ${filename}`);
+    return { ok: true, sheets: allSheets.length, problems: svodRows.length, filename };
   }
 
   // ---- Выгрузка .xlsx: один лист на журнал (класс+предмет), без общего ----
@@ -1416,7 +1450,7 @@
     getLastMissingHomeworkResults,
     getLastFinalGradesResults,
     downloadMissingHomeworkResultsCsv,
-    downloadFinalGradesCsv,
+    downloadFinalGradesWorkbook,
     downloadAdminParallelWorkbook
   };
 
