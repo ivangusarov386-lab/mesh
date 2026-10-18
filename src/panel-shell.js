@@ -57,7 +57,7 @@
         refreshAllClassesExportLabel(panel);
         runPendingPerStudentZipIfReady(panel);
       }
-      if (changes.meshHelperAdminBatch) refreshAdminExportLabel(panel);
+      if (changes.meshHelperAdminBatch || changes.meshHelperAdminFinalsBatch) refreshAdminExportLabel(panel);
     });
   }
 
