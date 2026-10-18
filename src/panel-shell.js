@@ -1000,8 +1000,8 @@
     });
   }
 
-  function setupAdminPickerConfirm(panel) {
-    const btn = panel.querySelector("#mh-admin-start-selected");
+  function setupAdminPickerStartButton(panel, buttonId, collectorMethod) {
+    const btn = panel.querySelector(`#${buttonId}`);
     if (!btn || btn.dataset.ready === "1") return;
     btn.dataset.ready = "1";
     btn.addEventListener("click", async (e) => {
@@ -1026,7 +1026,7 @@
       }
       hideAdminPicker(panel);
       setAdminStatus(panel, "Запускаем сбор в фоновой вкладке...", "muted");
-      const result = await collector.collectMissingHomeworkForSelectedClasses(selected);
+      const result = await collector[collectorMethod](selected);
       if (!result?.ok) {
         setAdminStatus(panel, "Не удалось запустить сбор.", "warn");
       } else {
@@ -1034,6 +1034,15 @@
         refreshAdminExportLabel(panel);
       }
     });
+  }
+
+  function setupAdminPickerConfirm(panel) {
+    // «Полный сбор» — для Excel/СВОД/Аналитики/ДЗ (нужны марки, расписание,
+    // посещаемость, ДЗ, мед.данные — ждёт всё это по каждому журналу).
+    setupAdminPickerStartButton(panel, "mh-admin-start-selected", "collectMissingHomeworkForSelectedClasses");
+    // «Только проверка итогов» — свой независимый, более лёгкий сбор
+    // (ждёт только оценки/ФИО/саму таблицу итогов, без лишнего).
+    setupAdminPickerStartButton(panel, "mh-admin-start-finals", "collectFinalGradesForSelectedClasses");
   }
 
   function setupAdminStop(panel) {
@@ -1045,7 +1054,13 @@
       e.stopPropagation();
       const collector = window.__MESH_HELPER_ADMIN_COLLECTOR__;
       if (!collector) return;
-      await collector.stopAdminBatch();
+      // Основной и «только итоги» сборы независимы — останавливаем тот
+      // (или те), что реально сейчас идёт.
+      const [mainBatch, finalsBatch] = await Promise.all([collector.getAdminBatchState(), collector.getAdminFinalsBatchState()]);
+      const tasks = [];
+      if (mainBatch?.status === "running") tasks.push(collector.stopAdminBatch());
+      if (finalsBatch?.status === "running") tasks.push(collector.stopAdminFinalsBatch());
+      await Promise.all(tasks);
       refreshAdminExportLabel(panel);
     });
   }
@@ -1089,27 +1104,48 @@
     }
   }
 
-  function refreshAdminExportLabel(panel) {
+  function showAdminBatchState(panel, batch, label) {
     const stopBtn = panel.querySelector("#mh-admin-stop");
+    if (stopBtn) stopBtn.style.display = batch.status === "running" ? "block" : "none";
+    if (batch.status === "running") {
+      const percent = batch.queue.length ? Math.round((batch.currentIndex / batch.queue.length) * 100) : 0;
+      setAdminProgress(panel, percent);
+      setAdminStatus(panel, `${label}Собрано ${batch.currentIndex} из ${batch.queue.length} журналов — идёт в фоновой вкладке.`, "muted");
+    } else if (batch.status === "done") {
+      setAdminProgress(panel, 100);
+      setAdminStatus(panel, `${label}Готово: собрано ${batch.queue.length} журналов. Можно скачивать.`, "ok");
+    } else if (batch.status === "error") {
+      setAdminProgress(panel, 100);
+      setAdminStatus(panel, batch.errorMessage || "Произошла ошибка сбора.", "warn");
+    }
+  }
+
+  // Основной сбор (для Excel/СВОД/Аналитики/ДЗ) и лёгкий сбор «только для
+  // проверки итогов» — независимые батчи, оба могут показывать прогресс в
+  // одном и том же статус-блоке. Приоритет — тому, что реально сейчас идёт;
+  // если оба завершены/ни один не запускался, показываем основной (как раньше).
+  function refreshAdminExportLabel(panel) {
     const collector = window.__MESH_HELPER_ADMIN_COLLECTOR__;
     if (!collector) return;
-    collector.getAdminBatchState().then((batch) => {
-      if (!batch) {
-        if (stopBtn) stopBtn.style.display = "none";
+    Promise.all([collector.getAdminBatchState(), collector.getAdminFinalsBatchState()]).then(([mainBatch, finalsBatch]) => {
+      if (mainBatch?.status === "running") {
+        showAdminBatchState(panel, mainBatch, "");
         return;
       }
-      if (stopBtn) stopBtn.style.display = batch.status === "running" ? "block" : "none";
-      if (batch.status === "running") {
-        const percent = batch.queue.length ? Math.round((batch.currentIndex / batch.queue.length) * 100) : 0;
-        setAdminProgress(panel, percent);
-        setAdminStatus(panel, `Собрано ${batch.currentIndex} из ${batch.queue.length} журналов — идёт в фоновой вкладке.`, "muted");
-      } else if (batch.status === "done") {
-        setAdminProgress(panel, 100);
-        setAdminStatus(panel, `Готово: собрано ${batch.queue.length} журналов. Можно скачивать.`, "ok");
-      } else if (batch.status === "error") {
-        setAdminProgress(panel, 100);
-        setAdminStatus(panel, batch.errorMessage || "Произошла ошибка сбора.", "warn");
+      if (finalsBatch?.status === "running") {
+        showAdminBatchState(panel, finalsBatch, "[Проверка итогов] ");
+        return;
       }
+      if (mainBatch) {
+        showAdminBatchState(panel, mainBatch, "");
+        return;
+      }
+      if (finalsBatch) {
+        showAdminBatchState(panel, finalsBatch, "[Проверка итогов] ");
+        return;
+      }
+      const stopBtn = panel.querySelector("#mh-admin-stop");
+      if (stopBtn) stopBtn.style.display = "none";
     });
   }
 
@@ -1238,7 +1274,8 @@
             <button id="mh-admin-load-classes" class="mh-class-export-btn" type="button">Загрузить список классов</button>
             <div id="mh-admin-picker" class="mh-allclasses-picker" style="display:none;">
               <div id="mh-admin-picker-list" class="mh-allclasses-picker-list"></div>
-              <button id="mh-admin-start-selected" class="mh-class-export-btn" type="button">Собрать выбранные</button>
+              <button id="mh-admin-start-selected" class="mh-class-export-btn" type="button">Собрать выбранные (полный сбор)</button>
+              <button id="mh-admin-start-finals" class="mh-class-export-btn mh-btn-secondary" type="button">Собрать только для проверки итогов</button>
             </div>
             <button id="mh-admin-stop" class="mh-class-stop-btn" type="button" style="display:none;">Остановить сбор</button>
             <div class="mh-class-progress-track"><div id="mh-admin-progress-fill" class="mh-class-progress-fill" style="width:0%"></div></div>

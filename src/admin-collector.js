@@ -250,6 +250,14 @@
     return startAdminBatchInBackground(journals);
   }
 
+  // Отдельный, независимый от основного, сбор только под «Проверку
+  // итогов» — свой storageKey (ADMIN_FINALS_STORAGE_KEY), поэтому не
+  // пересекается с уже идущим/завершённым основным сбором.
+  async function collectFinalGradesForSelectedClasses(selection) {
+    const journals = await collectSelectedClasses(selection);
+    return startAdminBatchInBackground(journals, ADMIN_FINALS_STORAGE_KEY, "Проверка итогов");
+  }
+
   // ---- «Отсутствует ДЗ»: дата урока считается «без ДЗ», если к ней ----
   // ---- не привязано ни одной записи homeworks_to_verify (см. выше), И ----
   // ---- при этом учитель явно НЕ нажимал «Без домашнего задания» — это ----
@@ -329,6 +337,12 @@
 
   const ADMIN_STORAGE_KEY = "meshHelperAdminBatch";
   const ADMIN_LAST_RESULTS_KEY = "meshHelperAdminLastResults";
+  // ---- Отдельный, лёгкий батч специально под «Проверку итогов» — свой ----
+  // ---- storage key, идёт независимо от основного сбора (Excel/СВОД/ ----
+  // ---- Аналитика/ДЗ). Не нужно гонять фоновую вкладку по всем журналам ----
+  // ---- ради полного набора данных, если нужны только оценки+итоги. ----
+  const ADMIN_FINALS_STORAGE_KEY = "meshHelperAdminFinalsBatch";
+  const ADMIN_FINALS_LAST_RESULTS_KEY = "meshHelperAdminFinalsLastResults";
   const ADMIN_MARKS_WAIT_TIMEOUT_MS = 15000;
 
   function currentAdminJournalIdFromQuery() {
@@ -741,7 +755,7 @@
     return 2;
   }
 
-  async function startAdminBatchInBackground(journals) {
+  async function startAdminBatchInBackground(journals, storageKey = ADMIN_STORAGE_KEY, label = "Отсутствует ДЗ") {
     if (!Array.isArray(journals) || !journals.length) {
       log("Пустой список журналов — нечего собирать.");
       return { ok: false, reason: "empty" };
@@ -754,11 +768,11 @@
       currentIndex: 0,
       results: {}
     };
-    await setStorage(ADMIN_STORAGE_KEY, batch);
-    log(`Старт в фоне (Отсутствует ДЗ): ${journals.length} журналов.`);
+    await setStorage(storageKey, batch);
+    log(`Старт в фоне (${label}): ${journals.length} журналов.`);
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(
-        { source: "mesh-helper-background", type: "start", journals, exportKind: "admin", storageKey: ADMIN_STORAGE_KEY },
+        { source: "mesh-helper-background", type: "start", journals, exportKind: "admin", storageKey },
         () => resolve({ ok: true, total: journals.length })
       );
     });
@@ -859,10 +873,10 @@
   // ---- выгрузке (гибко под четверти/триместры/что угодно), а не зашито ----
   // ---- заранее — у кого периодов меньше, там просто пустые ячейки справа. ----
   async function downloadFinalGradesCsv() {
-    const stored = await getLastMissingHomeworkResults();
+    const stored = await getLastFinalGradesResults();
     const rows = Object.values(stored?.results || {});
     if (!rows.length) {
-      log("Нечего выгружать — сначала запустите сбор.");
+      log("Нечего выгружать — сначала запустите сбор для проверки итогов.");
       return { ok: false, reason: "no-results" };
     }
 
@@ -897,7 +911,7 @@
           journal.teacher || "",
           student.name,
           gradesTextForStudent(marks, student.id),
-          count ? avg : "",
+          count ? String(avg).replace(".", ",") : "",
           ...periodCells,
           entry?.yearFinal || ""
         ]);
@@ -1258,6 +1272,125 @@
     }
   }
 
+  function clearAdminFinalsBatch() {
+    return new Promise((resolve) => chrome.storage.local.remove(ADMIN_FINALS_STORAGE_KEY, resolve));
+  }
+
+  async function stopAdminFinalsBatch() {
+    const batch = await getStorage(ADMIN_FINALS_STORAGE_KEY);
+    if (batch) {
+      batch.status = "stopped";
+      await setStorage(ADMIN_FINALS_STORAGE_KEY, batch);
+      if (batch.mode === "background") {
+        chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "stop", storageKey: ADMIN_FINALS_STORAGE_KEY });
+      }
+      const saved = await setStorage(ADMIN_FINALS_LAST_RESULTS_KEY, {
+        results: batch.results,
+        finishedAt: Date.now(),
+        partial: true,
+        processedCount: Object.keys(batch.results).length,
+        totalCount: batch.queue.length
+      });
+      if (!saved) {
+        log("ОШИБКА: не удалось сохранить результаты проверки итогов (не хватило места в storage).");
+      } else {
+        log(`[Проверка итогов] Остановлено. Успело собраться: ${Object.keys(batch.results).length} из ${batch.queue.length}.`);
+      }
+    }
+    await clearAdminFinalsBatch();
+  }
+
+  async function getAdminFinalsBatchState() {
+    return (await getStorage(ADMIN_FINALS_STORAGE_KEY)) || null;
+  }
+
+  async function getLastFinalGradesResults() {
+    return (await getStorage(ADMIN_FINALS_LAST_RESULTS_KEY)) || null;
+  }
+
+  // ---- Лёгкий resume для «Проверки итогов»: ждём только то, что реально ----
+  // ---- нужно — оценки, ФИО и саму таблицу с итогами. НЕ ждём расписание/ ----
+  // ---- посещаемость/ДЗ/мед.данные — они этой выгрузке не нужны, и их ----
+  // ---- ожидание только тормозило бы каждый журнал без всякой пользы. ----
+  async function resumeAdminFinalsBatchIfRunning() {
+    const batch = await getStorage(ADMIN_FINALS_STORAGE_KEY);
+    if (!batch || batch.status !== "running") return;
+
+    const journalId = currentAdminJournalIdFromQuery();
+    const item = batch.queue[batch.currentIndex];
+    if (!item || !journalId || String(item.id) !== String(journalId)) return;
+
+    item.status = "loading";
+    await setStorage(ADMIN_FINALS_STORAGE_KEY, batch);
+
+    const [found] = await Promise.all([
+      waitForAdminMarks(),
+      waitForAdminApiKind("studentProfiles"),
+      waitForFinalGradesDom()
+    ]);
+
+    const freshCheck = await getStorage(ADMIN_FINALS_STORAGE_KEY);
+    if (!freshCheck || freshCheck.status !== "running") {
+      log("[Проверка итогов] Сбор остановлен пользователем — не продолжаю.");
+      return;
+    }
+
+    const marks = found ? captureMarksForJournal(journalId) : [];
+    const students = captureStudentsForJournal();
+    const teacher = teacherNameForJournal(journalId);
+    const finalGrades = captureFinalGradesForJournal();
+
+    item.status = found ? "done" : "empty";
+    batch.results[journalId] = {
+      id: item.id,
+      subject: item.subject,
+      classLabel: item.classLabel,
+      classId: item.classId,
+      marks,
+      students,
+      teacher,
+      finalGrades,
+      capturedAt: Date.now()
+    };
+    log(`[Проверка итогов] ${item.classLabel} / ${item.subject}: учеников ${students.length}, итогов найдено в таблице — ${finalGrades.length} из ${students.length}`);
+
+    const nextIndex = batch.currentIndex + 1;
+    batch.currentIndex = nextIndex;
+    await setStorage(ADMIN_FINALS_STORAGE_KEY, batch);
+
+    if (nextIndex >= batch.queue.length) {
+      batch.status = "done";
+      await setStorage(ADMIN_FINALS_STORAGE_KEY, batch);
+      const saved = await setStorage(ADMIN_FINALS_LAST_RESULTS_KEY, {
+        results: batch.results,
+        finishedAt: Date.now(),
+        partial: false,
+        processedCount: Object.keys(batch.results).length,
+        totalCount: batch.queue.length
+      });
+      if (!saved) {
+        batch.status = "error";
+        batch.errorMessage = "Не хватило места в storage для сохранения результатов. Попробуйте собрать меньше классов за раз.";
+        await setStorage(ADMIN_FINALS_STORAGE_KEY, batch);
+        log("[Проверка итогов] ОШИБКА: не удалось сохранить результаты (не хватило места в storage).");
+        if (batch.mode === "background") {
+          chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance", storageKey: ADMIN_FINALS_STORAGE_KEY });
+        }
+        return;
+      }
+      log(`[Проверка итогов] Готово. Журналов обработано: ${batch.queue.length}.`);
+      if (batch.mode === "background") {
+        chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance", storageKey: ADMIN_FINALS_STORAGE_KEY });
+        await clearAdminFinalsBatch();
+      }
+      return;
+    }
+
+    if (batch.mode === "background") {
+      chrome.runtime.sendMessage({ source: "mesh-helper-background", type: "advance", storageKey: ADMIN_FINALS_STORAGE_KEY });
+    }
+  }
+
   window.__MESH_HELPER_ADMIN_COLLECTOR__ = {
     isAdminJournalsPage,
     selectParallel,
@@ -1275,9 +1408,13 @@
     listAllClasses,
     collectSelectedClasses,
     collectMissingHomeworkForSelectedClasses,
+    collectFinalGradesForSelectedClasses,
     stopAdminBatch,
+    stopAdminFinalsBatch,
     getAdminBatchState,
+    getAdminFinalsBatchState,
     getLastMissingHomeworkResults,
+    getLastFinalGradesResults,
     downloadMissingHomeworkResultsCsv,
     downloadFinalGradesCsv,
     downloadAdminParallelWorkbook
@@ -1288,4 +1425,5 @@
   }
 
   resumeAdminBatchIfRunning();
+  resumeAdminFinalsBatchIfRunning();
 })();
