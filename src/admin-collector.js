@@ -615,6 +615,70 @@
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
   }
 
+  // ---- «Проверка итогов»: итог за период (четверть/триместр — что угодно, ----
+  // ---- гибко по факту того, что отрисовано) и за год читаем из самой ----
+  // ---- таблицы журнала — тот же проверенный data-test-component-паттерн, ----
+  // ---- что уже использует hybrid-counter.js/final-control.js на живой ----
+  // ---- странице (markCell-<studentId>_... содержит настоящий ----
+  // ---- student_profile_id — сверено с API там же). Не берём из /final_marks: ----
+  // ---- этот ответ API ни разу не проверялся вживую, а гадать формат JSON ----
+  // ---- после истории с absence_reason_id рискованно. ----
+  function finalGradesRowCells(row) {
+    return [...(row?.children || [])].filter((el) => ["td", "th"].includes(el.tagName?.toLowerCase()));
+  }
+
+  function studentIdFromMarkRow(row) {
+    const cell = row?.querySelector?.('[data-test-component^="markCell-"]');
+    const attr = cell?.getAttribute?.("data-test-component") || "";
+    const m = attr.match(/^markCell-(\d+)_/);
+    return m ? m[1] : null;
+  }
+
+  function cellPlainText(cell) {
+    return (cell?.innerText || cell?.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
+  function waitForFinalGradesDom(timeoutMs = 10000) {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const check = () => {
+        if (document.querySelector('[data-test-component*="finalResult"], [data-test-component*="yearResult"]')) {
+          resolve(true);
+          return;
+        }
+        if (Date.now() - start > timeoutMs) {
+          resolve(false);
+          return;
+        }
+        setTimeout(check, 300);
+      };
+      check();
+    });
+  }
+
+  // Возвращает по каждому ученику строки с итогом в ячейках таблицы —
+  // periods (порядок слева направо = хронологический порядок периодов,
+  // сколько бы их ни было) и отдельно итог года.
+  function captureFinalGradesForJournal() {
+    const result = [];
+    document.querySelectorAll("tr").forEach((row) => {
+      const studentId = studentIdFromMarkRow(row);
+      if (!studentId) return;
+      const periods = [];
+      let yearFinal = "";
+      finalGradesRowCells(row).forEach((cell) => {
+        if (cell.querySelector('[data-test-component*="yearResult"]')) {
+          yearFinal = cellPlainText(cell);
+        } else if (cell.querySelector('[data-test-component*="finalResult"]')) {
+          periods.push(cellPlainText(cell));
+        }
+      });
+      if (!periods.length && !yearFinal) return;
+      result.push({ studentId, periods, yearFinal });
+    });
+    return result;
+  }
+
   // ---- Настраиваемые пороги — те же ключи chrome.storage.sync, что уже ----
   // ---- редактируются в панели у «Мой класс»/«Все классы»: значение, ----
   // ---- выставленное там, автоматически действует и здесь. ----
@@ -786,6 +850,77 @@
 
     log(`Экспортировано: ${rows.length} журналов → ${filename}`);
     return { ok: true, rows: rows.length, filename };
+  }
+
+  // ---- «Проверка итогов»: отдельная плоская CSV-выгрузка (как «Отсутствует ----
+  // ---- ДЗ») — та же уже собранная пачка результатов, без повторного обхода ----
+  // ---- журналов. Строка — ученик в конкретном предмете. Число колонок ----
+  // ---- «Период N» подстраивается под максимум, реально встреченный в этой ----
+  // ---- выгрузке (гибко под четверти/триместры/что угодно), а не зашито ----
+  // ---- заранее — у кого периодов меньше, там просто пустые ячейки справа. ----
+  async function downloadFinalGradesCsv() {
+    const stored = await getLastMissingHomeworkResults();
+    const rows = Object.values(stored?.results || {});
+    if (!rows.length) {
+      log("Нечего выгружать — сначала запустите сбор.");
+      return { ok: false, reason: "no-results" };
+    }
+
+    let maxPeriods = 0;
+    rows.forEach((journal) => {
+      (journal.finalGrades || []).forEach((entry) => {
+        maxPeriods = Math.max(maxPeriods, entry.periods?.length || 0);
+      });
+    });
+
+    const periodHeaders = Array.from({ length: maxPeriods }, (unused, i) => `Период ${i + 1}`);
+    const headers = ["Класс", "Предмет", "Учитель", "ФИО", "Оценки", "Средний балл", ...periodHeaders, "Итог года"];
+
+    const sortedRows = rows
+      .slice()
+      .sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ru") || a.subject.localeCompare(b.subject, "ru"));
+
+    const csvRows = [];
+    sortedRows.forEach((journal) => {
+      const students = journal.students || [];
+      const marks = journal.marks || [];
+      const byStudent = new Map((journal.finalGrades || []).map((entry) => [entry.studentId, entry]));
+
+      students.forEach((student) => {
+        const { count, avg } = averageForStudent(marks, student.id);
+        const entry = byStudent.get(student.id);
+        const periods = entry?.periods || [];
+        const periodCells = periodHeaders.map((label, i) => periods[i] || "");
+        csvRows.push([
+          journal.classLabel,
+          journal.subject,
+          journal.teacher || "",
+          student.name,
+          gradesTextForStudent(marks, student.id),
+          count ? avg : "",
+          ...periodCells,
+          entry?.yearFinal || ""
+        ]);
+      });
+    });
+
+    const csv = "﻿" + [headers, ...csvRows].map((row) => row.map(csvValue).join(";")).join("\n");
+    const date = new Date().toISOString().slice(0, 10);
+    const partialSuffix = stored.partial ? `_partial_${stored.processedCount}of${stored.totalCount}` : "";
+    const filename = `mesh_admin_proverka_itogov${partialSuffix}_${date}.csv`;
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+    log(`Экспортировано: ${csvRows.length} строк (${sortedRows.length} журналов) → ${filename}`);
+    return { ok: true, rows: csvRows.length, filename };
   }
 
   // ---- Выгрузка .xlsx: один лист на журнал (класс+предмет), без общего ----
@@ -1047,7 +1182,8 @@
       waitForAdminApiKind("homeworkAbsences"),
       waitForAdminApiKind("studentProfiles"),
       waitForAdminApiKind("attendances"),
-      waitForAdminApiKind("medicalRecommendations")
+      waitForAdminApiKind("medicalRecommendations"),
+      waitForFinalGradesDom()
     ]);
 
     const freshCheck = await getStorage(ADMIN_STORAGE_KEY);
@@ -1064,6 +1200,7 @@
     const heldLessons = countHeldLessonsForJournal(journalId);
     const students = captureStudentsForJournal();
     const teacher = teacherNameForJournal(journalId);
+    const finalGrades = captureFinalGradesForJournal();
 
     item.status = found ? "done" : "empty";
     batch.results[journalId] = {
@@ -1079,9 +1216,10 @@
       heldLessons,
       students,
       teacher,
+      finalGrades,
       capturedAt: Date.now()
     };
-    log(`${item.classLabel} / ${item.subject}: учеников ${students.length}, оценок ${marks.length}, ${missingHomeworkDates.length ? "отсутствует ДЗ — " + missingHomeworkDates.join(", ") : "ДЗ без пропусков"}`);
+    log(`${item.classLabel} / ${item.subject}: учеников ${students.length}, оценок ${marks.length}, ${missingHomeworkDates.length ? "отсутствует ДЗ — " + missingHomeworkDates.join(", ") : "ДЗ без пропусков"}, итогов найдено в таблице — ${finalGrades.length} из ${students.length} учеников`);
 
     const nextIndex = batch.currentIndex + 1;
     batch.currentIndex = nextIndex;
@@ -1141,6 +1279,7 @@
     getAdminBatchState,
     getLastMissingHomeworkResults,
     downloadMissingHomeworkResultsCsv,
+    downloadFinalGradesCsv,
     downloadAdminParallelWorkbook
   };
 

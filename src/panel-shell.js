@@ -1052,6 +1052,7 @@
 
   function setupAdminDownloads(panel) {
     const csvBtn = panel.querySelector("#mh-admin-download-csv");
+    const finalsCsvBtn = panel.querySelector("#mh-admin-download-finals-csv");
     const xlsxBtn = panel.querySelector("#mh-admin-download-xlsx");
     if (csvBtn && csvBtn.dataset.ready !== "1") {
       csvBtn.dataset.ready = "1";
@@ -1061,6 +1062,17 @@
         const collector = window.__MESH_HELPER_ADMIN_COLLECTOR__;
         if (!collector) return;
         const result = await collector.downloadMissingHomeworkResultsCsv();
+        if (!result?.ok) setAdminStatus(panel, "Нечего выгружать — сначала запустите сбор.", "warn");
+      });
+    }
+    if (finalsCsvBtn && finalsCsvBtn.dataset.ready !== "1") {
+      finalsCsvBtn.dataset.ready = "1";
+      finalsCsvBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const collector = window.__MESH_HELPER_ADMIN_COLLECTOR__;
+        if (!collector) return;
+        const result = await collector.downloadFinalGradesCsv();
         if (!result?.ok) setAdminStatus(panel, "Нечего выгружать — сначала запустите сбор.", "warn");
       });
     }
@@ -1233,6 +1245,7 @@
             <div id="mh-admin-progress-text" class="mh-class-progress-text">0%</div>
             <div id="mh-admin-export-status" class="mh-class-status" data-tone="muted">Нажми «Загрузить список классов», отметь нужные и запусти сбор.</div>
             <button id="mh-admin-download-csv" class="mh-class-export-btn mh-btn-secondary" type="button">Скачать CSV (Отсутствует ДЗ)</button>
+            <button id="mh-admin-download-finals-csv" class="mh-class-export-btn mh-btn-secondary" type="button">Скачать CSV (Проверка итогов)</button>
             <button id="mh-admin-download-xlsx" class="mh-class-export-btn mh-btn-secondary" type="button">Скачать Excel</button>
           </div>
         </div>`;
