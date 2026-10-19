@@ -309,12 +309,19 @@
     drawer.classList.add("mhad-open");
     positionDrawer(drawer);
     refreshState(drawer);
+    window.dispatchEvent(new CustomEvent("mesh-helper-drawer-opened", { detail: { id: DRAWER_ID } }));
   }
 
   function closeDrawer() {
     const drawer = document.getElementById(DRAWER_ID);
     if (drawer) drawer.classList.remove("mhad-open");
   }
+
+  // См. admin-drawer.js — drawer'ы независимы, но координируют взаимное
+  // закрытие через DOM-событие, чтобы не накладываться друг на друга.
+  window.addEventListener("mesh-helper-drawer-opened", (e) => {
+    if (e.detail && e.detail.id !== DRAWER_ID) closeDrawer();
+  });
 
   function toggleDrawer() {
     const drawer = document.getElementById(DRAWER_ID);

@@ -354,12 +354,21 @@
     positionDrawer(drawer);
     await loadThresholds(drawer);
     refreshState(drawer);
+    window.dispatchEvent(new CustomEvent("mesh-helper-drawer-opened", { detail: { id: DRAWER_ID } }));
   }
 
   function closeDrawer() {
     const drawer = document.getElementById(DRAWER_ID);
     if (drawer) drawer.classList.remove("mhad-open");
   }
+
+  // Три drawer'а независимы (разные файлы, разные storage key — см.
+  // CLAUDE.md), но визуально занимают одно и то же место слева от панели.
+  // Координация "открыл один — закрылся другой" идёт через DOM-событие,
+  // а не объединение логики.
+  window.addEventListener("mesh-helper-drawer-opened", (e) => {
+    if (e.detail && e.detail.id !== DRAWER_ID) closeDrawer();
+  });
 
   function toggleDrawer() {
     const drawer = document.getElementById(DRAWER_ID);
