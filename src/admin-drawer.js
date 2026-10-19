@@ -370,6 +370,10 @@
     if (e.detail && e.detail.id !== DRAWER_ID) closeDrawer();
   });
 
+  // Сворачивание основной панели в "таблетку" должно закрывать и этот
+  // drawer — иначе он остаётся висеть поверх свёрнутой панели.
+  window.addEventListener("mesh-helper-panel-collapsed", closeDrawer);
+
   function toggleDrawer() {
     const drawer = document.getElementById(DRAWER_ID);
     if (drawer && drawer.classList.contains("mhad-open")) closeDrawer();

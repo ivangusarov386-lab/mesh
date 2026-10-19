@@ -141,6 +141,12 @@
       collapsed = !collapsed;
       localStorage.setItem("meshHelperCollapsed", collapsed ? "1" : "0");
       apply();
+      // Сворачивание панели в "таблетку" должно закрывать все выезжающие
+      // drawer'ы (Режим администратора/Проверка итогов/Отсутствует ДЗ,
+      // заметки к классу) — иначе они остаются висеть поверх свёрнутой
+      // панели. Drawer'ы независимы (см. CLAUDE.md), поэтому координация —
+      // через DOM-событие, не прямой вызов их функций.
+      if (collapsed) window.dispatchEvent(new CustomEvent("mesh-helper-panel-collapsed"));
     });
   }
 

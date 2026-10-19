@@ -218,6 +218,10 @@
     else openDrawer();
   }
 
+  // Сворачивание основной панели в "таблетку" должно закрывать и этот
+  // drawer — иначе он остаётся висеть поверх свёрнутой панели.
+  window.addEventListener("mesh-helper-panel-collapsed", closeDrawer);
+
   function ensureToggleButton() {
     const panel = document.getElementById("mesh-helper-panel");
     if (!panel) return false;
