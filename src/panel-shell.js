@@ -938,13 +938,9 @@
             <button id="mh-open-memo" class="mh-class-export-btn mh-memo-btn" type="button">Служебная записка</button>
           </div>
         </div>
-        <div class="mh-section mh-admin-export" id="mh-admin-export" style="display:none;">
+        <div class="mh-section mh-admin-group" id="mh-admin-group" style="display:none;">
           <button id="mh-admin-open" class="mh-class-toggle" type="button"><span><svg class="mh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg> Режим администратора</span><span class="mh-class-arrow">▸</span></button>
-        </div>
-        <div class="mh-section mh-finals-export" id="mh-finals-export" style="display:none;">
           <button id="mh-finals-open" class="mh-class-toggle" type="button"><span><svg class="mh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg> Проверка итогов</span><span class="mh-class-arrow">▸</span></button>
-        </div>
-        <div class="mh-section mh-homework-export" id="mh-homework-export" style="display:none;">
           <button id="mh-homework-open" class="mh-class-toggle" type="button"><span><svg class="mh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9.5 12.5 5 5"></path><path d="m14.5 12.5-5 5"></path></svg> Отсутствует ДЗ</span><span class="mh-class-arrow">▸</span></button>
         </div>`;
       document.body.appendChild(panel);

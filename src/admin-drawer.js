@@ -13,7 +13,7 @@
 
   const DRAWER_ID = "mesh-helper-admin-drawer";
   const TOGGLE_ID = "mh-admin-open";
-  const SECTION_ID = "mh-admin-export";
+  const SECTION_ID = "mh-admin-group";
 
   function isAdminJournalsListPage() {
     return location.pathname.startsWith("/educationmanagement/manage/journals") && !location.pathname.includes("/group");

@@ -1,11 +1,18 @@
 .mh-class-export,
 .mh-allclasses-export,
-.mh-admin-export {
+.mh-admin-group {
   margin-top: var(--mh-space-5);
   padding: 12px;
   border: 1px solid var(--mh-border);
   border-radius: 12px;
   background: var(--mh-surface-muted);
+}
+
+/* Три кнопки-входа («Режим администратора»/«Проверка итогов»/
+   «Отсутствует ДЗ») теперь в одной общей плашке вместо трёх отдельных —
+   нужен только отступ между ними внутри, а не margin каждой секции. */
+.mh-admin-group .mh-class-toggle + .mh-class-toggle {
+  margin-top: var(--mh-space-3);
 }
 
 .mh-class-toggle {

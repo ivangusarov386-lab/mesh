@@ -13,7 +13,7 @@
 
   const DRAWER_ID = "mesh-helper-homework-drawer";
   const TOGGLE_ID = "mh-homework-open";
-  const SECTION_ID = "mh-homework-export";
+  const SECTION_ID = "mh-admin-group";
 
   function isAdminJournalsListPage() {
     return location.pathname.startsWith("/educationmanagement/manage/journals") && !location.pathname.includes("/group");
