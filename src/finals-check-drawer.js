@@ -14,6 +14,13 @@
   const TOGGLE_ID = "mh-finals-open";
   const SECTION_ID = "mh-admin-group";
 
+  const DEFAULT_FINAL_GRADE_RANGES = {
+    2: { from: 1, to: 2.59 },
+    3: { from: 2.6, to: 3.59 },
+    4: { from: 3.6, to: 4.59 },
+    5: { from: 4.6, to: 5 }
+  };
+
   function isAdminJournalsListPage() {
     return location.pathname.startsWith("/educationmanagement/manage/journals") && !location.pathname.includes("/group");
   }
@@ -31,6 +38,16 @@
         <button class="mhad-close" type="button" aria-label="Закрыть">×</button>
       </div>
       <div class="mhn-subtitle">Текущие оценки, средний балл и итоги за период/год по выбранным классам — отдельно от общего сбора, без лишнего ожидания.</div>
+      <div class="mh-final-criteria">
+        <div class="mh-final-criteria-title">Критерии округления итоговой (по ним в СВОДе определяется «итог не совпадает с расчётным»)</div>
+        <div class="mh-final-periods-row"><label for="mhfd-academic-periods" class="mh-final-grade-label">Учебных периодов в году</label><select id="mhfd-academic-periods"><option value="4">4 (четверти)</option><option value="3">3 (триместры)</option><option value="2">2 (полугодия)</option></select></div>
+        <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 2</span><input class="mh-final-from" data-grade="2" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="2" type="number" step="0.01" min="1" max="5"></div>
+        <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 3</span><input class="mh-final-from" data-grade="3" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="3" type="number" step="0.01" min="1" max="5"></div>
+        <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 4</span><input class="mh-final-from" data-grade="4" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="4" type="number" step="0.01" min="1" max="5"></div>
+        <div class="mh-final-criteria-row"><span class="mh-final-grade-label">Оценка 5</span><input class="mh-final-from" data-grade="5" type="number" step="0.01" min="1" max="5"><span class="mh-final-dash">—</span><input class="mh-final-to" data-grade="5" type="number" step="0.01" min="1" max="5"></div>
+        <button id="mhfd-final-criteria-save" class="mh-class-export-btn mh-btn-secondary" type="button">Сохранить критерии</button>
+        <div id="mhfd-final-criteria-status" class="mh-class-status" data-tone="muted"></div>
+      </div>
       <button id="mhfd-load-classes" class="mh-class-export-btn" type="button">Загрузить список классов</button>
       <div id="mhfd-picker" class="mh-allclasses-picker" style="display:none;">
         <div id="mhfd-picker-list" class="mh-allclasses-picker-list"></div>
@@ -45,17 +62,69 @@
     document.body.appendChild(drawer);
 
     drawer.querySelector(".mhad-close").addEventListener("click", closeDrawer);
+    setupFinalCriteria(drawer);
     setupLoadClasses(drawer);
     setupStartSelected(drawer);
     setupStop(drawer);
     setupDownload(drawer);
-    [...drawer.querySelectorAll("input")].forEach((input) => {
+    [...drawer.querySelectorAll("input, select")].forEach((input) => {
       ["click", "mousedown", "mouseup", "pointerdown", "pointerup"].forEach((eventName) => {
         input.addEventListener(eventName, (e) => e.stopPropagation());
       });
     });
 
     return drawer;
+  }
+
+  // Та же логика и те же chrome.storage.sync-ключи (finalGradeRanges/
+  // academicPeriodsCount), что и у «Критериев округления итоговой» в
+  // основной панели («Проверка оценок» → «Проверка итогов») — настройка
+  // общая, просто теперь редактируется и отсюда тоже, раз именно эта
+  // выгрузка использует её для подсветки проблем в СВОДе.
+  function setupFinalCriteria(drawer) {
+    const box = drawer.querySelector(".mh-final-criteria");
+    const periodsSelect = drawer.querySelector("#mhfd-academic-periods");
+    const saveBtn = drawer.querySelector("#mhfd-final-criteria-save");
+    const status = drawer.querySelector("#mhfd-final-criteria-status");
+    if (!box) return;
+
+    chrome.storage.sync.get(["finalGradeRanges", "academicPeriodsCount"], (data) => {
+      const ranges = data.finalGradeRanges || DEFAULT_FINAL_GRADE_RANGES;
+      [2, 3, 4, 5].forEach((grade) => {
+        const range = ranges[grade] || DEFAULT_FINAL_GRADE_RANGES[grade];
+        const fromInput = box.querySelector(`.mh-final-from[data-grade="${grade}"]`);
+        const toInput = box.querySelector(`.mh-final-to[data-grade="${grade}"]`);
+        if (fromInput) fromInput.value = range.from;
+        if (toInput) toInput.value = range.to;
+      });
+      if (periodsSelect) periodsSelect.value = [2, 3, 4].includes(data.academicPeriodsCount) ? data.academicPeriodsCount : 4;
+    });
+
+    if (saveBtn) {
+      saveBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const ranges = {};
+        [2, 3, 4, 5].forEach((grade) => {
+          const fromInput = box.querySelector(`.mh-final-from[data-grade="${grade}"]`);
+          const toInput = box.querySelector(`.mh-final-to[data-grade="${grade}"]`);
+          const from = Number(fromInput?.value);
+          const to = Number(toInput?.value);
+          ranges[grade] = {
+            from: Number.isFinite(from) ? from : DEFAULT_FINAL_GRADE_RANGES[grade].from,
+            to: Number.isFinite(to) ? to : DEFAULT_FINAL_GRADE_RANGES[grade].to
+          };
+        });
+        const periodsValue = Number(periodsSelect?.value);
+        const periodsCount = [2, 3, 4].includes(periodsValue) ? periodsValue : 4;
+        chrome.storage.sync.set({ finalGradeRanges: ranges, academicPeriodsCount: periodsCount }, () => {
+          if (status) {
+            status.textContent = "Критерии сохранены.";
+            status.dataset.tone = "ok";
+          }
+        });
+      });
+    }
   }
 
   function setStatus(drawer, message, tone) {
