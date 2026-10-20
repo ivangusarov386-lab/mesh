@@ -355,15 +355,27 @@
   // ---- homework_absences, которые реально нужны для этой проверки. ----
   const ADMIN_HOMEWORK_STORAGE_KEY = "meshHelperAdminHomeworkBatch";
   const ADMIN_HOMEWORK_LAST_RESULTS_KEY = "meshHelperAdminHomeworkLastResults";
-  // ---- Тайминги ожидания API сокращены (было 15000/12000/10000 + grace ----
-  // ---- 1200мс) — при 170 журналах полный сбор занимал ~час, потому что ----
-  // ---- Promise.all ждёт максимум из всех таймаутов НА КАЖДЫЙ журнал, и ----
-  // ---- почти всегда хотя бы один из параллельно ожидаемых видов данных ----
-  // ---- не укладывался в быстрое событие и доходил до fallback. Если после ----
-  // ---- сокращения где-то начнёт теряться конкретный вид данных (видно по ----
-  // ---- логам: count=0 там, где данные реально есть) — не увеличивать все ----
-  // ---- таймауты обратно, а разобраться точечно с этим одним видом. ----
-  const ADMIN_MARKS_WAIT_TIMEOUT_MS = 8000;
+  // ---- Тайминги ожидания API — двухступенчатые ("подстраховка"). ----
+  // ---- В обычном случае (данные реально пришли) любой из waitFor* ниже ----
+  // ---- резолвится СРАЗУ по событию mesh-helper-api-updated/marks-updated —
+  // ---- величина таймаута тут вообще не влияет на скорость, это только
+  // ---- потолок на случай "событие не пришло". Поэтому: сначала короткое
+  // ---- FAST-окно (быстро сдаёмся, если страница в принципе не планирует
+  // ---- прислать этот вид данных) — а если к концу FAST-окна данных всё ещё
+  // ---- нет, это не обязательно "данных нет", а может быть просто медленная
+  // ---- сеть/сервер — даём ещё EXTRA-окно, прежде чем окончательно сдаться.
+  // ---- Слушатель событий всё это время не снимается, поэтому если ответ
+  // ---- придёт даже в последнюю секунду EXTRA-окна — он не пропадёт.
+  // ---- Итоговый потолок (FAST+EXTRA) специально равен прежним хорошо
+  // ---- проверенным значениям (15000/12000/10000) — на случай "сегодня
+  // ---- скачалось, а завтра страница дольше открывалась" данные не теряются,
+  // ---- а типичный быстрый журнал как и раньше укладывается в FAST-окно. ----
+  const ADMIN_MARKS_FAST_WAIT_MS = 8000;
+  const ADMIN_MARKS_EXTRA_WAIT_MS = 7000;
+  const API_KIND_FAST_WAIT_MS = 6000;
+  const API_KIND_EXTRA_WAIT_MS = 6000;
+  const FINAL_DOM_FAST_WAIT_MS = 6000;
+  const FINAL_DOM_EXTRA_WAIT_MS = 4000;
 
   function currentAdminJournalIdFromQuery() {
     return new URLSearchParams(location.search).get("targetGroupId");
@@ -386,7 +398,7 @@
     });
   }
 
-  function waitForAdminMarks() {
+  function waitForAdminMarks(fastMs = ADMIN_MARKS_FAST_WAIT_MS, extraMs = ADMIN_MARKS_EXTRA_WAIT_MS) {
     return new Promise((resolve) => {
       let done = false;
       const finish = (found) => {
@@ -401,7 +413,13 @@
         finish(true);
         return;
       }
-      setTimeout(() => finish(false), ADMIN_MARKS_WAIT_TIMEOUT_MS);
+      // FAST-окно истекло без события — не сдаёмся сразу (см. комментарий
+      // у констант выше), даём ещё EXTRA-окно: слушатель onUpdate всё ещё
+      // активен и зарезолвит finish(true) сам, если марки всё же придут.
+      setTimeout(() => {
+        if (done) return;
+        setTimeout(() => finish(false), extraMs);
+      }, fastMs);
     });
   }
 
@@ -409,7 +427,7 @@
   // более медленным запросом, чем оценки — дожидаться только marks недостаточно
   // (проверено вживую: при быстром фоновом обходе расписание начала сентября
   // не успевало накопиться, и результат получался ложно пустым).
-  function waitForAdminApiKind(kind, fallbackMs = 6000) {
+  function waitForAdminApiKind(kind, fastMs = API_KIND_FAST_WAIT_MS, extraMs = API_KIND_EXTRA_WAIT_MS) {
     const GRACE_MS = 500;
     return new Promise((resolve) => {
       let done = false;
@@ -428,7 +446,13 @@
         setTimeout(finish, GRACE_MS);
         return;
       }
-      setTimeout(finish, fallbackMs);
+      // Та же подстраховка, что в waitForAdminMarks — FAST-окно для обычного
+      // случая, EXTRA-окно на случай медленной страницы, событие по-прежнему
+      // слушается всё это время.
+      setTimeout(() => {
+        if (done) return;
+        setTimeout(finish, extraMs);
+      }, fastMs);
     });
   }
 
@@ -672,7 +696,12 @@
     return (cell?.innerText || cell?.textContent || "").replace(/\s+/g, " ").trim();
   }
 
-  function waitForFinalGradesDom(timeoutMs = 6000) {
+  // Это просто поллинг DOM (не событие) — резолвится сразу, как только
+  // появится нужный атрибут, независимо от потолка ниже. Потолок —
+  // FAST+EXTRA, тот же принцип "подстраховки", что у waitForAdminMarks/
+  // waitForAdminApiKind: обычный журнал укладывается в FAST, а потолок на
+  // случай медленной отрисовки восстановлен до прежнего значения (10000).
+  function waitForFinalGradesDom(timeoutMs = FINAL_DOM_FAST_WAIT_MS + FINAL_DOM_EXTRA_WAIT_MS) {
     return new Promise((resolve) => {
       const start = Date.now();
       const check = () => {
