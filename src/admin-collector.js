@@ -355,7 +355,15 @@
   // ---- homework_absences, которые реально нужны для этой проверки. ----
   const ADMIN_HOMEWORK_STORAGE_KEY = "meshHelperAdminHomeworkBatch";
   const ADMIN_HOMEWORK_LAST_RESULTS_KEY = "meshHelperAdminHomeworkLastResults";
-  const ADMIN_MARKS_WAIT_TIMEOUT_MS = 15000;
+  // ---- Тайминги ожидания API сокращены (было 15000/12000/10000 + grace ----
+  // ---- 1200мс) — при 170 журналах полный сбор занимал ~час, потому что ----
+  // ---- Promise.all ждёт максимум из всех таймаутов НА КАЖДЫЙ журнал, и ----
+  // ---- почти всегда хотя бы один из параллельно ожидаемых видов данных ----
+  // ---- не укладывался в быстрое событие и доходил до fallback. Если после ----
+  // ---- сокращения где-то начнёт теряться конкретный вид данных (видно по ----
+  // ---- логам: count=0 там, где данные реально есть) — не увеличивать все ----
+  // ---- таймауты обратно, а разобраться точечно с этим одним видом. ----
+  const ADMIN_MARKS_WAIT_TIMEOUT_MS = 8000;
 
   function currentAdminJournalIdFromQuery() {
     return new URLSearchParams(location.search).get("targetGroupId");
@@ -401,8 +409,8 @@
   // более медленным запросом, чем оценки — дожидаться только marks недостаточно
   // (проверено вживую: при быстром фоновом обходе расписание начала сентября
   // не успевало накопиться, и результат получался ложно пустым).
-  function waitForAdminApiKind(kind, fallbackMs = 12000) {
-    const GRACE_MS = 1200;
+  function waitForAdminApiKind(kind, fallbackMs = 6000) {
+    const GRACE_MS = 500;
     return new Promise((resolve) => {
       let done = false;
       const finish = () => {
@@ -664,7 +672,7 @@
     return (cell?.innerText || cell?.textContent || "").replace(/\s+/g, " ").trim();
   }
 
-  function waitForFinalGradesDom(timeoutMs = 10000) {
+  function waitForFinalGradesDom(timeoutMs = 6000) {
     return new Promise((resolve) => {
       const start = Date.now();
       const check = () => {
@@ -995,11 +1003,17 @@
     return { ok: true, sheets: allSheets.length, problems: svodRows.length, filename };
   }
 
-  // ---- Выгрузка .xlsx: один лист на журнал (класс+предмет), без общего ----
-  // ---- листа «Ученик» (по просьбе — это именно его явно не хотели видеть ----
-  // ---- в режиме администратора). Пороги среднего балла/Н% и диапазоны ----
-  // ---- итоговых — те же настраиваемые значения, что в «Мой класс». ----
-  // ---- Риск академической задолженности подсвечивает ВСЮ строку целиком. ----
+  // ---- Выгрузка .xlsx: один лист на КАЖДЫЙ ПРЕДМЕТ (не на класс+предмет — ----
+  // ---- все классы, где ведётся этот предмет, собраны в одном листе, класс ----
+  // ---- указан отдельной колонкой) — тот же принцип, что уже в «Проверке ----
+  // ---- итогов» (downloadFinalGradesWorkbook). Раньше был лист на каждую ----
+  // ---- пару класс+предмет — при 8 классах и 21 предмете это десятки ----
+  // ---- листов, неудобно листать и сравнивать один предмет между классами. ----
+  // ---- Пороги среднего балла/Н% и диапазоны итоговых — те же настраиваемые ----
+  // ---- значения, что в «Мой класс». Риск академической задолженности ----
+  // ---- подсвечивает ВСЮ строку целиком. Сводная шапка над таблицей теперь ----
+  // ---- считается по ВСЕМ классам этого предмета вместе (а не по одному ----
+  // ---- классу, как раньше) — разбивка по классам уже есть в «Аналитике». ----
 
   async function downloadAdminParallelWorkbook() {
     const workbook = window.__MESH_HELPER_CLASS_WORKBOOK__;
@@ -1021,58 +1035,71 @@
     const finalGradeRanges = await getFinalGradeRanges();
 
     const HEADER = [
-      "№", "ФИО", "Оценки", "Средний балл", "Количество оценок", "Уроков проведено",
+      "Класс", "ФИО", "Оценки", "Средний балл", "Количество оценок", "Уроков проведено",
       "Н по факту", "Н по болезни", "Н % по факту", "Расчётный итог",
       "Риск академической задолженности", "ДЗ отсутствие", "Учитель"
     ];
 
     rows.sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ru") || a.subject.localeCompare(b.subject, "ru"));
 
-    const sheets = rows.map((journal) => {
-      const students = journal.students || [];
-      const marks = journal.marks || [];
-      const attendances = journal.attendances || [];
-      const medicalRecommendations = journal.medicalRecommendations || [];
-      const lessonDates = journal.lessonDates || [];
-      const heldLessons = journal.heldLessons || 0;
-      const missingText = journal.missingHomeworkDates?.length ? journal.missingHomeworkDates.join(", ") : "";
+    const bySubject = new Map();
+    rows.forEach((journal) => {
+      if (!bySubject.has(journal.subject)) bySubject.set(journal.subject, []);
+      bySubject.get(journal.subject).push(journal);
+    });
+    const subjectNames = [...bySubject.keys()].sort((a, b) => a.localeCompare(b, "ru"));
+
+    const sheets = subjectNames.map((subject) => {
+      const journals = bySubject.get(subject).slice().sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ru"));
 
       const studentRows = [];
       const overallAvgGrades = [];
       let overallGradeCount = 0;
       let overallRiskCount = 0;
-      students.forEach((student, index) => {
-        const { count, avg } = averageForStudent(marks, student.id);
-        const { absences, illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons, medicalRecommendations, lessonDates);
-        const avgRisk = count > 0 && avg <= problemAvgThreshold;
-        const absenceRisk = heldLessons > 0 && percent >= absencePercentThreshold;
-        const academicRisk = avgRisk || absenceRisk ? "Да" : "Нет";
-        if (count) overallAvgGrades.push(avg);
-        overallGradeCount += count;
-        if (academicRisk === "Да") overallRiskCount += 1;
-        studentRows.push(workbook.row(
-          [
-            index + 1,
-            student.name,
-            gradesTextForStudent(marks, student.id),
-            count ? avg : "",
-            count,
-            heldLessons,
-            absences,
-            illnessAbsences,
-            `${percent}%`,
-            count ? possibleFinal(avg, finalGradeRanges) : "",
-            academicRisk,
-            missingText,
-            journal.teacher || ""
-          ],
-          () => (academicRisk === "Да" ? "BadAbsence" : "Default")
-        ));
+
+      journals.forEach((journal) => {
+        const students = journal.students || [];
+        const marks = journal.marks || [];
+        const attendances = journal.attendances || [];
+        const medicalRecommendations = journal.medicalRecommendations || [];
+        const lessonDates = journal.lessonDates || [];
+        const heldLessons = journal.heldLessons || 0;
+        const missingText = journal.missingHomeworkDates?.length ? journal.missingHomeworkDates.join(", ") : "";
+
+        students.forEach((student) => {
+          const { count, avg } = averageForStudent(marks, student.id);
+          const { absences, illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons, medicalRecommendations, lessonDates);
+          const avgRisk = count > 0 && avg <= problemAvgThreshold;
+          const absenceRisk = heldLessons > 0 && percent >= absencePercentThreshold;
+          const academicRisk = avgRisk || absenceRisk ? "Да" : "Нет";
+          if (count) overallAvgGrades.push(avg);
+          overallGradeCount += count;
+          if (academicRisk === "Да") overallRiskCount += 1;
+          studentRows.push(workbook.row(
+            [
+              journal.classLabel,
+              student.name,
+              gradesTextForStudent(marks, student.id),
+              count ? avg : "",
+              count,
+              heldLessons,
+              absences,
+              illnessAbsences,
+              `${percent}%`,
+              count ? possibleFinal(avg, finalGradeRanges) : "",
+              academicRisk,
+              missingText,
+              journal.teacher || ""
+            ],
+            () => (academicRisk === "Да" ? "BadAbsence" : "Default")
+          ));
+        });
       });
 
       // ---- Сводная шапка над таблицей: общий средний балл, общее кол-во ----
-      // ---- оценок и общее кол-во АЗ по классу — каждое значение стоит ровно ----
-      // ---- над своим столбцом (Средний балл / Количество оценок / Риск). ----
+      // ---- оценок и общее кол-во АЗ по ПРЕДМЕТУ (все классы вместе) — ----
+      // ---- каждое значение стоит ровно над своим столбцом (Средний балл / ----
+      // ---- Количество оценок / Риск); разбивка по классам — в «Аналитике». ----
       const overallAvg = overallAvgGrades.length
         ? Math.round((overallAvgGrades.reduce((sum, value) => sum + value, 0) / overallAvgGrades.length) * 100) / 100
         : "";
@@ -1093,7 +1120,7 @@
         ...studentRows
       ];
 
-      return workbook.worksheet(`${journal.classLabel} ${journal.subject}`, sheetRows, { freezeRows: 3, filterStartRow: 3 });
+      return workbook.worksheet(subject, sheetRows, { freezeRows: 3, filterStartRow: 3 });
     });
 
     // ---- СВОД: проблемные ученики по всем собранным журналам, с учителем ----
@@ -1233,7 +1260,7 @@
 
     const allSheets = [analyticsSheet, svodSheet, ...sheets];
     workbook.downloadWorkbook(filename, allSheets, { paletteCount: analyticsSubjects.length });
-    log(`Экспортировано: ${sheets.length} журналов + Аналитика + СВОД → ${filename}`);
+    log(`Экспортировано: ${sheets.length} предметов (${rows.length} журналов) + Аналитика + СВОД → ${filename}`);
     return { ok: true, sheets: allSheets.length, filename };
   }
 
@@ -1248,7 +1275,7 @@
     item.status = "loading";
     await setStorage(ADMIN_STORAGE_KEY, batch);
 
-    const [found] = await Promise.all([
+    await Promise.all([
       waitForAdminMarks(),
       waitForAdminApiKind("schedule"),
       waitForAdminApiKind("homeworkAbsences"),
@@ -1265,7 +1292,14 @@
     }
 
     const missingHomeworkDates = getMissingHomeworkDatesForCurrentJournal();
-    const marks = found ? captureMarksForJournal(journalId) : [];
+    // ---- Марки берём из текущего состояния __MESH_HELPER_API__ независимо ----
+    // ---- от того, успел ли "mesh-helper-marks-updated" выстрелить ДО ----
+    // ---- истечения таймаута — Promise.all всё равно ждёт самый долгий из ----
+    // ---- остальных видов данных, и к этому моменту марки чаще всего уже ----
+    // ---- реально пришли, просто чуть позже своего конкретного таймаута. ----
+    // ---- Раньше это "found ? ... : []" молча выбрасывало реально собранные ----
+    // ---- оценки у отдельных журналов (баг: "данные есть, но не собрались"). ----
+    const marks = captureMarksForJournal(journalId);
     const attendances = window.__MESH_HELPER_API__?.attendances || [];
     const medicalRecommendations = window.__MESH_HELPER_API__?.medicalRecommendations || [];
     const lessonDates = captureLessonDatesForJournal(journalId);
@@ -1274,7 +1308,7 @@
     const teacher = teacherNameForJournal(journalId);
     const finalGrades = captureFinalGradesForJournal();
 
-    item.status = found ? "done" : "empty";
+    item.status = marks.length ? "done" : "empty";
     batch.results[journalId] = {
       id: item.id,
       subject: item.subject,
@@ -1381,7 +1415,7 @@
     item.status = "loading";
     await setStorage(ADMIN_FINALS_STORAGE_KEY, batch);
 
-    const [found] = await Promise.all([
+    await Promise.all([
       waitForAdminMarks(),
       waitForAdminApiKind("studentProfiles"),
       waitForFinalGradesDom()
@@ -1393,12 +1427,12 @@
       return;
     }
 
-    const marks = found ? captureMarksForJournal(journalId) : [];
+    const marks = captureMarksForJournal(journalId);
     const students = captureStudentsForJournal();
     const teacher = teacherNameForJournal(journalId);
     const finalGrades = captureFinalGradesForJournal();
 
-    item.status = found ? "done" : "empty";
+    item.status = marks.length ? "done" : "empty";
     batch.results[journalId] = {
       id: item.id,
       subject: item.subject,
