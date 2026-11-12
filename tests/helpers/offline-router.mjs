@@ -27,13 +27,23 @@ export function resolveFixture(urlText, method = 'GET') {
   return null;
 }
 
-export async function installOfflineRoutes(context) {
+export async function installOfflineRoutes(context, { extensionId } = {}) {
+  if (extensionId !== undefined && !/^[a-p]{32}$/.test(extensionId)) {
+    throw new Error('Expected the tested extension ID from its verified worker URL');
+  }
+  const ownHookUrl = extensionId ? `chrome-extension://${extensionId}/src/marks-api-hook.js` : null;
   const blocked = [];
   const requests = [];
   await context.route('**/*', async route => {
     const request = route.request();
     const url = request.url();
     requests.push({ method: request.method(), url });
+    // This is the packaged WAR loaded by the real bridge, not external traffic.
+    // Keep native Chrome resource/CSP checks; never continue HTTP(S) or other IDs.
+    if (ownHookUrl && request.method() === 'GET' && url === ownHookUrl) {
+      await route.continue();
+      return;
+    }
     const fixture = resolveFixture(url, request.method());
     if (!fixture) {
       blocked.push({ method: request.method(), url });

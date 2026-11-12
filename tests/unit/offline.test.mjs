@@ -38,6 +38,37 @@ test('context routing aborts unknown traffic instead of invoking any passthrough
   assert.equal(closed, true);
   assert.equal(network.blocked[1].method, 'WebSocket');
 });
+test('own packaged MAIN hook uses native extension loading; other resources stay blocked', async () => {
+  const extensionId = 'abcdefghijklmnopabcdefghijklmnop';
+  let handler;
+  const context = {
+    route: async (_pattern, cb) => { handler = cb; },
+    routeWebSocket: async () => {}
+  };
+  const network = await installOfflineRoutes(context, { extensionId });
+  const hookUrl = `chrome-extension://${extensionId}/src/marks-api-hook.js`;
+  const invoke = async (url, method = 'GET') => {
+    let outcome;
+    await handler({
+      request: () => ({ method: () => method, url: () => url }),
+      continue: async () => { outcome = 'native-local-resource'; },
+      abort: async () => { outcome = 'blocked'; },
+      fulfill: async () => { outcome = 'fixture'; }
+    });
+    return outcome;
+  };
+  assert.equal(await invoke(hookUrl), 'native-local-resource');
+  assert.equal(network.blocked.length, 0);
+  for (const url of [
+    hookUrl.replace(extensionId, 'pppppppppppppppppppppppppppppppp'),
+    hookUrl.replace('marks-api-hook.js', 'background.js'),
+    hookUrl + '?query=unexpected',
+    `https://school.mos.ru/src/marks-api-hook.js`,
+    'https://school.mos.ru/api/ej/core/teacher/v1/marks?group_ids=123'
+  ]) assert.equal(await invoke(url), 'blocked', url);
+  assert.equal(await invoke(hookUrl, 'POST'), 'blocked');
+  assert.equal(network.blocked.length, 6);
+});
 test('test-only deny proxy refuses HTTP and HTTPS CONNECT without upstream forwarding', async () => {
   const proxy = await startDenyProxy();
   try {

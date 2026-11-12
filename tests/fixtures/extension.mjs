@@ -56,13 +56,14 @@ export const test = base.extend({
         proxy: { server: denyProxy.url, bypass: '<-loopback>' },
         args: [`--disable-extensions-except=${root}`, `--load-extension=${root}`, '--disable-background-networking', '--disable-quic']
       });
-      network = await installOfflineRoutes(context);
       context.on('page', page => page.on('pageerror', error => pageErrors.push(error.message)));
       await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
       tracing = true;
       const worker = context.serviceWorkers().find(w => w.url().endsWith('/src/background.js')) ??
         await context.waitForEvent('serviceworker', { predicate: w => w.url().endsWith('/src/background.js'), timeout: 10000 });
       expect(worker.url()).toMatch(/^chrome-extension:\/\/[^/]+\/src\/background\.js$/);
+      // Resolve the actual ID before installing routes; no journal navigation yet.
+      network = await installOfflineRoutes(context, { extensionId: new URL(worker.url()).hostname });
       const page = await context.newPage();
       const openJournal = async (scenario = 'all') => {
         await page.goto(`https://school.mos.ru/teacher/study-process/journal/grade/990001?case=${scenario}`);
