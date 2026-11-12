@@ -1,0 +1,30 @@
+{
+  "commit": "2e576c4d76a4093fc49bec3d5bf169b71b01ff74",
+  "files": {
+    "manifest.json": "945ccce7b91d1f4e45059f3321f62c28d3a66cca6225f54d0e542f8f206695ff",
+    "src/admin-collector.js": "ee5f2f07a26c1fb9a98943e539deed0b94745630dafc7be4cf1338dc69499c60",
+    "src/admin-drawer.css": "53ff6506f782caf7af3c44671cf15e54374808ac6867ca994b093859b90154d4",
+    "src/admin-drawer.js": "eb5c38857b8e1fe09bb0edb13a75e3c62f19b97b75f0cb010a6ad955989158c9",
+    "src/background.js": "0a0297947132f4fc74ea49eea10121b89e4765c65abf2aba2aad6743fa0ba80b",
+    "src/class-auto-loader.js": "585be980ab1c3520e20306d3a67cc5fab943d303fad0e07d450f6ac898f6fcc1",
+    "src/class-panel.css": "a247106610e696768326211686d0d7f00a92a01f6db439296b6d795899f12ce7",
+    "src/class-workbook.js": "0750359fa82442faff7689b8820daa285e419748d4bec87400c12a4911463fc1",
+    "src/clean-panel.js": "80e02e71965282b62a91c5cc156a40446786f133b1967c6b21f04f8d5178fd42",
+    "src/final-control.js": "8ae87e77c3040029188cefcea799a15d5113ebefaef89d3942275b0db240011b",
+    "src/final-summary-guard.js": "d36f81f8669d3cb2d70d3a05dce685e0fc5d10a80124090f20df229d0733a565",
+    "src/finals-check-drawer.js": "a9f013573d4dbdcf5549989b94527eacacef6975efdcb683ec76c2db3af61ebb",
+    "src/highlight-toggle.js": "fad2c7552537f2df1e3db827f7533ac766b74f573baff28e277aa3f15a763bd9",
+    "src/homework-check-drawer.js": "74a950a6bc5e251e16026a2449802aa986dce53938a03c3cd9f64f4063cd11cd",
+    "src/hybrid-counter.js": "c80e8a319b8926171dac4e1e3defb4f3a8af15c7fc293f2c8a08e6f5e5a4f0d5",
+    "src/marks-api-bridge.js": "73c32b56ba5a089f84142bbb218ce14825bc0d1e67ccb525db7674331060a43c",
+    "src/marks-api-hook.js": "8a3f99ef9b1ea299af314d898dea5bfbc202799fbdb749c867498ca8af6f79c0",
+    "src/memo.css": "9675d84eb747194fbbbf72691752ed690942680a2894b6c229c22d10bafdbdd5",
+    "src/memo.html": "0aacc2cff7d5ef7feb221ed4d37108762537cd51406f284fa01268fe02c239d3",
+    "src/memo.js": "291b7af5138d853f42db38c608e153f35785b60a869e163b45d83b866f3ab0d9",
+    "src/notes-panel.css": "78cb9e20bc17b50b8eabbead9313f96362ec5d4cad0dd5bc6afee4c4aef0ac1a",
+    "src/notes-panel.js": "26cde58d50279aa0ef32efa36b11d89a8707d1579d5de42359d8afe778b16657",
+    "src/panel-shell.js": "193cead86020f9f94176b01c6fb48de294436aed8d11b3c2df9c2904c5f9d313",
+    "src/panel-tokens.css": "9a2537b858c561a8eaf97ecb3de61c00fdad7fd6a574ec824a2659c23af9d9c0",
+    "src/panel.css": "d4f34c6ff304d8fc937f1023201c41c716a38a590efdd409aec95b36ab3bb624"
+  }
+}
