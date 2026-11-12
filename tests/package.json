@@ -1,0 +1,17 @@
+{
+  "name": "mesh-extension-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "check": "node scripts/check-runtime.mjs",
+    "test": "npm run check && npm run test:unit",
+    "test:unit": "node scripts/run-unit.mjs",
+    "test:e2e": "node scripts/run-e2e.mjs",
+    "test:e2e:list": "playwright test --list"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0"
+  }
+}

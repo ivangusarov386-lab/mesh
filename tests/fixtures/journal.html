@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Синтетический журнал МЭШ</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/mesh-fixture/journal.css">
+  <script src="/mesh-fixture/journal.js" defer></script>
+</head>
+<body>
+  <h1>Журнал Тестовый предмет 8-А</h1>
+  <p>Все ученики и идентификаторы вымышлены. Реальные запросы запрещены.</p>
+  <div id="fixture-scenario" role="status"></div>
+  <div id="fixture-future-feature" role="note"></div>
+  <button id="fixture-fetch" type="button">Синтетические скрытые оценки (fetch)</button>
+  <button id="fixture-xhr" type="button">Синтетические скрытые оценки (XHR)</button>
+  <div id="fixture-api-status" role="status">Не загружены</div>
+  <table id="synthetic-journal">
+    <thead><tr><th>Вымышленный ученик</th><th colspan="5">Уроки октября и ноября</th><th>Средний</th><th>Итог</th></tr></thead>
+    <tbody>
+      <tr id="student-101"><td><span title="Тестовый ученик 001">Тестовый ученик 001</span></td>
+        <td><div data-test-component="markCell-101_200001_1"><span>5</span></div></td>
+        <td colspan="4"></td><td><div data-test-component="average">5,0</div></td><td><div data-test-component="finalResult">5</div></td></tr>
+      <tr id="student-102"><td><span title="Тестовый ученик 002">Тестовый ученик 002</span></td>
+        <td><div data-test-component="markCell-102_200001_1"><span>4</span> <span>5</span></div></td>
+        <td colspan="4"></td><td><div data-test-component="average">4,5</div></td><td><div data-test-component="finalResult">5</div></td></tr>
+      <tr id="student-103"><td><span title="Тестовый ученик 003">Тестовый ученик 003</span></td>
+        <td><div data-test-component="markCell-103_200001_1"><span>5</span><svg aria-label="stacked" width="8" height="8"><rect width="8" height="8"/></svg></div></td>
+        <td colspan="4"></td><td><div data-test-component="average">5,0</div></td><td><div data-test-component="finalResult">5</div></td></tr>
+      <tr id="student-104"><td><span title="Тестовый ученик 004">Тестовый ученик 004</span></td>
+        <td><div data-test-component="markCell-104_200001_1"><span>4</span></div></td>
+        <td colspan="4"></td><td><div data-test-component="average">4,0</div></td><td><div data-test-component="finalResult">4</div></td></tr>
+      <tr id="student-105"><td><span title="Тестовый ученик 005">Тестовый ученик 005</span></td>
+        <td><div data-test-component="markCell-105_200001_1"><span>5</span></div></td>
+        <td><div data-test-component="markCell-105_200002_1"><span>5</span></div></td>
+        <td><div data-test-component="markCell-105_200003_1"><span>5</span></div></td>
+        <td><div data-test-component="markCell-105_200004_1"><span>5</span></div></td>
+        <td><div data-test-component="markCell-105_200005_1"><span>5</span></div></td>
+        <td><div data-test-component="average">5,0</div></td><td><div data-test-component="finalResult"></div></td></tr>
+      <tr id="student-106"><td><span title="Тестовый ученик 006">Тестовый ученик 006</span></td>
+        <td><div data-test-component="markCell-106_200001_1"><span>4</span></div></td>
+        <td><div data-test-component="markCell-106_200002_1"><span>4</span></div></td>
+        <td><div data-test-component="markCell-106_200003_1"><span>4</span></div></td>
+        <td><div data-test-component="markCell-106_200004_1"><span>4</span></div></td>
+        <td><div data-test-component="markCell-106_200005_1"><span>4</span></div></td>
+        <td><div data-test-component="average">4,0</div></td><td><div data-test-component="finalResult">4</div></td></tr>
+      <tr id="student-107"><td><span title="Тестовый ученик 007">Тестовый ученик 007</span></td>
+        <td><div data-test-component="markCell-107_200010_1" data-fixture-date="2026-10-30"><span>4</span></div></td>
+        <td><div data-test-component="markCell-107_200011_1" data-fixture-date="2026-11-02"><span>5</span></div></td>
+        <td colspan="3"></td><td><div data-test-component="average">4,5</div></td><td><div data-test-component="finalResult">5</div></td></tr>
+    </tbody>
+  </table>
+</body>
+</html>
