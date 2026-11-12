@@ -82,6 +82,17 @@ router устанавливается до первой навигации жу�
 облачного прокси для npm/Git и не способ получить доступ к запрещённому хосту.
 QUIC отключён; пользовательские профили, cookies, HAR и storageState не загружаются.
 
+Teardown проверяет и `network.blocked`, и `denyProxy.denied`, повторно после
+остановки context/proxy. Неизвестный fallback HTTP/CONNECT приводит к failure,
+даже если Playwright router его не видел. Финальные записи сохраняются в
+`network-final.json`. Список intentional router blocks не освобождает proxy.
+Единственное nonfatal исключение: точный `CONNECT content-autofill.googleapis.com:443`,
+подтверждённый в CI как стартовый запрос Chromium 158 Autofill. Он остаётся
+отклонённым с 403; ни сеть, ни другие методы/порты/хосты не разрешаются.
+В свежем временном профиле network prediction выключен настройкой
+`net.network_prediction_options=2`, чтобы браузер не делал speculative page
+preconnect. `CONNECT school.mos.ru:443` никогда не исключается из проверки.
+
 ## Отчёты
 
 - `artifacts/unit/results.tap`, `stderr.log` — фактический Node run и exit code.

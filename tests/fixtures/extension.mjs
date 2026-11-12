@@ -1,10 +1,11 @@
 import { test as base, expect, chromium } from '@playwright/test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { root } from '../helpers/paths.mjs';
 import { installOfflineRoutes } from '../helpers/offline-router.mjs';
 import { startDenyProxy } from '../helpers/deny-proxy.mjs';
+import { assertOfflineNetwork } from '../helpers/network-audit.mjs';
 
 async function saveEvidence({ context, network, denyProxy, pageErrors, tracing, failed, testInfo }) {
   if (failed) {
@@ -48,6 +49,13 @@ export const test = base.extend({
     let network;
     try {
       denyProxy = await startDenyProxy();
+      // Disable speculative page preconnects in this new disposable profile.
+      // Chromium NetworkPredictionOptions::kDisabled = 2. Do not exempt
+      // school.mos.ru CONNECTs: they could hide a real extension request.
+      await mkdir(path.join(profile, 'Default'), { recursive: true });
+      await writeFile(path.join(profile, 'Default', 'Preferences'), JSON.stringify({
+        net: { network_prediction_options: 2 }
+      }));
       context = await chromium.launchPersistentContext(profile, {
         channel: 'chromium', headless: true,
         viewport: { width: 1440, height: 1100 },
@@ -73,8 +81,7 @@ export const test = base.extend({
         await expect(page.locator('#mh-summary')).toHaveText('Ученики ниже нормы по оценкам: 5');
       };
       await use({ context, page, worker, network, openJournal, expectedBlocked });
-      const unexpected = network.blocked.filter(r => !expectedBlocked.has(r.url));
-      expect(unexpected, 'Unknown requests were blocked; no network passthrough').toEqual([]);
+      assertOfflineNetwork(network, denyProxy, expectedBlocked);
       expect(pageErrors, 'Uncaught page errors').toEqual([]);
     } catch (error) {
       fixtureFailed = true;
@@ -94,6 +101,17 @@ export const test = base.extend({
       } finally {
         try { if (denyProxy) await denyProxy.close(); }
         finally { await rm(profile, { recursive: true, force: true }); }
+      }
+      // The context and proxy are now stopped: include late requests made while
+      // screenshots/trace/context.close ran, not just requests before teardown.
+      if (denyProxy) {
+        const finalNetwork = testInfo.outputPath('network-final.json');
+        await writeFile(finalNetwork, JSON.stringify({
+          requests: network?.requests, blocked: network?.blocked,
+          deniedByProxy: denyProxy.denied, pageErrors
+        }, null, 2));
+        await testInfo.attach('network-final', { path: finalNetwork, contentType: 'application/json' });
+        assertOfflineNetwork(network ?? { blocked: [] }, denyProxy, expectedBlocked);
       }
     }
   }
