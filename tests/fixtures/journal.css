@@ -1,0 +1,5 @@
+/* Synthetic page styles only; extension CSS is loaded by the real manifest. */
+body { font: 14px sans-serif; margin: 16px; }
+#synthetic-journal { border-collapse: collapse; margin-top: 14px; width: 850px; }
+#synthetic-journal td, #synthetic-journal th { border: 1px solid #bbb; padding: 6px; height: 26px; }
+#fixture-future-feature { color: #754500; max-width: 800px; }

@@ -1,0 +1,19 @@
+{
+  "contract": "Synthetic inputs for current consumer code, not verified production API samples",
+  "scenarios": [
+    { "id": "single", "student": 101, "domGrades": 1, "source": "hybrid-counter.js:domStats" },
+    { "id": "multiple", "student": 102, "domGrades": 2, "source": "hybrid-counter.js:domStats" },
+    { "id": "stacked", "student": 103, "domGrades": 2, "source": "hybrid-counter.js:hasStackIcon/domStats" },
+    { "id": "hidden", "student": 104, "domGrades": 1, "apiGrades": 3, "source": "hybrid-counter.js:rowStats" },
+    { "id": "missing-final", "student": 105, "domGrades": 5, "source": "final-control.js:isFinalFilled" },
+    { "id": "at-minimum", "student": 106, "domGrades": 5, "source": "hybrid-counter.js:setHighlight" },
+    { "id": "monthly", "status": "not-implemented", "fixture": "student-107", "reason": "Only visible-period minGrades exists; no monthly norm algorithm" },
+    { "id": "free", "status": "not-implemented", "reason": "PUBLICATION_PLAN.md describes future Free/PRO, no runtime gate" },
+    { "id": "pro", "status": "not-implemented", "reason": "No runtime gate or PRO key; do not introduce licensing in tests" }
+  ],
+  "hiddenMarks": [
+    { "id": 900001, "student_profile_id": 104, "schedule_lesson_id": 200001, "name": "4", "date": "2026-11-02" },
+    { "id": 900002, "student_profile_id": 104, "schedule_lesson_id": 200001, "name": "4", "date": "2026-11-02" },
+    { "id": 900003, "student_profile_id": 104, "schedule_lesson_id": 200001, "name": "4", "date": "2026-11-02" }
+  ]
+}
