@@ -35,6 +35,14 @@
   const JOURNAL_LINK_SELECTOR = 'a[href*="/journal/grade/"]';
   const CLASS_CARD_SELECTOR = '[data-test-component="journalCardRoute"]';
 
+  function withLessonComments(values, subject, snapshot, studentId) {
+    const comments = window.__MESH_HELPER_LESSON_COMMENTS__;
+    return comments?.isPhysicalEducation(subject) ? [...values, comments.format(snapshot, studentId)] : values;
+  }
+  function commentHeader(values, subject) {
+    return window.__MESH_HELPER_LESSON_COMMENTS__?.isPhysicalEducation(subject) ? [...values, "Комментарии"] : values;
+  }
+
   function log(...args) {
     console.log("[МЭШ помощник][class-auto-loader]", ...args);
   }
@@ -552,7 +560,8 @@
     }
 
     const subjects = batch.queue.map((item) => ({ id: item.id, text: item.text }));
-    const headers = ["ФИО", ...subjects.map((subject) => subject.text)];
+    const peSubjects = subjects.filter((subject) => window.__MESH_HELPER_LESSON_COMMENTS__?.isPhysicalEducation(subject.text));
+    const headers = ["ФИО", ...subjects.map((subject) => subject.text), ...peSubjects.map(() => "Комментарии")];
     const rows = students.map((student) => {
       const cells = subjects.map((subject) => {
         const marks = batch.results[subject.id]?.marks || [];
@@ -565,7 +574,7 @@
         if (absences) parts.push(`Н ${percent}%`);
         return parts.join(" · ");
       });
-      return [student.name, ...cells];
+      return [student.name, ...cells, ...peSubjects.map((subject) => window.__MESH_HELPER_LESSON_COMMENTS__.format(batch.results[subject.id]?.lessonComments, student.id))];
     });
 
     const csv = "﻿" + [headers, ...rows].map((row) => row.map(csvValue).join(";")).join("\n");
@@ -667,7 +676,7 @@
       const medicalRecommendations = batch.results[subject.id]?.medicalRecommendations || [];
       const lessonDates = batch.results[subject.id]?.lessonDates || [];
       const heldLessons = batch.results[subject.id]?.heldLessons;
-      const rows = [workbook.row(SUBJECT_HEADER, () => "Header")];
+      const rows = [workbook.row(commentHeader(SUBJECT_HEADER, subject.text), () => "Header")];
       students.forEach((student, index) => {
         const { count, avg } = averageForStudent(marks, student.id);
         const { absences, illnessAbsences, percent } = attendanceForStudent(attendances, student.id, heldLessons, medicalRecommendations, lessonDates);
@@ -675,7 +684,7 @@
         const absenceRisk = heldLessons > 0 && percent >= absencePercentThreshold;
         const academicRisk = avgRisk || absenceRisk ? "Да" : "Нет";
         rows.push(workbook.row(
-          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, illnessAbsences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", percent, academicRisk, count],
+          withLessonComments([index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, illnessAbsences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", percent, academicRisk, count], subject.text, batch.results[subject.id]?.lessonComments, student.id),
           () => (academicRisk === "Да" ? "BadAbsence" : "Default")
         ));
       });
@@ -713,11 +722,12 @@
 
     const sheetRef = (sheetName) => `'${sheetName.replace(/'/g, "''")}'`;
     const masterSheet = subjectSheets[0];
+    const hasPE = subjects.some((subject) => window.__MESH_HELPER_LESSON_COMMENTS__?.isPhysicalEducation(subject.text));
 
     const studentRows = [
       workbook.row(["Ученик:", students[0]?.name || ""], (value, colIndex) => (colIndex === 0 ? "Header" : "Default")),
       workbook.row([]),
-      workbook.row(["Предмет", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н по болезни", "Н % по факту", "Расчётный итог", "Риск академической задолженности", ""], () => "Header")
+      workbook.row(["Предмет", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н по болезни", "Н % по факту", "Расчётный итог", "Риск академической задолженности", "", ...(hasPE ? ["Комментарии"] : [])], () => "Header")
     ];
 
     subjectSheets.forEach((sheet, index) => {
@@ -733,7 +743,8 @@
         lookup(7, '""'),
         lookup(8, '""'),
         lookup(10, '"Нет"'),
-        lookup(9, "0")
+        lookup(9, "0"),
+        ...(hasPE ? [window.__MESH_HELPER_LESSON_COMMENTS__?.isPhysicalEducation(subjects[index].text) ? workbook.formula(`IF(COUNTIF(${sheetRef(sheet.name)}!$B:$B,$B$1)>1,"Неоднозначное имя",IFERROR(VLOOKUP($B$1,${sheetRef(sheet.name)}!$B:$M,12,FALSE),"Данные недоступны"))`) : ""] : [])
       ], () => "Default"));
     });
 
@@ -851,7 +862,8 @@
     const absencePercentThreshold = await getAbsencePercentThreshold();
     const finalGradeRanges = await getFinalGradeRanges();
 
-    const HEADER = ["Предмет", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Риск академической задолженности"];
+    const hasPE = subjects.some((subject) => window.__MESH_HELPER_LESSON_COMMENTS__?.isPhysicalEducation(subject.text));
+    const HEADER = ["Предмет", "Оценки", "Средний балл", "Уроков проведено", "Н по факту", "Н % по факту", "Расчётный итог", "Риск академической задолженности", ...(hasPE ? ["Комментарии"] : [])];
 
     const usedNames = new Set();
     const entries = [];
@@ -869,7 +881,7 @@
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
         const academicRisk = count && avg <= problemAvgThreshold ? "Да" : "Нет";
         rows.push(workbook.row(
-          [subject.text, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", academicRisk],
+          [subject.text, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", academicRisk, ...(hasPE ? [window.__MESH_HELPER_LESSON_COMMENTS__?.isPhysicalEducation(subject.text) ? window.__MESH_HELPER_LESSON_COMMENTS__.format(batch.results[subject.id]?.lessonComments, student.id) : ""] : [])],
           (value, colIndex) => {
             if (colIndex === 4 && percent >= absencePercentThreshold) return "BadAbsence";
             if (colIndex === 7 && academicRisk === "Да") return "BadAbsence";
@@ -936,14 +948,14 @@
       const heldLessons = result?.heldLessons;
       const students = (result?.students || []).slice().sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
-      const rows = [workbook.row(CLASS_HEADER, () => "Header")];
+      const rows = [workbook.row(commentHeader(CLASS_HEADER, cls.text), () => "Header")];
       students.forEach((student, index) => {
         studentsTotal += 1;
         const { count, avg } = averageForStudent(marks, student.id);
         const { absences, percent } = attendanceForStudent(attendances, student.id, heldLessons);
         const academicRisk = count && avg <= problemAvgThreshold ? "Да" : "Нет";
         rows.push(workbook.row(
-          [index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", academicRisk],
+          withLessonComments([index + 1, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", heldLessons || 0, absences, `${percent}%`, count ? possibleFinal(avg, finalGradeRanges) : "", academicRisk], cls.text, result?.lessonComments, student.id),
           (value, colIndex) => {
             if (colIndex === 6 && percent >= absencePercentThreshold) return "BadAbsence";
             if (colIndex === 8 && academicRisk === "Да") return "BadAbsence";
@@ -1008,8 +1020,14 @@
     mergeStudentProfiles(batch, profiles);
     const students = profiles.map((profile) => ({ id: getProfileId(profile), name: getProfileName(profile) })).filter((student) => student.id);
 
+    const lessonComments = await window.__MESH_HELPER_LESSON_COMMENTS__?.capture(item.text);
+    if (currentJournalIdFromPath() !== journalId) return;
+    if (lessonComments) {
+      const afterComments = await getStorage(STORAGE_KEY);
+      if (afterComments?.status !== "running" || afterComments.currentIndex !== batch.currentIndex) return;
+    }
     item.status = found ? "done" : "empty";
-    batch.results[journalId] = { text: item.text, classLabel: item.classLabel, count: marks.length, marks, attendances, medicalRecommendations, lessonDates, heldLessons, students, capturedAt: Date.now() };
+    batch.results[journalId] = { text: item.text, classLabel: item.classLabel, count: marks.length, marks, attendances, medicalRecommendations, lessonDates, heldLessons, students, ...(lessonComments ? { lessonComments } : {}), capturedAt: Date.now() };
     log(`${item.text}: ${found ? `поймано записей: ${marks.length}` : "таймаут, оценок не поймано"}`);
 
     const nextIndex = batch.currentIndex + 1;

@@ -14,6 +14,54 @@
   if (window.__meshHelperBridgeInstalled) return;
   window.__meshHelperBridgeInstalled = true;
 
+  const commentRequests = new Map();
+  let commentSequence = 0;
+  const isPhysicalEducation = (subject) => String(subject || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("ru") === "физическая культура";
+  function commentPageContext() {
+    return location.pathname + location.search + "|" + [...new Set([...document.querySelectorAll('[data-test-component^="markCell-"]')].map((cell) => cell.getAttribute("data-test-component")))].sort().join("|");
+  }
+  function validateCommentSnapshot(snapshot) {
+    if (snapshot?.status !== "partial" || !snapshot.byStudent || typeof snapshot.byStudent !== "object" || Array.isArray(snapshot.byStudent)) return { status: "unavailable" };
+    const entries = Object.entries(snapshot.byStudent);
+    if (entries.length > 2000) return { status: "unavailable" };
+    let size = 0;
+    let count = 0;
+    for (const [id, groups] of entries) {
+      if (!/^\d+$/.test(id) || !Array.isArray(groups) || groups.length > 20000) return { status: "unavailable" };
+      for (const group of groups) {
+        if (typeof group?.text !== "string" || !group.text.trim() || group.text.length > 10000 || !Number.isSafeInteger(group.count) || group.count < 1) return { status: "unavailable" };
+        size += group.text.length;
+        count += group.count;
+        if (size > 1000000 || count > 20000) return { status: "unavailable" };
+      }
+    }
+    return { status: "partial", byStudent: Object.fromEntries(entries.map(([id, groups]) => [id, groups.map(({ text, count }) => ({ text, count }))])) };
+  }
+  function formatLessonComments(snapshot, studentId) {
+    const safe = validateCommentSnapshot(snapshot);
+    if (safe.status !== "partial") return "Данные недоступны";
+    const groups = safe.byStudent[String(studentId)] || [];
+    if (!groups.length) return "Не найдены в доступных данных";
+    const count = groups.reduce((sum, group) => sum + group.count, 0);
+    const word = count % 100 >= 11 && count % 100 <= 14 ? "комментариев" : count % 10 === 1 ? "комментарий" : count % 10 >= 2 && count % 10 <= 4 ? "комментария" : "комментариев";
+    const text = `${count} ${word} по доступным данным (${groups.map((group) => `${group.count} — ${group.text}`).join("; ")})`;
+    return text.length <= 32000 ? text : text.slice(0, 31950) + "… (текст сокращён)";
+  }
+  window.__MESH_HELPER_LESSON_COMMENTS__ = Object.freeze({
+    isPhysicalEducation,
+    format: formatLessonComments,
+    capture(subject) {
+      if (!isPhysicalEducation(subject)) return Promise.resolve(null);
+      if (commentRequests.size >= 4) return Promise.resolve({ status: "unavailable" });
+      return new Promise((resolve) => {
+        const requestId = `comments-${Date.now()}-${++commentSequence}`;
+        const timer = setTimeout(() => { commentRequests.delete(requestId); resolve({ status: "unavailable" }); }, 1500);
+        commentRequests.set(requestId, { resolve, timer, context: commentPageContext() });
+        window.postMessage({ source: SOURCE, type: "lesson-comments-request", version: 1, requestId, subject: "физическая культура" }, location.origin);
+      });
+    }
+  });
+
   function injectHook() {
     try {
       const script = document.createElement("script");
@@ -255,6 +303,16 @@
     if (event.source !== window) return;
     const data = event.data;
     if (!data || data.source !== SOURCE) return;
+
+    if (data.type === "lesson-comments-response") {
+      if (event.origin !== location.origin || data.version !== 1 || typeof data.requestId !== "string") return;
+      const request = commentRequests.get(data.requestId);
+      if (!request) return;
+      commentRequests.delete(data.requestId);
+      clearTimeout(request.timer);
+      request.resolve(request.context === commentPageContext() ? validateCommentSnapshot(data.snapshot) : { status: "unavailable" });
+      return;
+    }
 
     if (data.type === "marks-response") publishMarks(extractMarks(data.payload), { url: data.url, at: data.at });
     if (data.type === "api-response") storeApiResponse(data.url, data.payload, { url: data.url, at: data.at });

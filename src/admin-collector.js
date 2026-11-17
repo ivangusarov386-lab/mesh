@@ -62,6 +62,14 @@
   const AFTER_CLICK_WAIT_MS = 300;
   const SUBJECT_LINKS_TIMEOUT_MS = 5000;
 
+  function withLessonComments(values, subject, snapshot, studentId) {
+    const comments = window.__MESH_HELPER_LESSON_COMMENTS__;
+    return comments?.isPhysicalEducation(subject) ? [...values, comments.format(snapshot, studentId)] : values;
+  }
+  function commentHeader(values, subject) {
+    return window.__MESH_HELPER_LESSON_COMMENTS__?.isPhysicalEducation(subject) ? [...values, "Комментарии"] : values;
+  }
+
   function log(...args) {
     console.log("[МЭШ помощник][admin-collector]", ...args);
   }
@@ -975,7 +983,7 @@
         });
       });
       const periodHeaders = Array.from({ length: maxPeriods }, (unused, i) => `Период ${i + 1}`);
-      const HEADER = ["Класс", "ФИО", "Оценки", "Средний балл", ...periodHeaders, "Итог года"];
+      const HEADER = commentHeader(["Класс", "ФИО", "Оценки", "Средний балл", ...periodHeaders, "Итог года"], subject);
 
       const sheetRows = [workbook.row(HEADER, () => "Header")];
 
@@ -990,7 +998,7 @@
           const periods = entry?.periods || [];
           const periodCells = periodHeaders.map((label, i) => periods[i] || "");
           sheetRows.push(workbook.row(
-            [journal.classLabel, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", ...periodCells, entry?.yearFinal || ""],
+            withLessonComments([journal.classLabel, student.name, gradesTextForStudent(marks, student.id), count ? avg : "", ...periodCells, entry?.yearFinal || ""], subject, journal.lessonComments, student.id),
             () => "Default"
           ));
 
@@ -1079,6 +1087,7 @@
     const subjectNames = [...bySubject.keys()].sort((a, b) => a.localeCompare(b, "ru"));
 
     const sheets = subjectNames.map((subject) => {
+      const subjectHeader = commentHeader(HEADER, subject);
       const journals = bySubject.get(subject).slice().sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ru"));
 
       const studentRows = [];
@@ -1118,7 +1127,8 @@
               count ? possibleFinal(avg, finalGradeRanges) : "",
               academicRisk,
               missingText,
-              journal.teacher || ""
+              journal.teacher || "",
+              ...(window.__MESH_HELPER_LESSON_COMMENTS__?.isPhysicalEducation(subject) ? [window.__MESH_HELPER_LESSON_COMMENTS__.format(journal.lessonComments, student.id)] : [])
             ],
             () => (academicRisk === "Да" ? "BadAbsence" : "Default")
           ));
@@ -1132,11 +1142,11 @@
       const overallAvg = overallAvgGrades.length
         ? Math.round((overallAvgGrades.reduce((sum, value) => sum + value, 0) / overallAvgGrades.length) * 100) / 100
         : "";
-      const summaryLabelRow = new Array(HEADER.length).fill("");
+      const summaryLabelRow = new Array(subjectHeader.length).fill("");
       summaryLabelRow[3] = "общий средний балл";
       summaryLabelRow[4] = "общее кол-во оценок";
       summaryLabelRow[10] = "Общее кол-во АЗ";
-      const summaryValueRow = new Array(HEADER.length).fill("");
+      const summaryValueRow = new Array(subjectHeader.length).fill("");
       summaryValueRow[3] = overallAvg;
       summaryValueRow[4] = overallGradeCount;
       summaryValueRow[10] = overallRiskCount;
@@ -1145,7 +1155,7 @@
       const sheetRows = [
         workbook.row(summaryLabelRow, (value, colIndex) => (summaryHighlightCols.has(colIndex) ? "Highlight" : "Default")),
         workbook.row(summaryValueRow, () => "Default"),
-        workbook.row(HEADER, () => "Header"),
+        workbook.row(subjectHeader, () => "Header"),
         ...studentRows
       ];
 
@@ -1336,6 +1346,12 @@
     const students = captureStudentsForJournal();
     const teacher = teacherNameForJournal(journalId);
     const finalGrades = captureFinalGradesForJournal();
+    const lessonComments = await window.__MESH_HELPER_LESSON_COMMENTS__?.capture(item.subject);
+    if (currentAdminJournalIdFromQuery() !== journalId) return;
+    if (lessonComments) {
+      const afterComments = await getStorage(ADMIN_STORAGE_KEY);
+      if (afterComments?.status !== "running" || afterComments.currentIndex !== batch.currentIndex) return;
+    }
 
     item.status = marks.length ? "done" : "empty";
     batch.results[journalId] = {
@@ -1352,6 +1368,7 @@
       students,
       teacher,
       finalGrades,
+      ...(lessonComments ? { lessonComments } : {}),
       capturedAt: Date.now()
     };
     log(`${item.classLabel} / ${item.subject}: учеников ${students.length}, оценок ${marks.length}, ${missingHomeworkDates.length ? "отсутствует ДЗ — " + missingHomeworkDates.join(", ") : "ДЗ без пропусков"}, итогов найдено в таблице — ${finalGrades.length} из ${students.length} учеников`);
@@ -1460,6 +1477,12 @@
     const students = captureStudentsForJournal();
     const teacher = teacherNameForJournal(journalId);
     const finalGrades = captureFinalGradesForJournal();
+    const lessonComments = await window.__MESH_HELPER_LESSON_COMMENTS__?.capture(item.subject);
+    if (currentAdminJournalIdFromQuery() !== journalId) return;
+    if (lessonComments) {
+      const afterComments = await getStorage(ADMIN_FINALS_STORAGE_KEY);
+      if (afterComments?.status !== "running" || afterComments.currentIndex !== batch.currentIndex) return;
+    }
 
     item.status = marks.length ? "done" : "empty";
     batch.results[journalId] = {
@@ -1471,6 +1494,7 @@
       students,
       teacher,
       finalGrades,
+      ...(lessonComments ? { lessonComments } : {}),
       capturedAt: Date.now()
     };
     log(`[Проверка итогов] ${item.classLabel} / ${item.subject}: учеников ${students.length}, итогов найдено в таблице — ${finalGrades.length} из ${students.length}`);

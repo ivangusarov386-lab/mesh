@@ -102,6 +102,7 @@ test('current CSV export downloads seven fictional pupils with observed counts',
   await download.saveAs(file);
   const text = await readFile(file, 'utf8');
   expect(text).toContain('"Кол-во оценок"');
+  expect(text).not.toContain('"Комментарии"');
   expect(text).toContain('"Тестовый ученик 001";"1"');
   expect(text).toContain('"Тестовый ученик 002";"2";"4,5"');
   expect(text.split('\n')).toHaveLength(8);
@@ -119,5 +120,28 @@ for (const mode of ['free', 'pro']) {
     await extension.openJournal(mode);
     await expect(extension.page.locator('#fixture-future-feature')).toContainText('только метка');
     expect(await extension.worker.evaluate(() => chrome.runtime.getManifest().permissions)).toEqual(['storage', 'unlimitedStorage']);
+  });
+}
+
+for (const scenario of ['pe', 'pe-unavailable']) {
+  test(`PE comments CSV uses real MAIN/bridge, partial totals and no extra requests: ${scenario}`, async ({ extension }, testInfo) => {
+    await extension.openJournal(scenario);
+    const { page, network } = extension;
+    await page.locator('#mh-results-toggle').click();
+    await page.locator('#mh-export-toggle').click();
+    const before = network.requests.filter(r => r.url.startsWith('https://school.mos.ru/')).length;
+    for (let i = 0; i < 2; i++) {
+      const waiting = page.waitForEvent('download');
+      await page.locator('#mh-export-all').click();
+      const download = await waiting;
+      const file = testInfo.outputPath(`comments-${i}.csv`);
+      await download.saveAs(file);
+      const csv = await readFile(file, 'utf8');
+      expect(csv).toContain('"Комментарии"');
+      expect(csv).toContain(scenario === 'pe' ? '5 комментариев по доступным данным (3 — Без спортивной формы; 2 — освобожден)' : 'Данные недоступны');
+      if (scenario === 'pe') expect(csv).toContain('Не найдены в доступных данных');
+      expect(csv.split('\n')).toHaveLength(8);
+    }
+    expect(network.requests.filter(r => r.url.startsWith('https://school.mos.ru/')).length).toBe(before);
   });
 }

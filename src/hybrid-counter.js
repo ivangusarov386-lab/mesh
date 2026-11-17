@@ -326,7 +326,7 @@
       .filter(Boolean);
   }
 
-  function reportRows(mode = "problems") {
+  function reportRows(mode = "problems", commentsSnapshot = null) {
     const min = minGrades();
     const source = rows({ onlyVisible: false });
     return source
@@ -342,7 +342,8 @@
         "Правильная оценка": x.correctFinal,
         "Уроков прошло по факту": x.lessonCount,
         "Кол-во Н": x.absenceCount,
-        "% пропуска от уроков по факту": String(x.absencePercent).replace(".", ",") + "%"
+        "% пропуска от уроков по факту": String(x.absencePercent).replace(".", ",") + "%",
+        ...(window.__MESH_HELPER_LESSON_COMMENTS__?.isPhysicalEducation(x.subject) ? { "Комментарии": window.__MESH_HELPER_LESSON_COMMENTS__.format(commentsSnapshot, x.studentId) } : {})
       }));
   }
 
@@ -356,8 +357,11 @@
     return `"${str.replace(/"/g, '""')}"`;
   }
 
-  function downloadCsv(mode) {
-    const data = reportRows(mode);
+  async function downloadCsv(mode) {
+    const context = location.pathname + location.search;
+    const snapshot = await window.__MESH_HELPER_LESSON_COMMENTS__?.capture(journalMeta().subject);
+    if (context !== location.pathname + location.search) return;
+    const data = reportRows(mode, snapshot);
     if (!data.length) {
       alert(mode === "all" ? "Нет данных для выгрузки." : "Проблемных учеников для выгрузки нет.");
       return;

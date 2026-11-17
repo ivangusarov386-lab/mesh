@@ -22,4 +22,4 @@ const resources = [manifest.background.service_worker, 'src/memo.html', 'src/mem
 for (const group of manifest.content_scripts) resources.push(...group.js ?? [], ...group.css ?? []);
 for (const group of manifest.web_accessible_resources) resources.push(...group.resources);
 for (const resource of resources) assert.ok(actual.includes(resource), `Missing runtime resource: ${resource}`);
-console.log(`PASS: ${actual.length} runtime files unchanged; JS syntax, manifest and resources valid`);
+console.log(`PASS: ${actual.length} runtime files match the reviewed baseline; JS syntax, manifest and resources valid`);

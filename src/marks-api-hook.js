@@ -20,6 +20,75 @@
   if (window.__meshHelperMarksHookInstalled) return;
   window.__meshHelperMarksHookInstalled = true;
 
+  // Read only the observed Redux slice, anchored in current journal cells.
+  // No dispatch/subscribe, fetch, hover, generic API storage or logging.
+  const commentContexts = new WeakMap();
+  function commentContext() {
+    const cells = [...document.querySelectorAll('[data-test-component^="markCell-"]')];
+    if (!cells.length || cells.length > 20000) return null;
+    const keys = cells.map((cell) => cell.getAttribute("data-test-component"));
+    if (keys.some((key) => !/^markCell-\d+_\d+_\d+$/.test(key))) return null;
+    return { cells, keys, token: location.pathname + location.search + "|" + [...new Set(keys)].sort().join("|") };
+  }
+
+  function readLessonComments() {
+    const unavailable = { status: "unavailable" };
+    try {
+      const context = commentContext();
+      if (!context) return unavailable;
+      const pairs = new Map();
+      const stores = new Set();
+      for (let i = 0; i < context.cells.length; i += 1) {
+        const match = context.keys[i].match(/^markCell-(\d+)_(\d+)_(\d+)$/);
+        const pair = `${match[1]}_${match[2]}`;
+        if (pairs.has(pair) && pairs.get(pair) !== match[3]) return unavailable;
+        pairs.set(pair, match[3]);
+        const cell = context.cells[i];
+        const fiberKeys = Object.getOwnPropertyNames(cell).filter((key) => key.startsWith("__reactFiber$"));
+        if (fiberKeys.length !== 1) return unavailable;
+        let fiber = cell[fiberKeys[0]];
+        let foundStore = false;
+        const visited = new Set();
+        for (let depth = 0; fiber && depth < 150 && !visited.has(fiber); depth += 1) {
+          visited.add(fiber);
+          const store = fiber.memoizedProps?.value?.store;
+          if (typeof store?.getState === "function") { stores.add(store); foundStore = true; break; }
+          fiber = fiber.return;
+        }
+        if (!foundStore) return unavailable;
+      }
+      if (stores.size !== 1) return unavailable;
+      const store = [...stores][0];
+      const slice = store.getState()?.JR_GradeJournal?.journal?.lessonComments;
+      if (!Array.isArray(slice?.apiData) || slice.apiData.length > 20000 || slice.apiError != null || typeof slice.apiStatus !== "string") return unavailable;
+      const previous = commentContexts.get(store);
+      if (previous && previous.token !== context.token && previous.data === slice.apiData) return unavailable;
+      commentContexts.set(store, { token: context.token, data: slice.apiData });
+      const grouped = new Map();
+      let totalText = 0;
+      for (const record of slice.apiData) {
+        if (!Number.isSafeInteger(record?.student_id) || !Number.isSafeInteger(record?.schedule_lesson_id) || typeof record?.comment !== "string") return unavailable;
+        if (!pairs.has(`${record.student_id}_${record.schedule_lesson_id}`) || !record.comment.trim()) continue;
+        totalText += record.comment.length;
+        if (record.comment.length > 10000 || totalText > 1000000) return unavailable;
+        const id = String(record.student_id);
+        if (!grouped.has(id)) grouped.set(id, new Map());
+        const texts = grouped.get(id);
+        texts.set(record.comment, (texts.get(record.comment) || 0) + 1);
+      }
+      if (commentContext()?.token !== context.token) return unavailable;
+      const byStudent = Object.fromEntries([...grouped].map(([id, texts]) => [id, [...texts].map(([text, count]) => ({ text, count }))]));
+      // The observed cache is not proof of period coverage or server freshness.
+      return { status: "partial", byStudent };
+    } catch (error) { return unavailable; }
+  }
+
+  window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (event.source !== window || event.origin !== location.origin || data?.source !== SOURCE || data.type !== "lesson-comments-request" || data.version !== 1 || typeof data.requestId !== "string" || data.requestId.length > 100 || data.subject !== "физическая культура") return;
+    window.postMessage({ source: SOURCE, type: "lesson-comments-response", version: 1, requestId: data.requestId, snapshot: readLessonComments() }, location.origin);
+  });
+
   function normalizeUrl(input) {
     try {
       if (typeof input === "string") return input;

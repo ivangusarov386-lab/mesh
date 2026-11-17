@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { root } from './paths.mjs';
 
 // Unit-only adapters. E2E never uses this helper or replaces Chrome APIs.
-export function loadModule(file, { expose = [], window: windowOverrides = {}, document: documentOverrides = {} } = {}) {
+export function loadModule(file, { expose = [], window: windowOverrides = {}, document: documentOverrides = {}, chrome: chromeOverrides = {}, location: locationOverrides = {}, globals = {} } = {}) {
   const listeners = new Map();
   const events = [];
   const document = {
@@ -22,14 +22,15 @@ export function loadModule(file, { expose = [], window: windowOverrides = {}, do
   };
   const context = vm.createContext({
     window, document, console, Blob, TextEncoder, URL, URLSearchParams,
-    location: { pathname: '/fixture-only', origin: 'https://school.mos.ru', search: '' },
+    location: { pathname: '/fixture-only', origin: 'https://school.mos.ru', search: '', ...locationOverrides },
     chrome: {
       runtime: { getURL: p => `chrome-extension://unit-only/${p}` },
-      storage: { local: { get: (_key, cb) => cb({}) } }
+      storage: { local: { get: (_key, cb) => cb({}) } },
+      ...chromeOverrides
     },
     CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options?.detail; } },
     MutationObserver: class { observe() {} disconnect() {} },
-    setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {}
+    setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {}, ...globals
   });
   let code = readFileSync(path.join(root, 'src', file), 'utf8');
   if (expose.length) {
