@@ -27,7 +27,7 @@ test('journal visible heading without h1 or useful dropdown enables PE CSV comme
   assert.match(csv,/"Предмет"/);
   assert.match(csv,/"Комментарии"/);
   assert.match(csv,/"Физическая культура"/);
-  assert.match(csv,/3 комментария по доступным данным \(3 — Без спортивной формы\)/);
+  assert.match(csv,/3 — Без спортивной формы/);
 });
 test('unrelated dropdown does not override a unique visible journal heading',()=>{
   assert.equal(setup({select:'2026 — 2027'}).exposed.journalMeta().subject,'Физическая культура');

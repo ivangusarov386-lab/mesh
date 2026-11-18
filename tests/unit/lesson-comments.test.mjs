@@ -25,7 +25,7 @@ test('comments formatting is PE-only, partial and never turns missing into zero'
   const service = loadModule('marks-api-bridge.js').window.__MESH_HELPER_LESSON_COMMENTS__;
   assert.equal(service.isPhysicalEducation(' Физическая  культура '),true);
   assert.equal(service.isPhysicalEducation('Адаптивная физическая культура'),false);
-  assert.equal(service.format({status:'partial',byStudent:{101:[{text:'Без спортивной формы',count:3},{text:'освобожден',count:2}]}},101),'5 комментариев по доступным данным (3 — Без спортивной формы; 2 — освобожден)');
+  assert.equal(service.format({status:'partial',byStudent:{101:[{text:'Без спортивной формы',count:3},{text:'освобожден',count:2}]}},101),'3 — Без спортивной формы; 2 — освобожден');
   assert.equal(service.format({status:'partial',byStudent:{}},101),'Не найдены в доступных данных');
   assert.equal(service.format(null,101),'Данные недоступны');
 });

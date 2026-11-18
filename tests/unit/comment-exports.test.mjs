@@ -49,7 +49,7 @@ test('actual teacher CSV and XLSX preserve old grades, append PE comments and ty
   await api.exportCsv();
   const csv = await a.downloads[0].text();
   assert.match(csv,/"ФИО";"Физическая культура";"Математика";"Комментарии"/);
-  assert.match(csv,/5 комментариев по доступным данным \(3 — Без спортивной формы; 2 — освобожден\)/);
+  assert.match(csv,/3 — Без спортивной формы; 2 — освобожден/);
   assert.match(csv,/Не найдены в доступных данных/);
   await api.exportWorkbook();
   assert.equal(a.outputs.length,1);

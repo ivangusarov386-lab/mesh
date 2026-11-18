@@ -138,7 +138,7 @@ for (const scenario of ['pe', 'pe-unavailable', 'pe-heading', 'pe-mixed']) {
       await download.saveAs(file);
       const csv = await readFile(file, 'utf8');
       expect(csv).toContain('"Комментарии"');
-      expect(csv).toContain(scenario !== 'pe-unavailable' ? '5 комментариев по доступным данным (3 — Без спортивной формы; 2 — освобожден)' : 'Данные недоступны [C03]');
+      expect(csv).toContain(scenario !== 'pe-unavailable' ? '3 — Без спортивной формы; 2 — освобожден' : 'Данные недоступны [C03]');
       if (scenario !== 'pe-unavailable') expect(csv).toContain('Не найдены в доступных данных');
       expect(csv.split('\n')).toHaveLength(8);
     }

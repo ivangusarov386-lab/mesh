@@ -48,9 +48,7 @@
     }
     const groups = safe.byStudent[String(studentId)] || [];
     if (!groups.length) return "Не найдены в доступных данных";
-    const count = groups.reduce((sum, group) => sum + group.count, 0);
-    const word = count % 100 >= 11 && count % 100 <= 14 ? "комментариев" : count % 10 === 1 ? "комментарий" : count % 10 >= 2 && count % 10 <= 4 ? "комментария" : "комментариев";
-    const text = `${count} ${word} по доступным данным (${groups.map((group) => `${group.count} — ${group.text}`).join("; ")})`;
+    const text = groups.map((group) => `${group.count} — ${group.text}`).join("; ");
     return text.length <= 32000 ? text : text.slice(0, 31950) + "… (текст сокращён)";
   }
   window.__MESH_HELPER_LESSON_COMMENTS__ = Object.freeze({
