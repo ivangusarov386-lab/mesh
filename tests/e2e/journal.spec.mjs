@@ -123,7 +123,7 @@ for (const mode of ['free', 'pro']) {
   });
 }
 
-for (const scenario of ['pe', 'pe-unavailable']) {
+for (const scenario of ['pe', 'pe-unavailable', 'pe-heading']) {
   test(`PE comments CSV uses real MAIN/bridge, partial totals and no extra requests: ${scenario}`, async ({ extension }, testInfo) => {
     await extension.openJournal(scenario);
     const { page, network } = extension;
@@ -138,8 +138,8 @@ for (const scenario of ['pe', 'pe-unavailable']) {
       await download.saveAs(file);
       const csv = await readFile(file, 'utf8');
       expect(csv).toContain('"Комментарии"');
-      expect(csv).toContain(scenario === 'pe' ? '5 комментариев по доступным данным (3 — Без спортивной формы; 2 — освобожден)' : 'Данные недоступны');
-      if (scenario === 'pe') expect(csv).toContain('Не найдены в доступных данных');
+      expect(csv).toContain(scenario !== 'pe-unavailable' ? '5 комментариев по доступным данным (3 — Без спортивной формы; 2 — освобожден)' : 'Данные недоступны');
+      if (scenario !== 'pe-unavailable') expect(csv).toContain('Не найдены в доступных данных');
       expect(csv.split('\n')).toHaveLength(8);
     }
     expect(network.requests.filter(r => r.url.startsWith('https://school.mos.ru/')).length).toBe(before);

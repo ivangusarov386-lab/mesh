@@ -216,9 +216,13 @@
     const pageText = text(document.body).slice(0, 2500);
     const classMatch = (titleText + " " + subjectSelect + " " + pageText).match(/\d{1,2}-[A-ZА-ЯЁ][A-ZА-ЯЁ0-9-]*/);
     const subjectMatch = titleText.match(/Журнал\s+(.+?)\s+\d{1,2}\s*[-–—]/i);
+    // The visible journal heading need not be an h1; the tab title may be just МЭШ.
+    // Accept a unique explicit «Журнал <предмет> <класс>» heading, not a PE mention.
+    const visibleSubjects = [...new Set([...pageText.matchAll(/(?:^|\s)Журнал\s+(.{1,120}?)\s+\d{1,2}\s*[-–—]\s*[A-ZА-ЯЁ]/gi)].map((match) => match[1].trim()))];
+    const visibleSubject = visibleSubjects.length === 1 ? visibleSubjects[0] : "";
     return {
       className: classMatch ? classMatch[0].replace(/\s+/g, " ").trim() : "",
-      subject: subjectMatch ? subjectMatch[1].trim() : (subjectSelect || "")
+      subject: subjectMatch ? subjectMatch[1].trim() : (visibleSubject || subjectSelect || "")
     };
   }
 

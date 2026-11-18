@@ -14,7 +14,7 @@ export function resolveFixture(urlText, method = 'GET') {
   if (method !== 'GET' || url.origin !== 'https://school.mos.ru') return null;
   if (url.pathname === '/teacher/study-process/journal/grade/990001') {
     const keys = [...url.searchParams.keys()];
-    if (keys.some(k => k !== 'case') || keys.length > 1 || !['all', 'monthly', 'free', 'pro', 'pe', 'pe-unavailable'].includes(url.searchParams.get('case') ?? 'all')) return null;
+    if (keys.some(k => k !== 'case') || keys.length > 1 || !['all', 'monthly', 'free', 'pro', 'pe', 'pe-unavailable', 'pe-heading'].includes(url.searchParams.get('case') ?? 'all')) return null;
     return { status: 200, contentType: 'text/html; charset=utf-8', body: readFileSync(path.join(fixtureDir, 'journal.html')) };
   }
   if (assets[url.pathname] && !url.search) {
