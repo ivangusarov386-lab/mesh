@@ -67,7 +67,7 @@ test('MAIN request is PE-only and same-origin; missing providers never fetch or 
   send('https://school.mos.ru',{subject:'математика'});
   assert.equal(messages.length,0);
   send('https://school.mos.ru');
-  assert.deepEqual(plain(messages[0].snapshot),{status:'unavailable'});
+  assert.deepEqual(plain(messages[0].snapshot),{status:'unavailable',reason:'C01'});
   assert.equal(a.window.__MESH_HELPER_MARKS_DEBUG__,undefined);
 });
 test('route changes invalidate in-flight comments replies', async () => {
@@ -96,4 +96,31 @@ test('reused Redux array after a context change is rejected until replaced', () 
   assert.equal(a.exposed.readLessonComments().status,'unavailable');
   apiData = [];
   assert.equal(a.exposed.readLessonComments().status,'partial');
+});
+
+test('unavailable diagnostics identify the gate without exposing records or exceptions',()=>{
+  assert.deepEqual(plain(source(records,{error:'private exception text'}).readLessonComments()),{status:'unavailable',reason:'C15'});
+  assert.deepEqual(plain(source(records,{cells:['101_200001_1','101_200001_2']}).readLessonComments()),{status:'unavailable',reason:'C02'});
+  const a = loadModule('marks-api-hook.js',{expose:['readLessonComments'],document:{querySelectorAll:()=>[{getAttribute:()=> 'markCell-101_200001_1'}]}});
+  assert.deepEqual(plain(a.exposed.readLessonComments()),{status:'unavailable',reason:'C03'});
+});
+test('bridge accepts only allowlisted static failure codes and strips unrelated payload fields',async()=>{
+  const sent=[];
+  const a=loadModule('marks-api-bridge.js',{window:{postMessage:msg=>sent.push(msg)}});
+  const service=a.window.__MESH_HELPER_LESSON_COMMENTS__;
+  for(const reason of ['C03','untrusted private text']){
+    const pending=service.capture('Физическая культура');
+    a.listeners.get('message')({source:a.window,origin:'https://school.mos.ru',data:{source:'mesh-helper-marks-hook',type:'lesson-comments-response',version:1,requestId:sent.at(-1).requestId,snapshot:{status:'unavailable',reason,comment:'untrusted private text',byStudent:{101:[]}}}});
+    const result=await pending;
+    assert.deepEqual(plain(result),{status:'unavailable',reason:reason==='C03'?'C03':'C12'});
+    assert.equal(service.format(result,101),`Данные недоступны [${result.reason}]`);
+    assert.doesNotMatch(JSON.stringify(result),/private|101/);
+  }
+});
+test('missing MAIN reply has its own timeout code',async()=>{
+  let timeout;
+  const a=loadModule('marks-api-bridge.js',{window:{postMessage(){}},globals:{setTimeout:cb=>{timeout=cb;return 1;}}});
+  const pending=a.window.__MESH_HELPER_LESSON_COMMENTS__.capture('Физическая культура');
+  timeout();
+  assert.deepEqual(plain(await pending),{status:'unavailable',reason:'C11'});
 });

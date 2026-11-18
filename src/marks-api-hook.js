@@ -32,20 +32,20 @@
   }
 
   function readLessonComments() {
-    const unavailable = { status: "unavailable" };
+    const unavailable = (reason) => ({ status: "unavailable", reason });
     try {
       const context = commentContext();
-      if (!context) return unavailable;
+      if (!context) return unavailable("C01");
       const pairs = new Map();
       const stores = new Set();
       for (let i = 0; i < context.cells.length; i += 1) {
         const match = context.keys[i].match(/^markCell-(\d+)_(\d+)_(\d+)$/);
         const pair = `${match[1]}_${match[2]}`;
-        if (pairs.has(pair) && pairs.get(pair) !== match[3]) return unavailable;
+        if (pairs.has(pair) && pairs.get(pair) !== match[3]) return unavailable("C02");
         pairs.set(pair, match[3]);
         const cell = context.cells[i];
         const fiberKeys = Object.getOwnPropertyNames(cell).filter((key) => key.startsWith("__reactFiber$"));
-        if (fiberKeys.length !== 1) return unavailable;
+        if (fiberKeys.length !== 1) return unavailable("C03");
         let fiber = cell[fiberKeys[0]];
         let foundStore = false;
         const visited = new Set();
@@ -55,32 +55,35 @@
           if (typeof store?.getState === "function") { stores.add(store); foundStore = true; break; }
           fiber = fiber.return;
         }
-        if (!foundStore) return unavailable;
+        if (!foundStore) return unavailable("C04");
       }
-      if (stores.size !== 1) return unavailable;
+      if (stores.size !== 1) return unavailable("C05");
       const store = [...stores][0];
       const slice = store.getState()?.JR_GradeJournal?.journal?.lessonComments;
-      if (!Array.isArray(slice?.apiData) || slice.apiData.length > 20000 || slice.apiError != null || typeof slice.apiStatus !== "string") return unavailable;
+      if (!Array.isArray(slice?.apiData)) return unavailable("C06");
+      if (slice.apiData.length > 20000) return unavailable("C09");
+      if (slice.apiError != null) return unavailable("C15");
+      if (typeof slice.apiStatus !== "string") return unavailable("C16");
       const previous = commentContexts.get(store);
-      if (previous && previous.token !== context.token && previous.data === slice.apiData) return unavailable;
+      if (previous && previous.token !== context.token && previous.data === slice.apiData) return unavailable("C07");
       commentContexts.set(store, { token: context.token, data: slice.apiData });
       const grouped = new Map();
       let totalText = 0;
       for (const record of slice.apiData) {
-        if (!Number.isSafeInteger(record?.student_id) || !Number.isSafeInteger(record?.schedule_lesson_id) || typeof record?.comment !== "string") return unavailable;
+        if (!Number.isSafeInteger(record?.student_id) || !Number.isSafeInteger(record?.schedule_lesson_id) || typeof record?.comment !== "string") return unavailable("C08");
         if (!pairs.has(`${record.student_id}_${record.schedule_lesson_id}`) || !record.comment.trim()) continue;
         totalText += record.comment.length;
-        if (record.comment.length > 10000 || totalText > 1000000) return unavailable;
+        if (record.comment.length > 10000 || totalText > 1000000) return unavailable("C09");
         const id = String(record.student_id);
         if (!grouped.has(id)) grouped.set(id, new Map());
         const texts = grouped.get(id);
         texts.set(record.comment, (texts.get(record.comment) || 0) + 1);
       }
-      if (commentContext()?.token !== context.token) return unavailable;
+      if (commentContext()?.token !== context.token) return unavailable("C10");
       const byStudent = Object.fromEntries([...grouped].map(([id, texts]) => [id, [...texts].map(([text, count]) => ({ text, count }))]));
       // The observed cache is not proof of period coverage or server freshness.
       return { status: "partial", byStudent };
-    } catch (error) { return unavailable; }
+    } catch (error) { return unavailable("C14"); }
   }
 
   window.addEventListener("message", (event) => {

@@ -20,26 +20,32 @@
   function commentPageContext() {
     return location.pathname + location.search + "|" + [...new Set([...document.querySelectorAll('[data-test-component^="markCell-"]')].map((cell) => cell.getAttribute("data-test-component")))].sort().join("|");
   }
+  // Only static codes cross the diagnostic boundary: no IDs, text, URLs or errors.
+  const commentFailureCode = (code) => typeof code === "string" && /^C(?:0[1-9]|1[0-6])$/.test(code) ? code : null;
   function validateCommentSnapshot(snapshot) {
-    if (snapshot?.status !== "partial" || !snapshot.byStudent || typeof snapshot.byStudent !== "object" || Array.isArray(snapshot.byStudent)) return { status: "unavailable" };
+    if (snapshot?.status === "unavailable") return { status: "unavailable", reason: commentFailureCode(snapshot.reason) || "C12" };
+    if (snapshot?.status !== "partial" || !snapshot.byStudent || typeof snapshot.byStudent !== "object" || Array.isArray(snapshot.byStudent)) return { status: "unavailable", reason: "C12" };
     const entries = Object.entries(snapshot.byStudent);
-    if (entries.length > 2000) return { status: "unavailable" };
+    if (entries.length > 2000) return { status: "unavailable", reason: "C12" };
     let size = 0;
     let count = 0;
     for (const [id, groups] of entries) {
-      if (!/^\d+$/.test(id) || !Array.isArray(groups) || groups.length > 20000) return { status: "unavailable" };
+      if (!/^\d+$/.test(id) || !Array.isArray(groups) || groups.length > 20000) return { status: "unavailable", reason: "C12" };
       for (const group of groups) {
-        if (typeof group?.text !== "string" || !group.text.trim() || group.text.length > 10000 || !Number.isSafeInteger(group.count) || group.count < 1) return { status: "unavailable" };
+        if (typeof group?.text !== "string" || !group.text.trim() || group.text.length > 10000 || !Number.isSafeInteger(group.count) || group.count < 1) return { status: "unavailable", reason: "C12" };
         size += group.text.length;
         count += group.count;
-        if (size > 1000000 || count > 20000) return { status: "unavailable" };
+        if (size > 1000000 || count > 20000) return { status: "unavailable", reason: "C12" };
       }
     }
     return { status: "partial", byStudent: Object.fromEntries(entries.map(([id, groups]) => [id, groups.map(({ text, count }) => ({ text, count }))])) };
   }
   function formatLessonComments(snapshot, studentId) {
     const safe = validateCommentSnapshot(snapshot);
-    if (safe.status !== "partial") return "Данные недоступны";
+    if (safe.status !== "partial") {
+      const reason = commentFailureCode(snapshot?.reason);
+      return reason ? `Данные недоступны [${reason}]` : "Данные недоступны";
+    }
     const groups = safe.byStudent[String(studentId)] || [];
     if (!groups.length) return "Не найдены в доступных данных";
     const count = groups.reduce((sum, group) => sum + group.count, 0);
@@ -52,10 +58,10 @@
     format: formatLessonComments,
     capture(subject) {
       if (!isPhysicalEducation(subject)) return Promise.resolve(null);
-      if (commentRequests.size >= 4) return Promise.resolve({ status: "unavailable" });
+      if (commentRequests.size >= 4) return Promise.resolve({ status: "unavailable", reason: "C13" });
       return new Promise((resolve) => {
         const requestId = `comments-${Date.now()}-${++commentSequence}`;
-        const timer = setTimeout(() => { commentRequests.delete(requestId); resolve({ status: "unavailable" }); }, 1500);
+        const timer = setTimeout(() => { commentRequests.delete(requestId); resolve({ status: "unavailable", reason: "C11" }); }, 1500);
         commentRequests.set(requestId, { resolve, timer, context: commentPageContext() });
         window.postMessage({ source: SOURCE, type: "lesson-comments-request", version: 1, requestId, subject: "физическая культура" }, location.origin);
       });
@@ -310,7 +316,7 @@
       if (!request) return;
       commentRequests.delete(data.requestId);
       clearTimeout(request.timer);
-      request.resolve(request.context === commentPageContext() ? validateCommentSnapshot(data.snapshot) : { status: "unavailable" });
+      request.resolve(request.context === commentPageContext() ? validateCommentSnapshot(data.snapshot) : { status: "unavailable", reason: "C10" });
       return;
     }
 

@@ -2,13 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadModule, fakeRow, plain } from '../helpers/vm.mjs';
 
-function setup({ heading = null, body = 'Меню\nЖурнал Физическая культура 8-А 8а (тест) 26-27 г\nСписок учащихся', select = '', title = 'МЭШ' } = {}) {
+function setup({ heading = null, body = 'Меню\nЖурнал Физическая культура 8-А 8а (тест) 26-27 г\nСписок учащихся', select = '', title = 'МЭШ', snapshot = {status:'partial',byStudent:{101:[{text:'Без спортивной формы',count:3}]}} } = {}) {
   const row = fakeRow(101,[{values:['5']}]);
   const original = row.querySelector;
   row.querySelector = selector => selector === 'span[title]' ? {getAttribute:()=> 'Вымышленный ученик'} : original(selector);
   const downloads = [];
   const service = loadModule('marks-api-bridge.js').window.__MESH_HELPER_LESSON_COMMENTS__;
-  const snapshot = {status:'partial',byStudent:{101:[{text:'Без спортивной формы',count:3}]}};
   const captures = [];
   const a = loadModule('hybrid-counter.js',{
     expose:['journalMeta','downloadCsv'],
@@ -43,4 +42,13 @@ test('ambiguous visible headings or a PE mention without journal syntax do not e
   for(const body of ['Физическая культура — заметка','Журнал Физическая культура 8-А\nЖурнал Математика 8-А']){
     assert.equal(setup({body}).exposed.journalMeta().subject,'');
   }
+});
+
+
+test('real current-journal CSV includes a static diagnostic code, never raw error text',async()=>{
+  const a=setup({snapshot:{status:'unavailable',reason:'C03',error:'private synthetic error'}});
+  await a.exposed.downloadCsv('all');
+  const csv=await a.downloads[0].text();
+  assert.match(csv,/Данные недоступны \[C03\]/);
+  assert.doesNotMatch(csv,/private synthetic error/);
 });
