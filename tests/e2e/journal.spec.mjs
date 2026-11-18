@@ -123,7 +123,7 @@ for (const mode of ['free', 'pro']) {
   });
 }
 
-for (const scenario of ['pe', 'pe-unavailable', 'pe-heading']) {
+for (const scenario of ['pe', 'pe-unavailable', 'pe-heading', 'pe-mixed']) {
   test(`PE comments CSV uses real MAIN/bridge, partial totals and no extra requests: ${scenario}`, async ({ extension }, testInfo) => {
     await extension.openJournal(scenario);
     const { page, network } = extension;

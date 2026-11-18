@@ -24,11 +24,30 @@
   // No dispatch/subscribe, fetch, hover, generic API storage or logging.
   const commentContexts = new WeakMap();
   function commentContext() {
-    const cells = [...document.querySelectorAll('[data-test-component^="markCell-"]')];
-    if (!cells.length || cells.length > 20000) return null;
-    const keys = cells.map((cell) => cell.getAttribute("data-test-component"));
-    if (keys.some((key) => !/^markCell-\d+_\d+_\d+$/.test(key))) return null;
-    return { cells, keys, token: location.pathname + location.search + "|" + [...new Set(keys)].sort().join("|") };
+    const allCells = [...document.querySelectorAll('[data-test-component^="markCell-"]')];
+    if (!allCells.length || allCells.length > 20000) return null;
+    const allKeys = allCells.map((cell) => cell.getAttribute("data-test-component"));
+    const supported = /^markCell-\d+_\d+_\d+$/;
+    // Unknown keys are never interpreted as valid cells. If their known prefix
+    // overlaps a supported pair, exclude that pair too rather than guessing a form.
+    const uncertainPairs = new Set();
+    allKeys.forEach((key) => {
+      if (supported.test(key)) return;
+      const pair = /^markCell-(\d+_\d+)_/.exec(key);
+      if (pair) uncertainPairs.add(pair[1]);
+    });
+    const cells = [];
+    const keys = [];
+    allKeys.forEach((key, index) => {
+      if (!supported.test(key)) return;
+      const pair = /^markCell-(\d+_\d+)_/.exec(key)[1];
+      if (uncertainPairs.has(pair)) return;
+      cells.push(allCells[index]);
+      keys.push(key);
+    });
+    if (!cells.length) return null;
+    // Include excluded keys in the fingerprint, just as the isolated bridge does.
+    return { cells, keys, token: location.pathname + location.search + "|" + [...new Set(allKeys)].sort().join("|") };
   }
 
   function readLessonComments() {

@@ -124,3 +124,28 @@ test('missing MAIN reply has its own timeout code',async()=>{
   timeout();
   assert.deepEqual(plain(await pending),{status:'unavailable',reason:'C11'});
 });
+
+test('an unsupported cell does not discard comments matched to supported cells',()=>{
+  const api=source(records,{cells:['101_200001_1','999_200001_unknown']});
+  const result=plain(api.readLessonComments());
+  assert.equal(result.status,'partial');
+  assert.deepEqual(result.byStudent['101'],[{text:'Без спортивной формы',count:3},{text:'освобожден',count:2}]);
+});
+test('unsupported variants cannot make a matching pair appear unambiguous',()=>{
+  const api=source([...records,{student_id:102,schedule_lesson_id:200001,comment:'Вымышленный комментарий'}],{cells:['101_200001_1','101_200001_unknown','102_200001_1']});
+  const result=plain(api.readLessonComments());
+  assert.equal(result.status,'partial');
+  assert.equal(result.byStudent['101'],undefined);
+  assert.deepEqual(result.byStudent['102'],[{text:'Вымышленный комментарий',count:1}]);
+});
+test('no supported cells remains unavailable rather than an empty successful result',()=>{
+  assert.deepEqual(plain(source(records,{cells:['101_200001_unknown']}).readLessonComments()),{status:'unavailable',reason:'C01'});
+});
+
+test('excluded cell changes still invalidate the context during Redux capture',()=>{
+  let unsupported='markCell-999_200001_unknown';
+  const store={getState(){unsupported='markCell-998_200001_unknown';return {JR_GradeJournal:{journal:{lessonComments:{apiData:records,apiStatus:'synthetic',apiError:null}}}};}};
+  const cells=[{getAttribute:()=> 'markCell-101_200001_1',__reactFiber$test:{memoizedProps:{value:{store}},return:null}},{getAttribute:()=>unsupported}];
+  const a=loadModule('marks-api-hook.js',{expose:['readLessonComments'],document:{querySelectorAll:()=>cells}});
+  assert.deepEqual(plain(a.exposed.readLessonComments()),{status:'unavailable',reason:'C10'});
+});

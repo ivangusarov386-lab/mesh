@@ -13,10 +13,15 @@
       document.querySelector('h1').replaceWith(heading);
       document.title = 'МЭШ';
     }
-    if (scenario === 'pe' || scenario === 'pe-heading') {
+    if (['pe', 'pe-heading', 'pe-mixed'].includes(scenario)) {
       const apiData = [1,2,3,4,5].map(id => ({ id, student_id:101, schedule_lesson_id:200001, comment:id<4?'Без спортивной формы':'освобожден' }));
       apiData.push({ id:6, student_id:102, schedule_lesson_id:200001, comment:'Другой ученик' });
       const store = { getState: () => ({ JR_GradeJournal: { journal: { lessonComments: { apiData, apiStatus:'synthetic', apiError:null } } } }) };
+      if (scenario === 'pe-mixed') {
+        const unsupported = document.createElement('div');
+        unsupported.setAttribute('data-test-component', 'markCell-999_200001_unknown');
+        document.body.appendChild(unsupported);
+      }
       document.querySelectorAll('[data-test-component^="markCell-"]').forEach(cell => {
         cell.__reactFiber$synthetic = { memoizedProps: { value: { store } }, return:null };
       });
