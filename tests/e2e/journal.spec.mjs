@@ -128,12 +128,18 @@ for (const scenario of ['pe', 'pe-unavailable', 'pe-heading', 'pe-mixed']) {
     await extension.openJournal(scenario);
     const { page, network } = extension;
     await page.locator('#mh-results-toggle').click();
-    await page.locator('#mh-export-toggle').click();
+    const exportToggle = page.locator('#mh-export-toggle');
+    const exportAll = page.locator('#mh-export-all');
     const before = network.requests.filter(r => r.url.startsWith('https://school.mos.ru/')).length;
     for (let i = 0; i < 2; i++) {
-      const waiting = page.waitForEvent('download');
-      await page.locator('#mh-export-all').click();
-      const download = await waiting;
+      await exportToggle.click();
+      await expect(exportToggle).toHaveAttribute('aria-expanded', 'true');
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        exportAll.click(),
+      ]);
+      await expect(exportToggle).toHaveAttribute('aria-expanded', 'false');
+      await expect(exportAll).toBeHidden();
       const file = testInfo.outputPath(`comments-${i}.csv`);
       await download.saveAs(file);
       const csv = await readFile(file, 'utf8');
