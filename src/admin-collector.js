@@ -406,19 +406,46 @@
     });
   }
 
-  function waitForAdminMarks(fastMs = ADMIN_MARKS_FAST_WAIT_MS, extraMs = ADMIN_MARKS_EXTRA_WAIT_MS) {
+  // Временная диагностика: только фиксированные названия этапов и длительности.
+  function createAdminTiming(mode) {
+    try {
+      if (window.localStorage.getItem("meshHelperAdminTiming") !== "1") return null;
+      return { mode, entries: [] };
+    } catch (_) { return null; }
+  }
+
+  function timingStart(timing) {
+    if (!timing) return null;
+    try { return window.performance.now(); } catch (_) { return null; }
+  }
+
+  function timingEnd(timing, start, stage, reason) {
+    if (!timing || start === null) return;
+    try {
+      timing.entries.push({ stage, ms: Math.round((window.performance.now() - start) * 10) / 10, reason });
+    } catch (_) { /* Диагностика не должна влиять на сбор. */ }
+  }
+
+  function reportAdminTiming(timing) {
+    if (!timing) return;
+    try { console.info("[МЭШ: диагностика ожиданий]", { mode: timing.mode, entries: timing.entries }); } catch (_) {}
+  }
+
+  function waitForAdminMarks(fastMs = ADMIN_MARKS_FAST_WAIT_MS, extraMs = ADMIN_MARKS_EXTRA_WAIT_MS, timing = null) {
+    const started = timingStart(timing);
     return new Promise((resolve) => {
       let done = false;
-      const finish = (found) => {
+      const finish = (found, reason) => {
         if (done) return;
         done = true;
+        timingEnd(timing, started, "marks", reason);
         window.removeEventListener("mesh-helper-marks-updated", onUpdate);
         resolve(found);
       };
-      const onUpdate = () => finish(true);
+      const onUpdate = () => finish(true, "event");
       window.addEventListener("mesh-helper-marks-updated", onUpdate);
       if (window.__MESH_HELPER_MARKS__?.loadedAt) {
-        finish(true);
+        finish(true, "already-loaded");
         return;
       }
       // FAST-окно истекло без события — не сдаёмся сразу (см. комментарий
@@ -426,7 +453,7 @@
       // активен и зарезолвит finish(true) сам, если марки всё же придут.
       setTimeout(() => {
         if (done) return;
-        setTimeout(() => finish(false), extraMs);
+        setTimeout(() => finish(false, "timeout"), extraMs);
       }, fastMs);
     });
   }
@@ -435,23 +462,25 @@
   // более медленным запросом, чем оценки — дожидаться только marks недостаточно
   // (проверено вживую: при быстром фоновом обходе расписание начала сентября
   // не успевало накопиться, и результат получался ложно пустым).
-  function waitForAdminApiKind(kind, fastMs = API_KIND_FAST_WAIT_MS, extraMs = API_KIND_EXTRA_WAIT_MS) {
+  function waitForAdminApiKind(kind, fastMs = API_KIND_FAST_WAIT_MS, extraMs = API_KIND_EXTRA_WAIT_MS, timing = null) {
+    const started = timingStart(timing);
     const GRACE_MS = 500;
     return new Promise((resolve) => {
       let done = false;
-      const finish = () => {
+      const finish = (reason) => {
         if (done) return;
         done = true;
+        timingEnd(timing, started, kind, reason);
         window.removeEventListener("mesh-helper-api-updated", onUpdate);
         resolve();
       };
       const onUpdate = (event) => {
-        if (event?.detail?.kind === kind) setTimeout(finish, GRACE_MS);
+        if (event?.detail?.kind === kind) setTimeout(() => finish("event"), GRACE_MS);
       };
       window.addEventListener("mesh-helper-api-updated", onUpdate);
       const current = window.__MESH_HELPER_API__?.[kind];
       if (Array.isArray(current) && current.length) {
-        setTimeout(finish, GRACE_MS);
+        setTimeout(() => finish("already-loaded"), GRACE_MS);
         return;
       }
       // Та же подстраховка, что в waitForAdminMarks — FAST-окно для обычного
@@ -459,7 +488,7 @@
       // слушается всё это время.
       setTimeout(() => {
         if (done) return;
-        setTimeout(finish, extraMs);
+        setTimeout(() => finish("timeout"), extraMs);
       }, fastMs);
     });
   }
@@ -709,15 +738,18 @@
   // FAST+EXTRA, тот же принцип "подстраховки", что у waitForAdminMarks/
   // waitForAdminApiKind: обычный журнал укладывается в FAST, а потолок на
   // случай медленной отрисовки восстановлен до прежнего значения (10000).
-  function waitForFinalGradesDom(timeoutMs = FINAL_DOM_FAST_WAIT_MS + FINAL_DOM_EXTRA_WAIT_MS) {
+  function waitForFinalGradesDom(timeoutMs = FINAL_DOM_FAST_WAIT_MS + FINAL_DOM_EXTRA_WAIT_MS, timing = null) {
+    const started = timingStart(timing);
     return new Promise((resolve) => {
       const start = Date.now();
       const check = () => {
         if (document.querySelector('[data-test-component*="finalResult"], [data-test-component*="yearResult"]')) {
+          timingEnd(timing, started, "finals-dom", "dom-found");
           resolve(true);
           return;
         }
         if (Date.now() - start > timeoutMs) {
+          timingEnd(timing, started, "finals-dom", "timeout");
           resolve(false);
           return;
         }
@@ -1311,17 +1343,19 @@
     const item = batch.queue[batch.currentIndex];
     if (!item || !journalId || String(item.id) !== String(journalId)) return;
 
+    const timing = createAdminTiming("main");
+
     item.status = "loading";
     await setStorage(ADMIN_STORAGE_KEY, batch);
 
     await Promise.all([
-      waitForAdminMarks(),
-      waitForAdminApiKind("schedule"),
-      waitForAdminApiKind("homeworkAbsences"),
-      waitForAdminApiKind("studentProfiles"),
-      waitForAdminApiKind("attendances"),
-      waitForAdminApiKind("medicalRecommendations"),
-      waitForFinalGradesDom()
+      waitForAdminMarks(undefined, undefined, timing),
+      waitForAdminApiKind("schedule", undefined, undefined, timing),
+      waitForAdminApiKind("homeworkAbsences", undefined, undefined, timing),
+      waitForAdminApiKind("studentProfiles", undefined, undefined, timing),
+      waitForAdminApiKind("attendances", undefined, undefined, timing),
+      waitForAdminApiKind("medicalRecommendations", undefined, undefined, timing),
+      waitForFinalGradesDom(undefined, timing)
     ]);
 
     const freshCheck = await getStorage(ADMIN_STORAGE_KEY);
@@ -1346,7 +1380,10 @@
     const students = captureStudentsForJournal();
     const teacher = teacherNameForJournal(journalId);
     const finalGrades = captureFinalGradesForJournal();
+    const commentsStarted = timingStart(timing);
     const lessonComments = await window.__MESH_HELPER_LESSON_COMMENTS__?.capture(item.subject);
+    timingEnd(timing, commentsStarted, "comments", "not-determined");
+    reportAdminTiming(timing);
     if (currentAdminJournalIdFromQuery() !== journalId) return;
     if (lessonComments) {
       const afterComments = await getStorage(ADMIN_STORAGE_KEY);
@@ -1458,13 +1495,15 @@
     const item = batch.queue[batch.currentIndex];
     if (!item || !journalId || String(item.id) !== String(journalId)) return;
 
+    const timing = createAdminTiming("finals");
+
     item.status = "loading";
     await setStorage(ADMIN_FINALS_STORAGE_KEY, batch);
 
     await Promise.all([
-      waitForAdminMarks(),
-      waitForAdminApiKind("studentProfiles"),
-      waitForFinalGradesDom()
+      waitForAdminMarks(undefined, undefined, timing),
+      waitForAdminApiKind("studentProfiles", undefined, undefined, timing),
+      waitForFinalGradesDom(undefined, timing)
     ]);
 
     const freshCheck = await getStorage(ADMIN_FINALS_STORAGE_KEY);
@@ -1477,7 +1516,10 @@
     const students = captureStudentsForJournal();
     const teacher = teacherNameForJournal(journalId);
     const finalGrades = captureFinalGradesForJournal();
+    const commentsStarted = timingStart(timing);
     const lessonComments = await window.__MESH_HELPER_LESSON_COMMENTS__?.capture(item.subject);
+    timingEnd(timing, commentsStarted, "comments", "not-determined");
+    reportAdminTiming(timing);
     if (currentAdminJournalIdFromQuery() !== journalId) return;
     if (lessonComments) {
       const afterComments = await getStorage(ADMIN_FINALS_STORAGE_KEY);
@@ -1583,13 +1625,17 @@
     const item = batch.queue[batch.currentIndex];
     if (!item || !journalId || String(item.id) !== String(journalId)) return;
 
+    const timing = createAdminTiming("homework");
+
     item.status = "loading";
     await setStorage(ADMIN_HOMEWORK_STORAGE_KEY, batch);
 
     await Promise.all([
-      waitForAdminApiKind("schedule"),
-      waitForAdminApiKind("homeworkAbsences")
+      waitForAdminApiKind("schedule", undefined, undefined, timing),
+      waitForAdminApiKind("homeworkAbsences", undefined, undefined, timing)
     ]);
+
+    reportAdminTiming(timing);
 
     const freshCheck = await getStorage(ADMIN_HOMEWORK_STORAGE_KEY);
     if (!freshCheck || freshCheck.status !== "running") {

@@ -2,7 +2,7 @@
   "commit": "2e576c4d76a4093fc49bec3d5bf169b71b01ff74",
   "files": {
     "manifest.json": "945ccce7b91d1f4e45059f3321f62c28d3a66cca6225f54d0e542f8f206695ff",
-    "src/admin-collector.js": "7fdf21f3b377bed28b09d6356b6a330349ea5f804ae8eb97552cab2be40cfc7d",
+    "src/admin-collector.js": "6b2f0b9ce4de0aa6bc7512565e1cb0f3351218b3609803aa1707b1adcf4420ae",
     "src/admin-drawer.css": "53ff6506f782caf7af3c44671cf15e54374808ac6867ca994b093859b90154d4",
     "src/admin-drawer.js": "eb5c38857b8e1fe09bb0edb13a75e3c62f19b97b75f0cb010a6ad955989158c9",
     "src/background.js": "0a0297947132f4fc74ea49eea10121b89e4765c65abf2aba2aad6743fa0ba80b",
@@ -28,5 +28,5 @@
     "src/panel.css": "d4f34c6ff304d8fc937f1023201c41c716a38a590efdd409aec95b36ab3bb624"
   },
   "baseCommit": "db676c3318cf16d861b8a767f396b9060af16315",
-  "updateReason": "Authorized PE comments feature: only the five reviewed JS files below advanced; manifest and the other 20 runtime files retain their hashes."
+  "updateReason": "Experimental timing diagnostics: admin-collector.js hash updated; other runtime files unchanged."
 }
